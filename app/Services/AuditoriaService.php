@@ -34,6 +34,37 @@ class AuditoriaService
         ]);
     }
 
+    public function registrarCreacion(string $evento, string $tabla, int $registroId, array $datosNuevos = []): Auditoria
+    {
+        return $this->registrar($evento, $tabla, $registroId, [
+            'datos_nuevos' => $datosNuevos,
+        ]);
+    }
+
+    public function registrarActualizacion(string $evento, string $tabla, int $registroId, array $datosAnteriores, array $datosNuevos): Auditoria
+    {
+        return $this->registrar($evento, $tabla, $registroId, [
+            'datos_anteriores' => $datosAnteriores,
+            'datos_nuevos'     => $datosNuevos,
+        ]);
+    }
+
+    public function registrarEliminacion(string $evento, string $tabla, int $registroId, array $datosAnteriores = [], ?string $razon = null): Auditoria
+    {
+        return $this->registrar($evento, $tabla, $registroId, [
+            'datos_anteriores' => $datosAnteriores,
+            'razon'            => $razon,
+        ]);
+    }
+
+    public function registrarCambioEstado(string $evento, string $tabla, int $registroId, string $estadoAnterior, string $estadoNuevo, ?string $razon = null): Auditoria
+    {
+        return $this->registrar($evento, $tabla, $registroId, [
+            'datos_anteriores' => ['estado' => $estadoAnterior],
+            'datos_nuevos'     => ['estado' => $estadoNuevo, 'razon' => $razon],
+        ]);
+    }
+
     /**
      * Obtiene el histórico de cambios para un registro específico de una tabla.
      *

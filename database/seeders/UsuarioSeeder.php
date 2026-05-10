@@ -30,12 +30,16 @@ class UsuarioSeeder extends Seeder
 
         $usuarios = [
             [
-                'nombre' => 'Juan Carlos',
-                'apellido_paterno' => 'Mamani',
-                'apellido_materno' => 'Quispe',
-                'ci' => '4587963',
-                'email' => 'gerente@cakanagf.com',
+                'nombre' => 'Agustin Alvaro',
+                'apellido_paterno' => 'Cruz',
+                'apellido_materno' => 'Mamani',
+                'ci' => '9860901',
+                'email' => 'agustinapaza1817@gmail.com',
+                'telefono' => '74027119',
+                'fecha_nacimiento' => '2005-08-27',
+                'direccion' => 'Ojos del Salado El Alto',
                 'rol_id' => $roles['gerente'],
+                'es_admin_central' => true,
             ],
             [
                 'nombre' => 'María Elena',
@@ -104,11 +108,12 @@ class UsuarioSeeder extends Seeder
                 'ci_complemento' => null,
                 'email' => $userData['email'],
                 'password' => $password,
-                'telefono' => '7' . $faker->randomNumber(7, true),
-                'fecha_nacimiento' => $faker->dateTimeBetween('-50 years', '-25 years')->format('Y-m-d'),
-                'direccion' => $faker->randomElement($direcciones),
+                'telefono' => $userData['telefono'] ?? ('7' . $faker->randomNumber(7, true)),
+                'fecha_nacimiento' => $userData['fecha_nacimiento'] ?? $faker->dateTimeBetween('-50 years', '-25 years')->format('Y-m-d'),
+                'direccion' => $userData['direccion'] ?? $faker->randomElement($direcciones),
                 'rol_id' => $userData['rol_id'],
                 'estado' => 'activo',
+                'es_admin_central' => $userData['es_admin_central'] ?? false,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

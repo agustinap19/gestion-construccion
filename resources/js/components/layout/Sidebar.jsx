@@ -4,7 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotificaciones } from '../../context/NotificacionContext';
 import { 
     Home, Bell, Briefcase, Package, Warehouse, Truck, Users, 
-    Shield, FileText, ChevronLeft, ChevronRight, LogOut, Settings, User, Sun, Moon
+    Shield, FileText, ChevronLeft, ChevronRight, LogOut, Settings, User, Sun, Moon,
+    Building, Landmark
 } from '../icons/Icons';
 import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
@@ -13,7 +14,7 @@ import { useLayout } from '../../context/LayoutContext';
 import { useTheme } from '../../context/ThemeContext';
 
 const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
-    const { usuario, logout } = useAuth();
+    const { usuario, logout, hasPermission } = useAuth();
     const { contador } = useNotificaciones();
     const { sidebarCollapsed: collapsed, toggleSidebar } = useLayout();
     const { theme, toggleTheme } = useTheme();
@@ -33,7 +34,7 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
         navigate('/login');
     };
 
-    const isManagerOrAdmin = usuario?.rol?.nombre === 'gerente' || usuario?.rol?.nombre === 'administrador';
+    const isManagerOrAdmin = usuario?.rol?.nombre === 'gerente' || usuario?.rol?.nombre === 'administrador' || hasPermission('roles.ver');
 
     const menuGroups = [
         {
@@ -46,20 +47,35 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
         {
             title: 'Gestión Operativa',
             items: [
-                { id: 'proyectos', label: 'Proyectos', icon: <Briefcase size={20} />, path: '/dashboard/proyectos', disabled: true },
+                { id: 'proyectos', label: 'Proyectos', icon: <Briefcase size={20} />, path: '/dashboard/proyectos' },
                 { id: 'materiales', label: 'Materiales', icon: <Package size={20} />, path: '/dashboard/materiales', disabled: true },
                 { id: 'almacenes', label: 'Almacenes', icon: <Warehouse size={20} />, path: '/dashboard/almacenes', disabled: true },
                 { id: 'proveedores', label: 'Proveedores', icon: <Truck size={20} />, path: '/dashboard/proveedores', disabled: true },
             ]
         },
         // Mostrar Administración solo para Gerente o roles específicos
+        // Mostrar Administración solo para Gerente o roles específicos
         ...(isManagerOrAdmin ? [{
             title: 'Administración',
             items: [
-                { id: 'usuarios', label: 'Usuarios', icon: <Users size={20} />, path: '/dashboard/usuarios', disabled: true },
+                { id: 'usuarios', label: 'Usuarios', icon: <Users size={20} />, path: '/dashboard/usuarios' },
                 { id: 'roles', label: 'Roles y Permisos', icon: <Shield size={20} />, path: '/dashboard/roles' },
+                { id: 'personal', label: 'Personal', icon: <Briefcase size={20} />, path: '/dashboard/personal' },
             ]
         }] : []),
+        {
+            title: 'Gestión de Clientes',
+            items: [
+                { id: 'clientes', label: 'Clientes (Privados)', icon: <Building size={20} />, path: '/dashboard/clientes' },
+                { id: 'entidades', label: 'Entidades Estatales', icon: <Landmark size={20} />, path: '/dashboard/entidades-estatales' },
+            ]
+        },
+        {
+            title: 'Gestión Social',
+            items: [
+                { id: 'beneficiarios', label: 'Beneficiarios', icon: <Users size={20} />, path: '/dashboard/beneficiarios' },
+            ]
+        },
         {
             title: 'Reportes',
             items: [

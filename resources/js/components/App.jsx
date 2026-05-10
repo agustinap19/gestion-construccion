@@ -40,6 +40,40 @@ import ListaRoles from '../pages/admin/roles/ListaRoles';
 import DetalleRol from '../pages/admin/roles/DetalleRol';
 import CrearRol from '../pages/admin/roles/CrearRol';
 import EditarRol from '../pages/admin/roles/EditarRol';
+import ListaUsuarios from '../pages/admin/usuarios/ListaUsuarios';
+import DetalleUsuario from '../pages/admin/usuarios/DetalleUsuario';
+import CrearUsuario from '../pages/admin/usuarios/CrearUsuario';
+import EditarUsuario from '../pages/admin/usuarios/EditarUsuario';
+
+// Gestión de Personal
+import ListaPersonal from '../pages/admin/personal/ListaPersonal';
+import DetallePersonal from '../pages/admin/personal/DetallePersonal';
+import CrearPersonal from '../pages/admin/personal/CrearPersonal';
+import EditarPersonal from '../pages/admin/personal/EditarPersonal';
+
+// Gestión de Clientes
+import ListaClientes from '../pages/admin/clientes/ListaClientes';
+import DetalleCliente from '../pages/admin/clientes/DetalleCliente';
+import CrearCliente from '../pages/admin/clientes/CrearCliente';
+import EditarCliente from '../pages/admin/clientes/EditarCliente';
+
+// Gestión de Entidades Estatales
+import ListaEntidadesEstatales from '../pages/admin/entidades/ListaEntidadesEstatales';
+import DetalleEntidadEstatal from '../pages/admin/entidades/DetalleEntidadEstatal';
+import CrearEntidadEstatal from '../pages/admin/entidades/CrearEntidadEstatal';
+import EditarEntidadEstatal from '../pages/admin/entidades/EditarEntidadEstatal';
+
+// Gestión de Beneficiarios
+import ListaBeneficiarios from '../pages/admin/beneficiarios/ListaBeneficiarios';
+import CrearBeneficiario from '../pages/admin/beneficiarios/CrearBeneficiario';
+import DetalleBeneficiario from '../pages/admin/beneficiarios/DetalleBeneficiario';
+import EditarBeneficiario from '../pages/admin/beneficiarios/EditarBeneficiario';
+
+// Gestión de Proyectos
+import ListaProyectos from '../pages/admin/proyectos/ListaProyectos';
+import CrearProyecto from '../pages/admin/proyectos/CrearProyecto';
+import DetalleProyecto from '../pages/admin/proyectos/DetalleProyecto';
+import EditarProyecto from '../pages/admin/proyectos/EditarProyecto';
 
 import PrimerLogin from '../pages/auth/PrimerLogin';
 
@@ -85,6 +119,42 @@ const AppContent = () => {
                         <Route path="/dashboard/roles/crear" element={<CrearRol />} />
                         <Route path="/dashboard/roles/:id" element={<DetalleRol />} />
                         <Route path="/dashboard/roles/:id/editar" element={<EditarRol />} />
+
+                        {/* Gestión de Usuarios */}
+                        <Route path="/dashboard/usuarios" element={<ListaUsuarios />} />
+                        <Route path="/dashboard/usuarios/crear" element={<CrearUsuario />} />
+                        <Route path="/dashboard/usuarios/:id" element={<DetalleUsuario />} />
+                        <Route path="/dashboard/usuarios/:id/editar" element={<EditarUsuario />} />
+
+                        {/* Gestión de Personal */}
+                        <Route path="/dashboard/personal" element={<ListaPersonal />} />
+                        <Route path="/dashboard/personal/crear" element={<CrearPersonal />} />
+                        <Route path="/dashboard/personal/:id" element={<DetallePersonal />} />
+                        <Route path="/dashboard/personal/:id/editar" element={<EditarPersonal />} />
+
+                        {/* Gestión de Clientes */}
+                        <Route path="/dashboard/clientes" element={<ListaClientes />} />
+                        <Route path="/dashboard/clientes/crear" element={<CrearCliente />} />
+                        <Route path="/dashboard/clientes/:id" element={<DetalleCliente />} />
+                        <Route path="/dashboard/clientes/:id/editar" element={<EditarCliente />} />
+
+                        {/* Gestión de Entidades Estatales */}
+                        <Route path="/dashboard/entidades-estatales" element={<ListaEntidadesEstatales />} />
+                        <Route path="/dashboard/entidades-estatales/crear" element={<CrearEntidadEstatal />} />
+                        <Route path="/dashboard/entidades-estatales/:id" element={<DetalleEntidadEstatal />} />
+                        <Route path="/dashboard/entidades-estatales/:id/editar" element={<EditarEntidadEstatal />} />
+
+                        {/* Gestión de Beneficiarios */}
+                        <Route path="/dashboard/beneficiarios" element={<ListaBeneficiarios />} />
+                        <Route path="/dashboard/beneficiarios/crear" element={<CrearBeneficiario />} />
+                        <Route path="/dashboard/beneficiarios/:id" element={<DetalleBeneficiario />} />
+                        <Route path="/dashboard/beneficiarios/:id/editar" element={<EditarBeneficiario />} />
+
+                        {/* Gestión de Proyectos */}
+                        <Route path="/dashboard/proyectos" element={<ListaProyectos />} />
+                        <Route path="/dashboard/proyectos/crear" element={<CrearProyecto />} />
+                        <Route path="/dashboard/proyectos/:id" element={<DetalleProyecto />} />
+                        <Route path="/dashboard/proyectos/:id/editar" element={<EditarProyecto />} />
                     </Route>
                     
                     {/* Catch-all route redirects to home */}

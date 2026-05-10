@@ -69,6 +69,31 @@ class NotificacionService
     }
 
     /**
+     * Alias semántico: envía notificación a todos los usuarios de un rol.
+     * Params: rol, titulo, mensaje, tipo (info|success|warning|error|security)
+     */
+    public function notificarAUsuariosConRol(string $rol, string $titulo, string $mensaje, string $tipo = 'info'): int
+    {
+        return $this->enviarARol($rol, [
+            'tipo'    => $tipo,
+            'titulo'  => $titulo,
+            'mensaje' => $mensaje,
+        ]);
+    }
+
+    /**
+     * Envía una notificación al gerente con URL de acción opcional.
+     */
+    public function enviarAGerente(string $titulo, string $mensaje, string $tipo = 'info', ?string $urlAccion = null): int
+    {
+        $data = ['tipo' => $tipo, 'titulo' => $titulo, 'mensaje' => $mensaje];
+        if ($urlAccion) {
+            $data['url_accion'] = $urlAccion;
+        }
+        return $this->enviarARol('gerente', $data);
+    }
+
+    /**
      * Marca una notificación como leída verificando que pertenezca al usuario
      */
     public function marcarComoLeida(int $id, int $usuarioId): bool

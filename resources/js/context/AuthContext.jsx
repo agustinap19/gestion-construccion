@@ -71,6 +71,7 @@ export const AuthProvider = ({ children }) => {
 
     const value = {
         user,
+        usuario: user, // alias para compatibilidad con componentes que usan 'usuario'
         permisos,
         token,
         isAuthenticated: !!token,

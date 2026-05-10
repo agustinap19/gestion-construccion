@@ -9,6 +9,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class User extends Authenticatable
 {
@@ -45,6 +46,7 @@ class User extends Authenticatable
         'descriptor_facial',
         'rostro_registrado',
         'rostro_registrado_en',
+        'es_admin_central',
     ];
 
     /**
@@ -76,7 +78,17 @@ class User extends Authenticatable
             'descriptor_facial' => 'array',
             'rostro_registrado' => 'boolean',
             'rostro_registrado_en' => 'datetime',
+            'es_admin_central' => 'boolean',
         ];
+    }
+
+    /**
+     * Verifica si este usuario es el administrador central protegido.
+     * No puede ser eliminado, inactivado ni suspendido.
+     */
+    public function esAdminCentral(): bool
+    {
+        return (bool) $this->es_admin_central;
     }
 
     /**
@@ -97,5 +109,13 @@ class User extends Authenticatable
         }
         
         return $this->rol->permisos->pluck('codigo');
+    }
+
+    /**
+     * Get the personal record associated with the user.
+     */
+    public function personal(): HasOne
+    {
+        return $this->hasOne(Personal::class, 'usuario_id');
     }
 }

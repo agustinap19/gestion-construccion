@@ -1,90 +1,84 @@
 import api from './api';
 
 const usuarioService = {
-    /**
-     * Obtiene la lista de usuarios con paginación y filtros
-     */
-    listar: async (filtros = {}, page = 1) => {
-        try {
-            const params = { ...filtros, page };
-            const response = await api.get('/usuarios', { params });
-            return response.data;
-        } catch (error) {
-            throw error;
-        }
+    listar: async (filtros = {}, perPage = 15) => {
+        const response = await api.get('/usuarios', { params: { ...filtros, per_page: perPage } });
+        return response.data;
     },
 
-    /**
-     * Obtiene un usuario específico por su ID
-     */
     obtener: async (id) => {
-        try {
-            const response = await api.get(`/usuarios/${id}`);
-            return response.data;
-        } catch (error) {
-            throw error;
-        }
+        const response = await api.get(`/usuarios/${id}`);
+        return response.data;
     },
 
-    /**
-     * Crea un nuevo usuario
-     */
     crear: async (datos) => {
-        try {
-            const response = await api.post('/usuarios', datos);
-            return response.data;
-        } catch (error) {
-            throw error;
-        }
+        const response = await api.post('/usuarios', datos);
+        return response.data;
     },
 
-    /**
-     * Actualiza un usuario existente
-     */
     actualizar: async (id, datos) => {
-        try {
-            const response = await api.put(`/usuarios/${id}`, datos);
-            return response.data;
-        } catch (error) {
-            throw error;
-        }
+        const response = await api.put(`/usuarios/${id}`, datos);
+        return response.data;
     },
 
-    /**
-     * Cambia el estado de un usuario
-     */
-    cambiarEstado: async (id, estado) => {
-        try {
-            const response = await api.patch(`/usuarios/${id}/estado`, { estado });
-            return response.data;
-        } catch (error) {
-            throw error;
-        }
+    cambiarEstado: async (id, estado, razon = null) => {
+        const response = await api.patch(`/usuarios/${id}/estado`, { estado, razon });
+        return response.data;
     },
 
-    /**
-     * Reenvía la contraseña temporal a un usuario
-     */
+    cambiarRol: async (id, rolId, razon = null) => {
+        const response = await api.patch(`/usuarios/${id}/rol`, { rol_id: rolId, razon });
+        return response.data;
+    },
+
+    desbloquear: async (id) => {
+        const response = await api.post(`/usuarios/${id}/desbloquear`);
+        return response.data;
+    },
+
     reenviarPassword: async (id) => {
-        try {
-            const response = await api.post(`/usuarios/${id}/reenviar-password`);
-            return response.data;
-        } catch (error) {
-            throw error;
-        }
+        const response = await api.post(`/usuarios/${id}/reenviar-password`);
+        return response.data;
     },
 
-    /**
-     * Elimina (soft delete) un usuario
-     */
-    eliminar: async (id) => {
-        try {
-            const response = await api.delete(`/usuarios/${id}`);
-            return response.data;
-        } catch (error) {
-            throw error;
-        }
-    }
+    cerrarSesion: async (id, tokenId) => {
+        const response = await api.delete(`/usuarios/${id}/sesiones/${tokenId}`);
+        return response.data;
+    },
+
+    cerrarTodasSesiones: async (id) => {
+        const response = await api.delete(`/usuarios/${id}/sesiones`);
+        return response.data;
+    },
+
+    revocarDispositivo: async (id, dispositivoId) => {
+        const response = await api.patch(`/usuarios/${id}/dispositivos/${dispositivoId}/revocar`);
+        return response.data;
+    },
+
+    revocarTodosDispositivos: async (id) => {
+        const response = await api.patch(`/usuarios/${id}/dispositivos/revocar-todos`);
+        return response.data;
+    },
+
+    eliminar: async (id, razon = null) => {
+        const response = await api.delete(`/usuarios/${id}`, { data: { razon } });
+        return response.data;
+    },
+
+    restaurar: async (id) => {
+        const response = await api.post(`/usuarios/${id}/restaurar`);
+        return response.data;
+    },
+
+    accionMasiva: async (accion, usuarioIds, razon = null) => {
+        const response = await api.post('/usuarios/accion-masiva', {
+            accion,
+            usuario_ids: usuarioIds,
+            razon,
+        });
+        return response.data;
+    },
 };
 
 export default usuarioService;
