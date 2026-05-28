@@ -18,6 +18,7 @@ import ConfirmDialog from '../../../components/ui/ConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import clienteService from '../../../services/clienteService';
+import AuditoriaTimeline from '../../../components/ui/AuditoriaTimeline';
 
 const DetalleCliente = () => {
     const { id } = useParams();
@@ -26,7 +27,6 @@ const DetalleCliente = () => {
     
     const [cliente, setCliente] = useState(null);
     const [referidos, setReferidos] = useState([]);
-    const [auditoria, setAuditoria] = useState([]);
     const [estadisticas, setEstadisticas] = useState({});
     const [cargando, setCargando] = useState(true);
 
@@ -55,7 +55,6 @@ const DetalleCliente = () => {
             const data = await clienteService.obtener(id);
             setCliente(data.cliente);
             setReferidos(data.referidos);
-            setAuditoria(data.auditoria);
             setEstadisticas(data.estadisticas);
             setNotas(data.cliente.notas || '');
         } catch (error) {
@@ -323,41 +322,7 @@ const DetalleCliente = () => {
                 />
             </Card>
         ),
-        auditoria: (
-            <Card className="p-6">
-                <h3 className="text-lg font-medium text-white mb-6">Historial de Cambios</h3>
-                {auditoria.length === 0 ? (
-                    <p className="text-slate-500 text-sm text-center py-8">No hay registros de auditoría recientes.</p>
-                ) : (
-                    <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-700 before:to-transparent">
-                        {auditoria.map((evento, idx) => (
-                            <div key={evento.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                                <div className="flex items-center justify-center w-10 h-10 rounded-full border border-slate-700 bg-slate-800 text-slate-400 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow">
-                                    <Shield size={16} />
-                                </div>
-                                <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border border-slate-700/50 bg-slate-800/30">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="font-medium text-slate-300 text-sm">{evento.evento}</span>
-                                        <span className="text-xs text-slate-500">{new Date(evento.created_at).toLocaleString()}</span>
-                                    </div>
-                                    <p className="text-xs text-slate-400 mb-2">Por: {evento.actor?.email || 'Sistema'}</p>
-                                    
-                                    {/* Muestra un extracto si hay datos nuevos */}
-                                    {evento.datos_nuevos && (
-                                        <details className="text-xs group/details mt-2">
-                                            <summary className="cursor-pointer text-emerald-500 font-medium hover:text-emerald-400">Ver detalles técnicos</summary>
-                                            <pre className="mt-2 p-2 bg-slate-950 rounded border border-slate-800 text-slate-400 overflow-x-auto">
-                                                {JSON.stringify(evento.datos_nuevos, null, 2)}
-                                            </pre>
-                                        </details>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </Card>
-        )
+        auditoria: <AuditoriaTimeline entidad="clientes" id={id} />
     };
 
     const accionesDropdown = [

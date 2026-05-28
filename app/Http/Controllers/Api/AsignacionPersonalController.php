@@ -25,12 +25,16 @@ class AsignacionPersonalController extends Controller
     public function store(Request $request, int $proyectoId): JsonResponse
     {
         $request->validate([
-            'personal_id' => 'required|exists:personal,id',
-            'rol_en_proyecto' => 'required|string|max:100',
-            'responsabilidades' => 'nullable|string|max:1000',
-            'fecha_inicio' => 'nullable|date',
+            'personal_id'             => 'required|exists:personal,id',
+            'rol_en_proyecto'         => 'required|string|max:100',
+            'responsabilidades'       => 'nullable|string|max:1000',
+            'es_responsable_principal' => 'nullable|boolean',
+            'fecha_inicio'            => 'nullable|date',
         ]);
-        $datos = array_merge($request->only(['personal_id', 'rol_en_proyecto', 'responsabilidades', 'fecha_inicio']), ['proyecto_id' => $proyectoId]);
+        $datos = array_merge(
+            $request->only(['personal_id', 'rol_en_proyecto', 'responsabilidades', 'es_responsable_principal', 'fecha_inicio']),
+            ['proyecto_id' => $proyectoId]
+        );
         $asignacion = $this->service->asignar($datos, $request->user()->id);
         return response()->json(['status' => 'success', 'data' => $asignacion, 'message' => 'Personal asignado.'], 201);
     }

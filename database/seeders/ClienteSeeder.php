@@ -113,6 +113,7 @@ class ClienteSeeder extends Seeder
                     'documento_tipo' => 'nit',
                     'documento_numero' => '9008007022',
                     'email' => 'deuda@maderas.com',
+                    'telefono_principal' => '33445566',
                     'estado' => 'bloqueado',
                     'notas' => 'Cliente en mora',
                     'usuario_creador_id' => $adminId,

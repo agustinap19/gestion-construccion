@@ -11,7 +11,7 @@ class CambiarEstadoProyectoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'estado' => 'required|in:borrador,planificacion,en_ejecucion,pausado,finalizado,cancelado',
+            'estado' => 'required|in:formulacion,licitacion,adjudicado,en_ejecucion,pausado,finalizado,cancelado',
             'razon'  => 'nullable|string|max:1000',
         ];
     }

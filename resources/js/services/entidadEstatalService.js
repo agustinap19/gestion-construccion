@@ -13,7 +13,7 @@ const entidadEstatalService = {
                     per_page: perPage
                 }
             });
-            return response.data;
+            return response.data.data;
         } catch (error) {
             throw error;
         }

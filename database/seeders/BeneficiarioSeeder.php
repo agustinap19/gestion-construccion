@@ -14,8 +14,8 @@ class BeneficiarioSeeder extends Seeder
     {
         $proyecto1 = Proyecto::where('codigo', 'PRJ-2026-0001')->first();
         $proyecto2 = Proyecto::where('codigo', 'PRJ-2026-0002')->first();
-        $tipoA = TipoVivienda::where('nombre', 'LIKE', '%Tipo A%')->first();
-        $tipoB = TipoVivienda::where('nombre', 'LIKE', '%Tipo B%')->first();
+        $tipoA = TipoVivienda::where('nombre', 'LIKE', '%TIPO 1%')->first();
+        $tipoB = TipoVivienda::where('nombre', 'LIKE', '%TIPO 2%')->first();
         
         $gerente = User::whereHas('rol', fn($q) => $q->where('nombre', 'gerente'))->first();
         $userId = $gerente ? $gerente->id : 1;

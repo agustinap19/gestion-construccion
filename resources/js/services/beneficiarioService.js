@@ -6,6 +6,13 @@ const beneficiarioService = {
         return response.data;
     },
 
+    listarPorProyecto: async (proyectoId, filtros = {}, page = 1, perPage = 24) => {
+        const response = await api.get('/beneficiarios', {
+            params: { proyecto_id: proyectoId, ...filtros, page, per_page: perPage },
+        });
+        return response.data;
+    },
+
     getById: async (id) => {
         const response = await api.get(`/beneficiarios/${id}`);
         return response.data;
@@ -45,6 +52,11 @@ const beneficiarioService = {
         return response.data;
     },
 
+    obtenerCupoProyecto: async (proyectoId) => {
+        const response = await api.get(`/beneficiarios/proyecto/${proyectoId}/cupo`);
+        return response.data.data;
+    },
+
     obtenerMapaProyecto: async (proyectoId) => {
         const response = await api.get(`/beneficiarios/proyecto/${proyectoId}/mapa`);
         return response.data;
@@ -53,7 +65,29 @@ const beneficiarioService = {
     obtenerTransicionesPermitidas: async (id) => {
         const response = await api.get(`/beneficiarios/${id}/transiciones-permitidas`);
         return response.data;
-    }
+    },
+
+    subirFoto: async (archivo) => {
+        const fd = new FormData();
+        fd.append('archivo', archivo);
+        const response = await api.post('/upload/imagen', fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data.url;
+    },
+
+    subirDocumento: async (archivo) => {
+        const fd = new FormData();
+        fd.append('archivo', archivo);
+        const response = await api.post('/upload/documento', fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data.url;
+    },
+
+    urlExportar: (proyectoId, tipo = 'pdf') => {
+        return `/api/beneficiarios/proyecto/${proyectoId}/exportar?tipo=${tipo}`;
+    },
 };
 
 export default beneficiarioService;

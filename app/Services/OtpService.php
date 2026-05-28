@@ -6,51 +6,46 @@ use App\Mail\CodigoOtpMail;
 use App\Models\CodigoOtp;
 use App\Models\User;
 use Exception;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class OtpService
 {
-    /**
-     * Genera un nuevo código OTP.
-     */
-    public function generarOtp(int $usuarioId, string $fingerprint): array
+    public function generarYEnviar(User $usuario, string $fingerprint, string $userAgent, string $ip): string
     {
-        $codigo = (string) random_int(100000, 999999);
+        // Invalidar OTPs previos del usuario para este fingerprint
+        CodigoOtp::where('usuario_id', $usuario->id)
+            ->where('fingerprint_dispositivo', $fingerprint)
+            ->where('usado', false)
+            ->update(['usado' => true]);
+
+        $codigoPlano = (string) random_int(100000, 999999);
         $tokenTemporal = Str::uuid()->toString();
 
         CodigoOtp::create([
-            'usuario_id' => $usuarioId,
-            'codigo' => $codigo,
+            'usuario_id' => $usuario->id,
+            'codigo' => Hash::make($codigoPlano),
+            'tipo' => 'nuevo_dispositivo',
             'token_temporal' => $tokenTemporal,
             'fingerprint_dispositivo' => $fingerprint,
-            'usado' => false,
             'expira_en' => now()->addMinutes(10),
+            'usado' => false,
+            'intentos_fallidos' => 0,
         ]);
 
-        return [
-            'token_temporal' => $tokenTemporal,
-            'codigo' => $codigo,
-        ];
+        $nombreDispositivo = $this->parsearNombreDispositivo($userAgent);
+        Mail::to($usuario->email)->send(new CodigoOtpMail($codigoPlano, $nombreDispositivo, $ip));
+
+        return $tokenTemporal;
     }
 
-    /**
-     * Envía el código por correo.
-     */
-    public function enviarCodigoPorCorreo(User $usuario, string $codigo, string $nombreDispositivo, string $ip): void
-    {
-        Mail::to($usuario->email)->send(new CodigoOtpMail($codigo, $nombreDispositivo, $ip));
-    }
-
-    /**
-     * Valida el OTP proporcionado por el usuario.
-     */
-    public function validarOtp(string $tokenTemporal, string $codigo): CodigoOtp
+    public function validar(string $tokenTemporal, string $codigoIngresado): CodigoOtp
     {
         $otp = CodigoOtp::where('token_temporal', $tokenTemporal)->first();
 
         if (!$otp) {
-            throw new Exception('Token temporal inválido.');
+            throw new Exception('Sesión de verificación inválida o expirada.');
         }
 
         if ($otp->usado) {
@@ -61,27 +56,55 @@ class OtpService
             throw new Exception('El código ha expirado. Por favor solicita uno nuevo.');
         }
 
-        if ($otp->codigo !== $codigo) {
-            $otp->increment('intentos_fallidos');
-            
-            if ($otp->intentos_fallidos >= 3) {
-                $otp->update(['usado' => true]);
-                throw new Exception('Demasiados intentos fallidos. El código ha sido invalidado.');
-            }
+        if ($otp->intentos_fallidos >= 5) {
+            $otp->update(['usado' => true]);
+            throw new Exception('Demasiados intentos fallidos. Por favor solicita un nuevo código.');
+        }
 
-            throw new Exception('El código ingresado es incorrecto.');
+        if (!Hash::check($codigoIngresado, $otp->codigo)) {
+            $otp->increment('intentos_fallidos');
+            $restantes = 5 - ($otp->intentos_fallidos);
+            throw new Exception("Código incorrecto. Te quedan {$restantes} intentos.");
         }
 
         $otp->update(['usado' => true]);
-
         return $otp;
     }
 
-    /**
-     * Elimina OTPs expirados.
-     */
-    public function limpiarOtpsExpirados(): int
+    public function purgarExpirados(): int
     {
-        return CodigoOtp::where('expira_en', '<', now()->subDay())->delete();
+        return CodigoOtp::where('expira_en', '<', now()->subHour())->delete();
+    }
+
+    private function parsearNombreDispositivo(string $userAgent): string
+    {
+        $browser = 'Navegador Desconocido';
+        $os = 'SO Desconocido';
+
+        if (preg_match('/Edg\//i', $userAgent)) {
+            $browser = 'Edge';
+        } elseif (preg_match('/Firefox\//i', $userAgent)) {
+            $browser = 'Firefox';
+        } elseif (preg_match('/OPR\//i', $userAgent) || preg_match('/Opera\//i', $userAgent)) {
+            $browser = 'Opera';
+        } elseif (preg_match('/Chrome\//i', $userAgent)) {
+            $browser = 'Chrome';
+        } elseif (preg_match('/Safari\//i', $userAgent)) {
+            $browser = 'Safari';
+        }
+
+        if (preg_match('/Windows NT 10/i', $userAgent)) {
+            $os = 'Windows 10/11';
+        } elseif (preg_match('/Mac OS X/i', $userAgent)) {
+            $os = 'Mac OS';
+        } elseif (preg_match('/Linux/i', $userAgent)) {
+            $os = 'Linux';
+        } elseif (preg_match('/Android/i', $userAgent)) {
+            $os = 'Android';
+        } elseif (preg_match('/iPhone|iPad/i', $userAgent)) {
+            $os = 'iOS';
+        }
+
+        return "{$browser} en {$os}";
     }
 }

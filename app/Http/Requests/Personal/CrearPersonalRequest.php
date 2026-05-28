@@ -34,10 +34,10 @@ class CrearPersonalRequest extends FormRequest
 
             'crear_usuario_vinculado' => 'nullable|boolean',
             'usuario_data' => 'nullable|array|required_if:crear_usuario_vinculado,true',
-            'usuario_data.email' => 'required_if:crear_usuario_vinculado,true|email|unique:usuarios,email',
+            'usuario_data.email' => 'required_if:crear_usuario_vinculado,true|email|unique:users,email',
             'usuario_data.rol_id' => 'required_if:crear_usuario_vinculado,true|exists:roles,id',
 
-            'vincular_usuario_existente_id' => 'nullable|exists:usuarios,id',
+            'vincular_usuario_existente_id' => 'nullable|exists:users,id',
         ];
     }
 

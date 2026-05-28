@@ -4,7 +4,6 @@ namespace App\Services\Personal;
 
 use App\Models\Personal;
 use App\Models\User;
-use App\Services\AuditoriaService;
 use App\Services\NotificacionService;
 use App\Services\UsuarioService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -14,7 +13,6 @@ use Exception;
 class PersonalService
 {
     public function __construct(
-        protected AuditoriaService $auditoriaService,
         protected NotificacionService $notificacionService,
         protected UsuarioService $usuarioService
     ) {}
@@ -111,13 +109,9 @@ class PersonalService
                 )->count(),
         ];
 
-        // Auditoría
-        $auditoria = $this->auditoriaService->obtenerPorTabla('personal', $personal->id);
-
         return [
-            'personal' => $personal,
+            'personal'                 => $personal,
             'estadisticas_competencias' => $competenciasStats,
-            'auditoria' => $auditoria,
         ];
     }
 
@@ -202,15 +196,6 @@ class PersonalService
                 'estado_laboral' => $datos['estado_laboral'] ?? 'activo',
             ]);
 
-            $this->auditoriaService->registrar('personal.creado', 'personal', $personal->id, [
-                'datos_nuevos' => [
-                    'nombre' => $personal->nombre_completo,
-                    'codigo' => $personal->codigo_empleado,
-                    'tipo' => $personal->tipo,
-                    'con_usuario' => $personal->tieneUsuario(),
-                ],
-            ]);
-
             return $personal->load('usuario.rol', 'competencias');
         });
     }
@@ -252,27 +237,6 @@ class PersonalService
         $personal->update($datosUpdate);
 
         $datosNuevos = $personal->only($camposActualizables);
-
-        if ($datosAnteriores != $datosNuevos) {
-            $this->auditoriaService->registrar('personal.actualizado', 'personal', $personal->id, [
-                'datos_anteriores' => $datosAnteriores,
-                'datos_nuevos' => $datosNuevos,
-            ]);
-        }
-
-        if ($cambioSalario) {
-            $this->auditoriaService->registrar('personal.salario_cambiado', 'personal', $personal->id, [
-                'datos_anteriores' => ['salario_base' => $datosAnteriores['salario_base']],
-                'datos_nuevos' => ['salario_base' => $datosUpdate['salario_base']],
-            ]);
-        }
-
-        if ($cambioContrato) {
-            $this->auditoriaService->registrar('personal.contrato_cambiado', 'personal', $personal->id, [
-                'datos_anteriores' => ['tipo_contrato' => $datosAnteriores['tipo_contrato']],
-                'datos_nuevos' => ['tipo_contrato' => $datosUpdate['tipo_contrato']],
-            ]);
-        }
 
         if ($personal->tieneUsuario()) {
             $this->notificacionService->enviarA($personal->usuario_id, [
@@ -316,12 +280,6 @@ class PersonalService
 
         $personal->update($actualizacion);
 
-        $this->auditoriaService->registrar('personal.estado_laboral_cambiado', 'personal', $personal->id, [
-            'datos_anteriores' => ['estado_laboral' => $estadoAnterior],
-            'datos_nuevos' => ['estado_laboral' => $nuevoEstado],
-            'razon' => $razon,
-        ]);
-
         if ($personal->tieneUsuario()) {
             $this->notificacionService->enviarA($personal->usuario_id, [
                 'tipo' => $nuevoEstado === 'desvinculado' ? 'danger' : 'warning',
@@ -353,13 +311,6 @@ class PersonalService
         $usuario = User::findOrFail($usuarioId);
         $personal->update(['usuario_id' => $usuarioId]);
 
-        $this->auditoriaService->registrar('personal.usuario_vinculado', 'personal', $personal->id, [
-            'datos_nuevos' => [
-                'usuario_id' => $usuarioId,
-                'usuario_email' => $usuario->email,
-            ],
-        ]);
-
         return $personal->load('usuario.rol');
     }
 
@@ -376,13 +327,6 @@ class PersonalService
 
         $usuarioAnterior = $personal->usuario;
         $personal->update(['usuario_id' => null]);
-
-        $this->auditoriaService->registrar('personal.usuario_desvinculado', 'personal', $personal->id, [
-            'datos_anteriores' => [
-                'usuario_id' => $usuarioAnterior->id,
-                'usuario_email' => $usuarioAnterior->email,
-            ],
-        ]);
 
         return $personal->load('usuario.rol');
     }
@@ -412,14 +356,6 @@ class PersonalService
         $usuario = $this->usuarioService->crear($datosCompletos, $actorId);
         $personal->update(['usuario_id' => $usuario->id]);
 
-        $this->auditoriaService->registrar('personal.usuario_creado', 'personal', $personal->id, [
-            'datos_nuevos' => [
-                'usuario_id' => $usuario->id,
-                'email' => $usuario->email,
-                'rol' => $usuario->rol->nombre_visible ?? '',
-            ],
-        ]);
-
         return $personal->load('usuario.rol', 'competencias');
     }
 
@@ -429,15 +365,6 @@ class PersonalService
     public function eliminar(int $id, int $actorId, ?string $razon): bool
     {
         $personal = Personal::findOrFail($id);
-
-        $this->auditoriaService->registrar('personal.eliminado', 'personal', $personal->id, [
-            'datos_anteriores' => [
-                'nombre' => $personal->nombre_completo,
-                'codigo' => $personal->codigo_empleado,
-                'tiene_usuario' => $personal->tieneUsuario(),
-            ],
-            'razon' => $razon,
-        ]);
 
         return $personal->delete();
     }
@@ -450,10 +377,6 @@ class PersonalService
         $personal = Personal::withTrashed()->findOrFail($id);
         $personal->restore();
         $personal->update(['estado_laboral' => 'desvinculado']);
-
-        $this->auditoriaService->registrar('personal.restaurado', 'personal', $personal->id, [
-            'datos_nuevos' => ['estado_laboral' => 'desvinculado'],
-        ]);
 
         return $personal->load('usuario.rol', 'competencias');
     }

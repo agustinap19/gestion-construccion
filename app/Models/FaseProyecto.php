@@ -13,26 +13,22 @@ class FaseProyecto extends Model
     protected $table = 'fases_proyecto';
 
     protected $fillable = [
-        'codigo',
         'proyecto_id',
         'nombre',
         'descripcion',
         'orden',
-        'fase_prerrequisito_id',
-        'peso_porcentual',
-        'estado',
-        'porcentaje_avance_interno',
         'fecha_inicio_planificada',
         'fecha_fin_planificada',
         'fecha_inicio_real',
         'fecha_fin_real',
+        'avance_porcentaje',
+        'estado',
+        'fase_prerrequisito_id',
         'observaciones',
-        'usuario_creador_id',
     ];
 
     protected $casts = [
-        'peso_porcentual'          => 'decimal:2',
-        'porcentaje_avance_interno' => 'decimal:2',
+        'avance_porcentaje'        => 'decimal:2',
         'orden'                    => 'integer',
         'fecha_inicio_planificada' => 'date',
         'fecha_fin_planificada'    => 'date',
@@ -40,12 +36,12 @@ class FaseProyecto extends Model
         'fecha_fin_real'           => 'date',
     ];
 
+    // Estados: pendiente / en_progreso / completada / suspendida
     private const TRANSICIONES_PERMITIDAS = [
-        'pendiente'  => ['en_proceso', 'cancelada'],
-        'en_proceso' => ['completada', 'pausada', 'cancelada'],
-        'pausada'    => ['en_proceso', 'cancelada'],
-        'completada' => [],
-        'cancelada'  => [],
+        'pendiente'   => ['en_progreso'],
+        'en_progreso' => ['completada', 'suspendida'],
+        'suspendida'  => ['en_progreso'],
+        'completada'  => [],
     ];
 
     // ── Relaciones ──────────────────────────────────────────────────────────
@@ -55,29 +51,22 @@ class FaseProyecto extends Model
         return $this->belongsTo(Proyecto::class, 'proyecto_id');
     }
 
-    // La fase que debe terminar antes de que esta pueda iniciar
     public function fasePrerrequisito()
     {
         return $this->belongsTo(FaseProyecto::class, 'fase_prerrequisito_id');
     }
 
-    // Fases que dependen de esta para poder iniciar
     public function fasesDependientes()
     {
         return $this->hasMany(FaseProyecto::class, 'fase_prerrequisito_id');
     }
 
-    public function creador()
+    public function itemsChecklist()
     {
-        return $this->belongsTo(User::class, 'usuario_creador_id');
+        return $this->hasMany(ItemChecklist::class, 'fase_id')->orderBy('orden');
     }
 
     // ── Accessors ────────────────────────────────────────────────────────────
-
-    public function getContribucionAlAvanceAttribute(): float
-    {
-        return round((float) $this->peso_porcentual * (float) $this->porcentaje_avance_interno / 100, 4);
-    }
 
     public function getEstaCompletadaAttribute(): bool
     {
@@ -86,7 +75,7 @@ class FaseProyecto extends Model
 
     public function getEstaActivaAttribute(): bool
     {
-        return in_array($this->estado, ['en_proceso', 'pausada']);
+        return in_array($this->estado, ['en_progreso', 'suspendida']);
     }
 
     public function getPrerrequisitoCumplidoAttribute(): bool
@@ -116,7 +105,7 @@ class FaseProyecto extends Model
 
     public function scopeActivas($query)
     {
-        return $query->whereIn('estado', ['en_proceso', 'pausada']);
+        return $query->whereIn('estado', ['en_progreso', 'suspendida']);
     }
 
     // ── Métodos de dominio ───────────────────────────────────────────────────

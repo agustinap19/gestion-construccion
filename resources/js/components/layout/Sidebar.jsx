@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotificaciones } from '../../context/NotificacionContext';
-import { 
-    Home, Bell, Briefcase, Package, Warehouse, Truck, Users, 
-    Shield, FileText, ChevronLeft, ChevronRight, LogOut, Settings, User, Sun, Moon,
-    Building, Landmark
+import {
+    Home, Bell, Briefcase, Package, Warehouse, Truck, Users,
+    Shield, FileText, LogOut, Settings, User, Sun, Moon,
+    Pin, PinOff, BookOpen
 } from '../icons/Icons';
 import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
@@ -19,12 +19,10 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
     const { sidebarCollapsed: collapsed, toggleSidebar } = useLayout();
     const { theme, toggleTheme } = useTheme();
     const navigate = useNavigate();
-    
+
     const [isHovered, setIsHovered] = useState(false);
     const isActuallyCollapsed = collapsed && !isHovered;
-    const isFloating = collapsed && isHovered;
 
-    // Ocultar sidebar en móvil si se cambia de ruta
     useEffect(() => {
         setIsOpenMobile(false);
     }, [navigate, setIsOpenMobile]);
@@ -34,160 +32,202 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
         navigate('/login');
     };
 
-    const isManagerOrAdmin = usuario?.rol?.nombre === 'gerente' || usuario?.rol?.nombre === 'administrador' || hasPermission('roles.ver');
+    const isManagerOrAdmin = ['gerente', 'administrador', 'super_admin'].includes(usuario?.rol?.nombre) || hasPermission('roles.ver');
 
     const menuGroups = [
         {
             title: 'Principal',
             items: [
-                { id: 'home', label: 'Inicio', icon: <Home size={20} />, path: '/dashboard' },
-                { id: 'notificaciones', label: 'Notificaciones', icon: <Bell size={20} />, path: '/dashboard/notificaciones', badge: contador > 0 ? contador : null },
+                { id: 'home', label: 'Inicio', icon: Home, path: '/dashboard', exact: true },
+                { id: 'notificaciones', label: 'Notificaciones', icon: Bell, path: '/dashboard/notificaciones', badge: contador > 0 ? contador : null },
             ]
         },
         {
-            title: 'Gestión Operativa',
+            title: 'Operativo',
             items: [
-                { id: 'proyectos', label: 'Proyectos', icon: <Briefcase size={20} />, path: '/dashboard/proyectos' },
-                { id: 'materiales', label: 'Materiales', icon: <Package size={20} />, path: '/dashboard/materiales', disabled: true },
-                { id: 'almacenes', label: 'Almacenes', icon: <Warehouse size={20} />, path: '/dashboard/almacenes', disabled: true },
-                { id: 'proveedores', label: 'Proveedores', icon: <Truck size={20} />, path: '/dashboard/proveedores', disabled: true },
+                { id: 'proyectos', label: 'Proyectos', icon: Briefcase, path: '/dashboard/proyectos' },
+                ...(hasPermission('materiales.ver') ? [{ id: 'materiales', label: 'Materiales', icon: Package, path: '/dashboard/materiales' }] : []),
+                ...(hasPermission('almacenes.ver') ? [{ id: 'almacenes', label: 'Almacenes', icon: Warehouse, path: '/dashboard/almacenes' }] : []),
+                ...(hasPermission('biblioteca_constructiva.ver') ? [{ id: 'biblioteca', label: 'Biblioteca', icon: BookOpen, path: '/dashboard/biblioteca-constructiva' }] : []),
+                { id: 'proveedores', label: 'Proveedores', icon: Truck, path: '/dashboard/proveedores', disabled: true },
             ]
         },
-        // Mostrar Administración solo para Gerente o roles específicos
-        // Mostrar Administración solo para Gerente o roles específicos
         ...(isManagerOrAdmin ? [{
             title: 'Administración',
             items: [
-                { id: 'usuarios', label: 'Usuarios', icon: <Users size={20} />, path: '/dashboard/usuarios' },
-                { id: 'roles', label: 'Roles y Permisos', icon: <Shield size={20} />, path: '/dashboard/roles' },
-                { id: 'personal', label: 'Personal', icon: <Briefcase size={20} />, path: '/dashboard/personal' },
+                { id: 'usuarios', label: 'Usuarios', icon: Users, path: '/dashboard/usuarios' },
+                { id: 'roles', label: 'Roles y Permisos', icon: Shield, path: '/dashboard/roles' },
+                { id: 'personal', label: 'Personal', icon: Briefcase, path: '/dashboard/personal' },
             ]
         }] : []),
         {
-            title: 'Gestión de Clientes',
-            items: [
-                { id: 'clientes', label: 'Clientes (Privados)', icon: <Building size={20} />, path: '/dashboard/clientes' },
-                { id: 'entidades', label: 'Entidades Estatales', icon: <Landmark size={20} />, path: '/dashboard/entidades-estatales' },
-            ]
-        },
-        {
-            title: 'Gestión Social',
-            items: [
-                { id: 'beneficiarios', label: 'Beneficiarios', icon: <Users size={20} />, path: '/dashboard/beneficiarios' },
-            ]
-        },
-        {
             title: 'Reportes',
             items: [
-                { id: 'reportes', label: 'Generar Reportes', icon: <FileText size={20} />, path: '/dashboard/reportes' },
+                { id: 'reportes', label: 'Reportes', icon: FileText, path: '/dashboard/reportes' },
             ]
         }
     ];
 
-    const filteredGroups = menuGroups;
-
     const userMenuOptions = [
-        { label: 'Mi Perfil', icon: <User size={16} />, onClick: () => navigate('/dashboard/mi-perfil') },
-        { label: 'Configuración', icon: <Settings size={16} />, onClick: () => navigate('/dashboard/configuracion') },
+        { label: 'Mi Perfil', icon: <User size={15} />, onClick: () => navigate('/dashboard/mi-perfil') },
+        { label: 'Configuración', icon: <Settings size={15} />, onClick: () => navigate('/dashboard/configuracion') },
         { divider: true },
-        { label: theme === 'dark' ? 'Modo claro' : 'Modo oscuro', icon: theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />, onClick: toggleTheme },
+        { label: theme === 'dark' ? 'Modo claro' : 'Modo oscuro', icon: theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />, onClick: toggleTheme },
         { divider: true },
-        { label: 'Cerrar Sesión', icon: <LogOut size={16} />, onClick: handleLogout, danger: true },
+        { label: 'Cerrar Sesión', icon: <LogOut size={15} />, onClick: handleLogout, danger: true },
     ];
 
-    const sidebarClass = `
-        fixed top-0 left-0 h-screen z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-r border-slate-200 dark:border-slate-800/50 flex flex-col transition-all duration-300 overflow-x-hidden
-        ${isActuallyCollapsed ? 'w-[80px]' : 'w-[280px]'}
-        ${isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        ${isFloating ? 'shadow-[10px_0_50px_rgba(0,0,0,0.5)] border-r-0' : ''}
-    `;
+    const sidebarWidth = isActuallyCollapsed ? '72px' : '268px';
 
     return (
         <>
             {/* Overlay móvil */}
             {isOpenMobile && (
-                <div 
-                    className="fixed inset-0 bg-[#050505]/80 z-30 lg:hidden"
+                <div
+                    className="fixed inset-0 z-30 lg:hidden"
+                    style={{ background: 'oklch(0% 0 0 / 0.6)', backdropFilter: 'blur(4px)' }}
                     onClick={() => setIsOpenMobile(false)}
                 />
             )}
 
-            <aside 
-                className={sidebarClass}
+            <aside
+                style={{ width: sidebarWidth }}
+                className={[
+                    'fixed top-0 left-0 h-screen z-40 flex flex-col transition-all duration-300',
+                    // Glass base
+                    'bg-white/[0.82] dark:bg-[#080c15]/[0.90]',
+                    'backdrop-blur-[28px] saturate-150',
+                    'border-r border-slate-200/80 dark:border-white/[0.055]',
+                    'shadow-[1px_0_0_0_oklch(88%_0.005_260/0.6)] dark:shadow-[1px_0_0_0_oklch(100%_0_0/0.04)]',
+                    isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+                    collapsed && isHovered ? 'shadow-[0_0_60px_oklch(0%_0_0/0.25)]' : '',
+                ].join(' ')}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
             >
-                {/* Header (Logo & Toggle) */}
-                <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800/50 shrink-0">
+                {/* Logo / Header */}
+                <div className="h-[62px] flex items-center justify-between px-4 shrink-0 relative">
+                    {/* Línea gradiente inferior */}
+                    <div className="absolute bottom-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-slate-200 dark:via-white/[0.07] to-transparent" />
+
                     <div className="flex items-center gap-3 overflow-hidden min-w-[40px]">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center shrink-0">
-                            <span className="text-emerald-600 dark:text-emerald-400 font-bold text-sm">CK</span>
+                        {/* Logo icon */}
+                        <div className="relative shrink-0">
+                            <div className="w-8 h-8 rounded-[10px] flex items-center justify-center relative overflow-hidden"
+                                style={{ background: 'linear-gradient(135deg, oklch(62% 0.2 145), oklch(52% 0.22 165))' }}>
+                                <span className="text-white font-black text-xs tracking-tight relative z-10">CK</span>
+                                {/* Glass shine */}
+                                <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/20 rounded-t-[10px]" />
+                            </div>
+                            {/* Glow */}
+                            <div className="absolute inset-0 rounded-[10px] blur-[8px] opacity-40"
+                                style={{ background: 'oklch(62% 0.2 145)' }} />
                         </div>
+
                         {!isActuallyCollapsed && (
-                            <span className="text-slate-900 dark:text-white font-bold tracking-tight whitespace-nowrap animate-fade-in">
-                                CA & KANAGF
-                            </span>
+                            <div className="animate-fade-in min-w-0">
+                                <p className="text-[13px] font-bold text-slate-900 dark:text-white tracking-tight leading-none">CA & KANAGF</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-500 mt-0.5 tracking-wide uppercase">S.R.L.</p>
+                            </div>
                         )}
                     </div>
-                    
-                    {/* Botón colapsar - oculto en móvil */}
-                    <button 
-                        onClick={toggleSidebar}
-                        className="hidden lg:flex w-6 h-6 items-center justify-center rounded-full bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors absolute -right-3 top-5 border border-slate-200 dark:border-slate-700 z-50 shadow-sm"
-                    >
-                        {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-                    </button>
+
+                    {/* Botón anclar/desanclar — solo desktop, solo visible cuando la barra está expandida */}
+                    {!isActuallyCollapsed && (
+                        <button
+                            onClick={toggleSidebar}
+                            title={collapsed ? 'Anclar menú' : 'Desanclar menú'}
+                            className={[
+                                'hidden lg:flex shrink-0',
+                                'w-7 h-7 items-center justify-center rounded-lg',
+                                'text-slate-400 dark:text-slate-500',
+                                'hover:bg-slate-100 dark:hover:bg-white/[0.07]',
+                                'hover:text-emerald-600 dark:hover:text-emerald-400',
+                                'transition-all duration-200',
+                            ].join(' ')}
+                        >
+                            {collapsed ? <Pin size={14} /> : <PinOff size={14} />}
+                        </button>
+                    )}
                 </div>
 
-                {/* Navegación */}
-                <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-                    {filteredGroups.map((group, idx) => (
-                        <div key={idx} className="mb-6 px-3">
+                {/* Nav */}
+                <nav className="flex-1 overflow-y-auto py-3 scrollbar-thin">
+                    {menuGroups.map((group, gIdx) => (
+                        <div key={gIdx} className="mb-1 px-3">
                             {!isActuallyCollapsed && (
-                                <h3 className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap overflow-hidden">
+                                <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-600 whitespace-nowrap">
                                     {group.title}
-                                </h3>
+                                </p>
                             )}
-                            <ul className="space-y-1 relative">
+                            {isActuallyCollapsed && gIdx > 0 && (
+                                <div className="mx-2 mb-1 h-px bg-slate-100 dark:bg-white/[0.04]" />
+                            )}
+                            <ul className="space-y-0.5">
                                 {group.items.map(item => {
+                                    const Icon = item.icon;
                                     const isDis = item.disabled;
-                                    
-                                    const linkContent = (
+
+                                    const linkEl = (
                                         <NavLink
                                             to={isDis ? '#' : item.path}
+                                            end={item.exact}
                                             onClick={(e) => isDis && e.preventDefault()}
-                                            className={({ isActive }) => `
-                                                group flex items-center rounded-xl transition-all duration-200 relative overflow-hidden
-                                                ${isActuallyCollapsed ? 'justify-center p-3' : 'px-3 py-2.5'}
-                                                ${isDis ? 'opacity-50 cursor-not-allowed' : ''}
-                                                ${!isDis && isActive ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200'}
-                                            `}
+                                            className={({ isActive }) => [
+                                                'group relative flex items-center rounded-[10px] transition-all duration-200 overflow-hidden select-none',
+                                                isActuallyCollapsed ? 'justify-center p-[10px]' : 'px-3 py-[9px]',
+                                                isDis ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
+                                                !isDis && isActive
+                                                    ? 'bg-emerald-500/[0.12] dark:bg-emerald-500/[0.10] text-emerald-700 dark:text-emerald-300'
+                                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-white/[0.05] hover:text-slate-900 dark:hover:text-slate-200',
+                                            ].join(' ')}
                                         >
                                             {({ isActive }) => (
                                                 <>
-                                                    {/* Indicador Activo Animado */}
+                                                    {/* Indicador activo */}
                                                     {isActive && !isDis && (
-                                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2/3 bg-emerald-500 rounded-r-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                                                        <span
+                                                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-r-full"
+                                                            style={{
+                                                                background: 'linear-gradient(180deg, oklch(65% 0.2 145), oklch(55% 0.22 165))',
+                                                                boxShadow: '0 0 8px oklch(62% 0.2 145 / 0.5)',
+                                                            }}
+                                                        />
                                                     )}
-                                                    
-                                                    <span className={`${!isActuallyCollapsed && 'mr-3 pl-1'} transition-transform duration-300 group-hover:translate-x-1 shrink-0`}>
-                                                        {item.icon}
+
+                                                    {/* Shine on active */}
+                                                    {isActive && !isDis && !isActuallyCollapsed && (
+                                                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/[0.06] to-transparent pointer-events-none" />
+                                                    )}
+
+                                                    {/* Icono */}
+                                                    <span className={[
+                                                        'shrink-0 transition-transform duration-200',
+                                                        !isActuallyCollapsed ? 'mr-3 pl-1' : '',
+                                                        'group-hover:scale-110',
+                                                        isActive ? 'text-emerald-600 dark:text-emerald-400' : '',
+                                                    ].join(' ')}>
+                                                        <Icon size={17} />
                                                     </span>
-                                                    
+
+                                                    {/* Label */}
                                                     {!isActuallyCollapsed && (
-                                                        <span className="flex-1 text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+                                                        <span className="flex-1 text-[13px] font-medium whitespace-nowrap overflow-hidden text-ellipsis">
                                                             {item.label}
                                                         </span>
                                                     )}
 
+                                                    {/* Badge notificaciones */}
                                                     {!isActuallyCollapsed && item.badge && (
-                                                        <span className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 py-0.5 px-2 rounded-full text-xs font-bold shrink-0">
+                                                        <span className="ml-auto shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 dark:bg-emerald-400 text-white dark:text-[#080c15] text-[10px] font-bold flex items-center justify-center"
+                                                            style={{ boxShadow: '0 0 8px oklch(62% 0.2 145 / 0.5)' }}>
                                                             {item.badge}
                                                         </span>
                                                     )}
 
+                                                    {/* Pronto badge */}
                                                     {!isActuallyCollapsed && isDis && (
-                                                        <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-0.5 px-2 rounded-md text-[10px] font-bold shrink-0 uppercase tracking-wider">
+                                                        <span className="ml-auto shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.06] text-slate-400 dark:text-slate-500">
                                                             Pronto
                                                         </span>
                                                     )}
@@ -196,50 +236,58 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
                                         </NavLink>
                                     );
 
-                                    if (isActuallyCollapsed || isDis) {
-                                        const tooltipText = isDis ? 'Próximamente' : item.label;
+                                    if (isActuallyCollapsed) {
                                         return (
                                             <li key={item.id}>
-                                                <Tooltip content={tooltipText} position="right">
-                                                    {linkContent}
+                                                <Tooltip content={isDis ? 'Próximamente' : item.label} position="right">
+                                                    {linkEl}
                                                 </Tooltip>
                                             </li>
                                         );
                                     }
 
-                                    return <li key={item.id}>{linkContent}</li>;
+                                    return <li key={item.id}>{linkEl}</li>;
                                 })}
                             </ul>
                         </div>
                     ))}
-                </div>
+                </nav>
 
-                {/* Footer (User) */}
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800/50 shrink-0 w-full">
-                    <Dropdown 
-                        trigger={
-                            <button className={`w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${isActuallyCollapsed ? 'justify-center' : ''}`}>
-                                <Avatar 
-                                    name={`${usuario?.nombre || ''} ${usuario?.apellido_paterno || ''}`}
-                                    size="sm"
-                                    online={true}
-                                />
-                                {!isActuallyCollapsed && (
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                                            {usuario?.nombre} {usuario?.apellido_paterno}
-                                        </p>
-                                        <p className="text-xs text-emerald-600 dark:text-emerald-400 truncate capitalize">
-                                            {usuario?.rol?.nombre_visible || usuario?.rol?.nombre}
-                                        </p>
-                                    </div>
-                                )}
-                            </button>
-                        }
-                        items={userMenuOptions}
-                        align="top"
-                        className="w-full block"
-                    />
+                {/* Footer — usuario */}
+                <div className="px-3 pb-4 shrink-0 relative">
+                    {/* Línea gradiente superior */}
+                    <div className="absolute top-0 left-4 right-4 h-[1px] bg-gradient-to-r from-transparent via-slate-200 dark:via-white/[0.07] to-transparent" />
+                    <div className="pt-3">
+                        <Dropdown
+                            trigger={
+                                <button className={[
+                                    'w-full flex items-center rounded-[10px] p-2.5 transition-all duration-200 focus:outline-none',
+                                    'hover:bg-slate-100/80 dark:hover:bg-white/[0.05]',
+                                    'text-left cursor-pointer',
+                                    isActuallyCollapsed ? 'justify-center' : 'gap-3',
+                                ].join(' ')}>
+                                    <Avatar
+                                        name={`${usuario?.nombre || ''} ${usuario?.apellido_paterno || ''}`}
+                                        size="sm"
+                                        online={true}
+                                    />
+                                    {!isActuallyCollapsed && (
+                                        <div className="flex-1 min-w-0 animate-fade-in">
+                                            <p className="text-[13px] font-semibold text-slate-900 dark:text-white truncate leading-tight">
+                                                {usuario?.nombre} {usuario?.apellido_paterno}
+                                            </p>
+                                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 truncate capitalize mt-0.5">
+                                                {usuario?.rol?.nombre_visible || usuario?.rol?.nombre}
+                                            </p>
+                                        </div>
+                                    )}
+                                </button>
+                            }
+                            items={userMenuOptions}
+                            align="top"
+                            className="w-full block"
+                        />
+                    </div>
                 </div>
             </aside>
         </>

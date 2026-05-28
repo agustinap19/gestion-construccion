@@ -160,7 +160,7 @@ class PersonalController extends Controller
     {
         try {
             $request->validate([
-                'usuario_id' => 'required|exists:usuarios,id',
+                'usuario_id' => 'required|exists:users,id',
             ], [
                 'usuario_id.required' => 'El usuario es obligatorio.',
                 'usuario_id.exists' => 'El usuario seleccionado no existe.',

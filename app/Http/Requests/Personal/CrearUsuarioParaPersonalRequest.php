@@ -11,7 +11,7 @@ class CrearUsuarioParaPersonalRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => 'required|email|unique:usuarios,email',
+            'email' => 'required|email|unique:users,email',
             'rol_id' => 'required|exists:roles,id',
         ];
     }

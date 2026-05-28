@@ -3,9 +3,7 @@
 namespace App\Services\Clientes;
 
 use App\Models\Cliente;
-use App\Models\Auditoria;
 use App\Models\User;
-use App\Services\AuditoriaService;
 use App\Services\NotificacionService;
 use App\Exceptions\Clientes\ClienteDuplicadoException;
 use App\Exceptions\Clientes\ClienteConDependenciasException;
@@ -17,14 +15,9 @@ use Carbon\Carbon;
 
 class ClienteService
 {
-    protected $auditoriaService;
-    protected $notificacionService;
-
-    public function __construct(AuditoriaService $auditoriaService, NotificacionService $notificacionService)
-    {
-        $this->auditoriaService = $auditoriaService;
-        $this->notificacionService = $notificacionService;
-    }
+    public function __construct(
+        protected NotificacionService $notificacionService
+    ) {}
 
     public function listarConFiltros(array $filtros, int $perPage = 20): LengthAwarePaginator
     {
@@ -54,11 +47,6 @@ class ClienteService
             $query->where('origen', $filtros['origen']);
         }
 
-        if (!empty($filtros['con_proyectos'])) {
-            // Se habilitará cuando exista Proyectos
-            // $query->has('proyectos');
-        }
-
         if (!empty($filtros['creado_desde'])) {
             $query->whereDate('created_at', '>=', $filtros['creado_desde']);
         }
@@ -79,33 +67,26 @@ class ClienteService
     public function obtenerCompleto(int $id): array
     {
         $cliente = Cliente::with(['zona', 'creador', 'referidoPor'])->findOrFail($id);
-        
-        $referidos = $cliente->referidos()->select('id', 'nombre_completo', 'nombre_comercial', 'tipo', 'created_at')->get();
-        
-        $auditoria = Auditoria::with('actor:id,email')
-            ->where('tabla_afectada', 'clientes')
-            ->where('registro_id', $id)
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
+
+        $referidos = $cliente->referidos()
+            ->select('id', 'nombre_completo', 'nombre_comercial', 'tipo', 'created_at')
             ->get();
 
         $antiguedad_meses = Carbon::parse($cliente->created_at)->diffInMonths(now());
 
         return [
-            'cliente' => $cliente,
-            'referidos' => $referidos,
-            'auditoria' => $auditoria,
+            'cliente'     => $cliente,
+            'referidos'   => $referidos,
             'estadisticas' => [
-                'cantidad_proyectos' => 0, // Placeholder
-                'monto_total_contratado' => 0, // Placeholder
-                'antiguedad_meses' => $antiguedad_meses
-            ]
+                'cantidad_proyectos'       => 0,
+                'monto_total_contratado'   => 0,
+                'antiguedad_meses'         => $antiguedad_meses,
+            ],
         ];
     }
 
     public function crear(array $datos, int $actorId): Cliente
     {
-        // Validaciones cruzadas tipo vs documento_tipo
         if ($datos['tipo'] === 'empresa' && $datos['documento_tipo'] !== 'nit') {
             throw ValidationException::withMessages(['documento_tipo' => 'Las empresas deben usar NIT como documento.']);
         }
@@ -113,7 +94,6 @@ class ClienteService
             throw ValidationException::withMessages(['documento_tipo' => 'Las personas naturales no pueden usar NIT.']);
         }
 
-        // Unicidad de documento
         $existe = Cliente::where('documento_tipo', $datos['documento_tipo'])
                          ->where('documento_numero', $datos['documento_numero'])
                          ->exists();
@@ -121,7 +101,6 @@ class ClienteService
             throw new ClienteDuplicadoException($datos['documento_tipo'], $datos['documento_numero']);
         }
 
-        // Validación de referente
         if (!empty($datos['cliente_referido_por'])) {
             $referente = Cliente::find($datos['cliente_referido_por']);
             if (!$referente || in_array($referente->estado, ['bloqueado', 'inactivo'])) {
@@ -137,13 +116,6 @@ class ClienteService
 
             $cliente = Cliente::create($datos);
 
-            $this->auditoriaService->registrarCreacion(
-                'cliente.creado',
-                'clientes',
-                $cliente->id,
-                $cliente->toArray()
-            );
-
             return $cliente->load(['zona', 'creador', 'referidoPor']);
         });
     }
@@ -151,11 +123,10 @@ class ClienteService
     public function actualizar(int $id, array $datos, int $actorId): Cliente
     {
         $cliente = Cliente::findOrFail($id);
-        
-        // Validaciones cruzadas
-        $nuevoTipo = $datos['tipo'] ?? $cliente->tipo;
+
+        $nuevoTipo    = $datos['tipo'] ?? $cliente->tipo;
         $nuevoDocTipo = $datos['documento_tipo'] ?? $cliente->documento_tipo;
-        
+
         if ($nuevoTipo === 'empresa' && $nuevoDocTipo !== 'nit') {
             throw ValidationException::withMessages(['documento_tipo' => 'Las empresas deben usar NIT como documento.']);
         }
@@ -163,7 +134,6 @@ class ClienteService
             throw ValidationException::withMessages(['documento_tipo' => 'Las personas naturales no pueden usar NIT.']);
         }
 
-        // Unicidad
         if (isset($datos['documento_numero']) || isset($datos['documento_tipo'])) {
             $docNum = $datos['documento_numero'] ?? $cliente->documento_numero;
             $existe = Cliente::where('documento_tipo', $nuevoDocTipo)
@@ -175,35 +145,16 @@ class ClienteService
             }
         }
 
-        // Proteger campos inmutables
-        unset($datos['usuario_creador_id']);
-        unset($datos['estado']); // Se cambia con su propio método
+        unset($datos['usuario_creador_id'], $datos['estado']);
 
-        $datosAnteriores = $cliente->toArray();
         $cliente->fill($datos);
-        
-        $cambiosReales = [];
-        $nuevosReales = [];
-        foreach ($cliente->getDirty() as $atributo => $valorNuevo) {
-            $cambiosReales[$atributo] = $datosAnteriores[$atributo] ?? null;
-            $nuevosReales[$atributo] = $valorNuevo;
+
+        if (empty($cliente->getDirty())) {
+            return $cliente;
         }
 
-        if (empty($cambiosReales)) {
-            return $cliente; // Nada que guardar
-        }
-
-        return DB::transaction(function () use ($cliente, $actorId, $cambiosReales, $nuevosReales) {
+        return DB::transaction(function () use ($cliente) {
             $cliente->save();
-
-            $this->auditoriaService->registrarActualizacion(
-                'cliente.actualizado',
-                'clientes',
-                $cliente->id,
-                $cambiosReales,
-                $nuevosReales
-            );
-
             return $cliente->load(['zona', 'creador', 'referidoPor']);
         });
     }
@@ -211,12 +162,12 @@ class ClienteService
     public function cambiarEstado(int $id, string $nuevoEstado, ?string $razon, int $actorId): Cliente
     {
         $cliente = Cliente::findOrFail($id);
-        
+
         if ($cliente->estado === $nuevoEstado) {
             return $cliente;
         }
 
-        $actor = User::with('rol')->find($actorId);
+        $actor     = User::with('rol')->find($actorId);
         $esGerente = $actor && $actor->rol && $actor->rol->nombre === 'gerente';
 
         if (in_array('bloqueado', [$nuevoEstado, $cliente->estado]) && !$esGerente) {
@@ -227,19 +178,9 @@ class ClienteService
             throw ValidationException::withMessages(['razon' => 'Debe especificar una razón al bloquear al cliente.']);
         }
 
-        return DB::transaction(function () use ($cliente, $nuevoEstado, $razon, $actorId) {
-            $estadoAnterior = $cliente->estado;
+        return DB::transaction(function () use ($cliente, $nuevoEstado, $razon) {
             $cliente->estado = $nuevoEstado;
             $cliente->save();
-
-            $this->auditoriaService->registrarCambioEstado(
-                'cliente.estado_cambiado',
-                'clientes',
-                $cliente->id,
-                $estadoAnterior,
-                $nuevoEstado,
-                $razon
-            );
 
             if ($nuevoEstado === 'bloqueado') {
                 $this->notificacionService->notificarAUsuariosConRol(
@@ -266,27 +207,8 @@ class ClienteService
             );
         }
 
-        // Validación de proyectos (Placeholder)
-        /*
-        if ($cliente->proyectos()->count() > 0) {
-            throw new ClienteConDependenciasException(
-                "Este cliente tiene proyectos asociados. Reasígnalos o termínalos antes de eliminar.",
-                'proyectos',
-                $cliente->proyectos()->count()
-            );
-        }
-        */
-
-        return DB::transaction(function () use ($cliente, $actorId, $razon) {
+        return DB::transaction(function () use ($cliente) {
             $cliente->delete();
-
-            $this->auditoriaService->registrarEliminacion(
-                'cliente.eliminado',
-                'clientes',
-                $cliente->id,
-                $cliente->toArray(),
-                $razon
-            );
 
             $this->notificacionService->notificarAUsuariosConRol(
                 'gerente',
@@ -307,18 +229,9 @@ class ClienteService
         }
 
         $cliente = Cliente::onlyTrashed()->findOrFail($id);
-        
-        return DB::transaction(function () use ($cliente, $actorId) {
+
+        return DB::transaction(function () use ($cliente) {
             $cliente->restore();
-
-            $this->auditoriaService->registrarActualizacion(
-                'cliente.restaurado',
-                'clientes',
-                $cliente->id,
-                ['deleted_at' => $cliente->deleted_at],
-                ['deleted_at' => null]
-            );
-
             return $cliente;
         });
     }
@@ -326,10 +239,10 @@ class ClienteService
     public function obtenerEstadisticasGenerales(): array
     {
         $baseQuery = Cliente::query();
-        $totalActivos = (clone $baseQuery)->activos()->count();
-        $totalInactivos = (clone $baseQuery)->where('estado', 'inactivo')->count();
+        $totalActivos     = (clone $baseQuery)->activos()->count();
+        $totalInactivos   = (clone $baseQuery)->where('estado', 'inactivo')->count();
         $totalPotenciales = (clone $baseQuery)->where('estado', 'potencial')->count();
-        $totalBloqueados = (clone $baseQuery)->where('estado', 'bloqueado')->count();
+        $totalBloqueados  = (clone $baseQuery)->where('estado', 'bloqueado')->count();
 
         $totalPersonas = (clone $baseQuery)->personas()->count();
         $totalEmpresas = (clone $baseQuery)->empresas()->count();
@@ -350,15 +263,15 @@ class ClienteService
             ->toArray();
 
         return [
-            'total_activos' => $totalActivos,
-            'total_inactivos' => $totalInactivos,
-            'total_potenciales' => $totalPotenciales,
-            'total_bloqueados' => $totalBloqueados,
-            'total_personas_naturales' => $totalPersonas,
-            'total_empresas' => $totalEmpresas,
+            'total_activos'              => $totalActivos,
+            'total_inactivos'            => $totalInactivos,
+            'total_potenciales'          => $totalPotenciales,
+            'total_bloqueados'           => $totalBloqueados,
+            'total_personas_naturales'   => $totalPersonas,
+            'total_empresas'             => $totalEmpresas,
             'clientes_creados_ultimo_mes' => $creadosUltimoMes,
-            'top_referentes' => $topReferentes,
-            'distribucion_origen' => $distribucionOrigen
+            'top_referentes'             => $topReferentes,
+            'distribucion_origen'        => $distribucionOrigen,
         ];
     }
 }

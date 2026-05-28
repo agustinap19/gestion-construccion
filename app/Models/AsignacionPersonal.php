@@ -16,6 +16,7 @@ class AsignacionPersonal extends Model
         'proyecto_id',
         'personal_id',
         'rol_en_proyecto',
+        'responsabilidades',
         'fecha_inicio',
         'fecha_fin',
         'estado',

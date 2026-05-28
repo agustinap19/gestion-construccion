@@ -82,6 +82,11 @@ class Vivienda extends Model
         return $this->belongsTo(User::class, 'usuario_creador_id');
     }
 
+    public function itemsChecklist()
+    {
+        return $this->hasMany(ItemChecklist::class, 'vivienda_id')->orderBy('orden');
+    }
+
     // ── Accessors ────────────────────────────────────────────────────────────
 
     public function getTieneAvanceAttribute(): bool

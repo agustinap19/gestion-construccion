@@ -10,17 +10,15 @@ class CodigoOtp extends Model
 {
     protected $table = 'codigos_otp';
 
-    public $timestamps = false; // We only have created_at
-
     protected $fillable = [
         'usuario_id',
         'codigo',
+        'tipo',
         'token_temporal',
         'fingerprint_dispositivo',
-        'usado',
         'expira_en',
+        'usado',
         'intentos_fallidos',
-        'created_at',
     ];
 
     protected function casts(): array
@@ -28,7 +26,6 @@ class CodigoOtp extends Model
         return [
             'usado' => 'boolean',
             'expira_en' => 'datetime',
-            'created_at' => 'datetime',
             'intentos_fallidos' => 'integer',
         ];
     }
@@ -40,7 +37,6 @@ class CodigoOtp extends Model
 
     public function scopeVigente(Builder $query): void
     {
-        $query->where('usado', false)
-              ->where('expira_en', '>', now());
+        $query->where('usado', false)->where('expira_en', '>', now());
     }
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PageHeader from '../../../components/layout/PageHeader';
-import { Briefcase, ArrowLeft, Save } from '../../../components/icons/Icons';
+import { Briefcase, ArrowLeft, Save, Edit } from '../../../components/icons/Icons';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import FloatingInput from '../../../components/ui/FloatingInput';

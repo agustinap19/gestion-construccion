@@ -2,38 +2,28 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class IntentoAcceso extends Model
 {
-    use HasFactory;
-
     protected $table = 'intentos_acceso';
+
+    public $timestamps = false;
 
     protected $fillable = [
         'email',
-        'usuario_id',
         'ip_address',
         'user_agent',
         'exitoso',
-        'motivo_fallo',
-        'pais',
-        'ciudad',
-        'fecha_intento',
+        'motivo',
+        'created_at',
     ];
 
     protected function casts(): array
     {
         return [
             'exitoso' => 'boolean',
-            'fecha_intento' => 'datetime',
+            'created_at' => 'datetime',
         ];
-    }
-
-    public function usuario(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'usuario_id');
     }
 }

@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+// TODO: reactivar OwenIt\Auditing\Auditable cuando la tabla `audits` sea creada (sprint de auditoría)
+
 class Cliente extends Model
 {
     use HasFactory, SoftDeletes;

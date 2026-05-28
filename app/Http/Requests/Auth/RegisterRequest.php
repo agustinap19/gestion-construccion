@@ -25,8 +25,8 @@ class RegisterRequest extends FormRequest
             'nombre' => ['required', 'string', 'max:80'],
             'apellido_paterno' => ['required', 'string', 'max:80'],
             'apellido_materno' => ['nullable', 'string', 'max:80'],
-            'ci' => ['required', 'string', 'unique:usuarios,ci'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:usuarios,email'],
+            'ci' => ['required', 'string', 'unique:users,ci'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'rol_id' => ['required', 'exists:roles,id'],
         ];

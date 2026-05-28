@@ -11,19 +11,12 @@ use Exception;
 
 class RolService
 {
-    /**
-     * Permisos considerados críticos (solo gerente puede asignarlos).
-     */
     private const PERMISOS_CRITICOS = [
         'roles.crear',
         'roles.eliminar',
         'usuarios.crear',
         'usuarios.eliminar',
     ];
-
-    public function __construct(
-        protected AuditoriaService $auditoriaService
-    ) {}
 
     /**
      * Lista todos los roles con filtros opcionales.
@@ -88,14 +81,10 @@ class RolService
                 ];
             });
 
-        // Historial de auditoría
-        $auditoria = $this->auditoriaService->obtenerPorTabla('roles', $id);
-
         return [
-            'rol' => $rol,
+            'rol'               => $rol,
             'permisos_agrupados' => $permisosAgrupados,
-            'usuarios' => $usuarios,
-            'auditoria' => $auditoria,
+            'usuarios'          => $usuarios,
         ];
     }
 
@@ -131,16 +120,6 @@ class RolService
             if (!empty($permisoIds)) {
                 $rol->permisos()->sync($permisoIds);
             }
-
-            // Registrar auditoría
-            $this->auditoriaService->registrar('rol.creado', 'roles', $rol->id, [
-                'datos_nuevos' => [
-                    'nombre' => $rol->nombre,
-                    'nombre_visible' => $rol->nombre_visible,
-                    'descripcion' => $rol->descripcion,
-                    'permisos_count' => count($permisoIds),
-                ],
-            ]);
 
             return $rol->load('permisos')->loadCount('usuarios');
         });
@@ -182,14 +161,6 @@ class RolService
             'estado' => $rol->estado,
         ];
 
-        // Registrar auditoría solo si hubo cambios
-        if ($datosAnteriores !== $datosNuevos) {
-            $this->auditoriaService->registrar('rol.actualizado', 'roles', $rol->id, [
-                'datos_anteriores' => $datosAnteriores,
-                'datos_nuevos' => $datosNuevos,
-            ]);
-        }
-
         return $rol->load('permisos')->loadCount('usuarios');
     }
 
@@ -215,21 +186,6 @@ class RolService
         // Sincronizar permisos
         $rol->permisos()->sync($permisoIds);
 
-        // Registrar auditoría
-        $this->auditoriaService->registrar('rol.permisos_modificados', 'roles', $rol->id, [
-            'datos_anteriores' => [
-                'permisos' => array_values($permisosAnteriores),
-                'total' => count($permisosAnteriores),
-            ],
-            'datos_nuevos' => [
-                'permisos' => array_values($permisosNuevosModels),
-                'total' => count($permisosNuevosModels),
-                'agregados' => array_values($agregados),
-                'eliminados' => array_values($eliminados),
-            ],
-            'razon' => $razon,
-        ]);
-
         return $rol->load('permisos')->loadCount('usuarios');
     }
 
@@ -247,14 +203,6 @@ class RolService
         if ($rol->usuarios_count > 0) {
             throw new Exception("El rol tiene {$rol->usuarios_count} usuarios asignados. Reasígnalos antes de eliminar.");
         }
-
-        // Registrar auditoría antes de eliminar
-        $this->auditoriaService->registrar('rol.eliminado', 'roles', $rol->id, [
-            'datos_anteriores' => [
-                'nombre' => $rol->nombre,
-                'nombre_visible' => $rol->nombre_visible,
-            ],
-        ]);
 
         // Eliminar permisos asociados y el rol
         $rol->permisos()->detach();
@@ -285,16 +233,6 @@ class RolService
             ]);
 
             $nuevoRol->permisos()->sync($permisoIds);
-
-            $this->auditoriaService->registrar('rol.duplicado', 'roles', $nuevoRol->id, [
-                'datos_nuevos' => [
-                    'nombre' => $nuevoRol->nombre,
-                    'nombre_visible' => $nuevoRol->nombre_visible,
-                    'rol_origen_id' => $rolOrigen->id,
-                    'rol_origen_nombre' => $rolOrigen->nombre_visible,
-                    'permisos_copiados' => count($permisoIds),
-                ],
-            ]);
 
             return $nuevoRol->load('permisos')->loadCount('usuarios');
         });

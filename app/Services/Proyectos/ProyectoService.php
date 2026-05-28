@@ -2,14 +2,14 @@
 
 namespace App\Services\Proyectos;
 
+use App\Models\ConfiguracionPorcentajesPresupuesto;
 use App\Models\Proyecto;
 use App\Models\TipoProyecto;
 use App\Models\User;
-use App\Models\Auditoria;
-use App\Services\AuditoriaService;
 use App\Services\NotificacionService;
+use App\Services\Proyectos\CascadaProyectoService;
+use App\Services\Proyectos\CalculadoraAvanceService;
 use App\Exceptions\Proyectos\TransicionEstadoNoPermitidaException;
-use App\Exceptions\Proyectos\CategoriaProyectoIncompatibleException;
 use App\Exceptions\Proyectos\ProyectoConDependenciasException;
 use App\Exceptions\Proyectos\ProyectoEnEstadoNoModificableException;
 use Illuminate\Validation\ValidationException;
@@ -19,32 +19,38 @@ use Carbon\Carbon;
 
 class ProyectoService
 {
-    protected AuditoriaService $auditoria;
     protected NotificacionService $notificacion;
     protected CalculoAvanceService $calculoAvance;
+    protected CascadaProyectoService $cascada;
+    protected CalculadoraAvanceService $calculadora;
 
     public function __construct(
-        AuditoriaService $auditoria,
         NotificacionService $notificacion,
-        CalculoAvanceService $calculoAvance
+        CalculoAvanceService $calculoAvance,
+        CascadaProyectoService $cascada,
+        CalculadoraAvanceService $calculadora
     ) {
-        $this->auditoria = $auditoria;
-        $this->notificacion = $notificacion;
+        $this->notificacion  = $notificacion;
         $this->calculoAvance = $calculoAvance;
+        $this->cascada       = $cascada;
+        $this->calculadora   = $calculadora;
     }
 
     public function listarConFiltros(array $filtros, int $perPage = 20): LengthAwarePaginator
     {
-        $query = Proyecto::with(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'administrador']);
+        $query = Proyecto::with(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'responsable']);
 
         if (!empty($filtros['busqueda'])) {
             $query->buscar($filtros['busqueda']);
         }
-        if (!empty($filtros['categoria']) && $filtros['categoria'] !== 'todos') {
-            $query->porCategoria($filtros['categoria']);
-        }
         if (!empty($filtros['estado']) && $filtros['estado'] !== 'todos') {
             $query->porEstado($filtros['estado']);
+        }
+        if (!empty($filtros['categoria']) && $filtros['categoria'] !== 'todos') {
+            $query->where('categoria', $filtros['categoria']);
+        }
+        if (!empty($filtros['prioridad']) && $filtros['prioridad'] !== 'todos') {
+            $query->where('prioridad', $filtros['prioridad']);
         }
         if (!empty($filtros['tipo_proyecto_id'])) {
             $query->where('tipo_proyecto_id', $filtros['tipo_proyecto_id']);
@@ -52,17 +58,14 @@ class ProyectoService
         if (!empty($filtros['zona_id'])) {
             $query->where('zona_id', $filtros['zona_id']);
         }
-        if (!empty($filtros['administrador_id'])) {
-            $query->where('administrador_id', $filtros['administrador_id']);
+        if (!empty($filtros['responsable_id'])) {
+            $query->where('responsable_id', $filtros['responsable_id']);
         }
         if (!empty($filtros['cliente_id'])) {
             $query->where('cliente_id', $filtros['cliente_id']);
         }
         if (!empty($filtros['entidad_estatal_id'])) {
             $query->where('entidad_estatal_id', $filtros['entidad_estatal_id']);
-        }
-        if (!empty($filtros['prioridad']) && $filtros['prioridad'] !== 'todos') {
-            $query->where('prioridad', $filtros['prioridad']);
         }
         if (!empty($filtros['fecha_desde'])) {
             $query->whereDate('fecha_inicio_planificada', '>=', $filtros['fecha_desde']);
@@ -71,7 +74,7 @@ class ProyectoService
             $query->whereDate('fecha_fin_planificada', '<=', $filtros['fecha_hasta']);
         }
 
-        $allowedSorts = ['codigo', 'nombre', 'created_at', 'estado', 'porcentaje_avance', 'presupuesto_total', 'fecha_inicio_planificada'];
+        $allowedSorts = ['codigo', 'nombre', 'created_at', 'estado', 'avance_fisico', 'presupuesto_referencial', 'fecha_inicio_planificada'];
         $ordenarPor = in_array($filtros['ordenar_por'] ?? '', $allowedSorts) ? $filtros['ordenar_por'] : 'created_at';
         $direccion = in_array(strtolower($filtros['direccion'] ?? ''), ['asc', 'desc']) ? strtolower($filtros['direccion']) : 'desc';
 
@@ -83,111 +86,198 @@ class ProyectoService
     {
         $proyecto = Proyecto::with([
             'tipoProyecto', 'cliente', 'entidadEstatal', 'zona',
-            'administrador', 'creador',
-            'viviendas' => fn($q) => $q->with('beneficiario', 'tipoVivienda'),
+            'responsable', 'creadoPor',
+            'beneficiarios',
             'fasesProyecto' => fn($q) => $q->orderBy('orden'),
-            'asignacionesPersonal' => fn($q) => $q->with('personal')->where('estado', 'activa'),
         ])->findOrFail($id);
 
-        $auditoria = Auditoria::with('actor:id,nombre,apellido_paterno,foto_url')
-            ->where('tabla_afectada', 'proyectos')
-            ->where('registro_id', $id)
-            ->orderBy('created_at', 'desc')
-            ->limit(20)
-            ->get();
+        // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+        // $auditoria = Auditoria::with('actor:id,nombre,apellido_paterno')
+        //     ->where('tabla_afectada', 'proyectos')
+        //     ->where('registro_id', $id)
+        //     ->orderBy('created_at', 'desc')
+        //     ->limit(20)
+        //     ->get();
+        $auditoria = [];
 
         $estadisticas = $this->obtenerEstadisticasProyecto($proyecto);
 
         return [
-            'proyecto' => $proyecto,
-            'auditoria' => $auditoria,
-            'estadisticas' => $estadisticas,
+            'proyecto'               => $proyecto,
+            'auditoria'              => $auditoria,
+            'estadisticas'           => $estadisticas,
             'transiciones_permitidas' => $proyecto->getTransicionesPermitidas(),
         ];
     }
 
+    public function obtenerDashboard(int $id): array
+    {
+        $proyecto = Proyecto::with([
+            'tipoProyecto:id,nombre',
+            'cliente:id,nombre_completo',
+            'entidadEstatal:id,nombre',
+            'zona:id,nombre',
+            'responsable:id,nombre,apellido_paterno,foto_url',
+            'almacen',
+            'hitosCobro',
+        ])->findOrFail($id);
+
+        $dashData = $this->calculadora->calcularDashboard($proyecto);
+
+        $hitoCobros = $proyecto->hitosCobro->map(fn($h) => [
+            'id'                  => $h->id,
+            'nombre'              => $h->nombre,
+            'porcentaje_contrato' => (float) $h->porcentaje_contrato,
+            'monto_calculado'     => (float) $h->monto_calculado,
+            'fecha_planificada'   => $h->fecha_planificada?->format('Y-m-d'),
+            'fecha_cobrado'       => $h->fecha_cobrado?->format('Y-m-d'),
+            'tipo'                => $h->tipo,
+            'estado'              => $h->estado,
+        ])->values();
+
+        return array_merge(
+            [
+                'proyecto'               => $proyecto,
+                'transiciones_permitidas' => $proyecto->getTransicionesPermitidas(),
+                'hitos_cobro'            => $hitoCobros,
+            ],
+            $dashData
+        );
+    }
+
     public function crear(array $datos, int $actorId): Proyecto
     {
-        // Si viene tipo_proyecto_id, inferir categoría
-        if (!empty($datos['tipo_proyecto_id'])) {
-            $tipoProyecto = TipoProyecto::findOrFail($datos['tipo_proyecto_id']);
-            $datos['categoria'] = $tipoProyecto->categoria;
-        } else {
-            // Si viene categoría pero no tipo_proyecto_id, asignar el primero disponible
-            $categoria = $datos['categoria'] ?? 'social';
-            $tipoProyecto = TipoProyecto::where('categoria', $categoria)->first();
-            if ($tipoProyecto) {
-                $datos['tipo_proyecto_id'] = $tipoProyecto->id;
-            }
-            $datos['categoria'] = $categoria;
+        // Validar contraparte por categoría
+        if ($datos['categoria'] === 'social' && empty($datos['entidad_estatal_id'])) {
+            throw ValidationException::withMessages(['entidad_estatal_id' => 'Los proyectos sociales requieren una entidad estatal contratante.']);
+        }
+        if ($datos['categoria'] === 'privado' && empty($datos['cliente_id'])) {
+            throw ValidationException::withMessages(['cliente_id' => 'Los proyectos privados requieren un cliente.']);
         }
 
-        // Reglas 5-6: Validar contraparte según categoría
-        if ($datos['categoria'] === 'social') {
-            if (!empty($datos['cliente_id'])) {
-                throw new CategoriaProyectoIncompatibleException('Un proyecto social no puede tener un cliente privado.');
+        // Validar fases privado
+        $fasesConfig = $datos['fases_config'] ?? [];
+        if (!empty($fasesConfig)) {
+            $suma = array_sum(array_column($fasesConfig, 'porcentaje'));
+            if (abs($suma - 100) > 0.01) {
+                throw ValidationException::withMessages(['fases_config' => "La suma de porcentajes de fases debe ser 100% (actual: {$suma}%)."]);
             }
-            if (empty($datos['entidad_estatal_id'])) {
-                throw ValidationException::withMessages(['entidad_estatal_id' => 'Los proyectos sociales requieren una entidad estatal.']);
-            }
-        } else {
-            if (!empty($datos['entidad_estatal_id'])) {
-                throw new CategoriaProyectoIncompatibleException('Un proyecto privado no puede tener una entidad estatal.');
-            }
-            if (empty($datos['cliente_id'])) {
-                throw ValidationException::withMessages(['cliente_id' => 'Los proyectos privados requieren un cliente.']);
-            }
-            // Regla 17: monto_garantia solo aplica a sociales
-            $datos['monto_garantia'] = null;
         }
 
-        // Regla 18: monto_garantia <= 30% presupuesto (sociales)
-        if ($datos['categoria'] === 'social' && !empty($datos['monto_garantia'])) {
-            $limite = $datos['presupuesto_total'] * 0.30;
-            if ($datos['monto_garantia'] > $limite) {
+        // Validar hitos de cobro (acepta tanto 'hitos_cobro' como 'productos_contractuales' por legado)
+        $hitosDesdeNuevoApi = isset($datos['hitos_cobro']);
+        $hitosData = $datos['hitos_cobro'] ?? $datos['productos_contractuales'] ?? [];
+        // Clave de error para compatibilidad con tests legacy
+        $hitosErrorKey = $hitosDesdeNuevoApi ? 'hitos_cobro' : 'productos_contractuales';
+
+        if (!empty($hitosData)) {
+            $suma = array_sum(array_column($hitosData, 'porcentaje'));
+            if (abs($suma - 100) > 0.01) {
+                throw ValidationException::withMessages([$hitosErrorKey => "La suma de porcentajes de hitos debe ser 100% (actual: {$suma}%)."]);
+            }
+
+            $inicio = $datos['fecha_inicio_planificada'] ?? null;
+            $fin    = $datos['fecha_fin_planificada'] ?? null;
+            if ($inicio && $fin) {
+                foreach ($hitosData as $idx => $hito) {
+                    $fecha = $hito['fecha_planificada'] ?? $hito['fecha_planificada_cobro'] ?? null;
+                    if ($fecha && ($fecha < $inicio || $fecha > $fin)) {
+                        throw ValidationException::withMessages(["{$hitosErrorKey}.{$idx}.fecha_planificada" => "La fecha del hito '{$hito['nombre']}' debe estar dentro del rango del proyecto."]);
+                    }
+                }
+            }
+        }
+
+        // Cargar set de porcentajes del tipo de proyecto
+        $categoria  = $datos['categoria'] ?? 'social';
+        $configSet  = ConfiguracionPorcentajesPresupuesto::paraProyecto($categoria);
+        $contractual = (float) ($datos['monto_contractual'] ?? $datos['monto_contrato'] ?? $datos['presupuesto_referencial'] ?? 0);
+
+        // Snapshot de porcentajes: copiar del set al proyecto
+        $porMO   = (float) ($datos['porcentaje_mano_obra']        ?? $configSet->porcentaje_mano_obra);
+        $porGG   = (float) ($datos['porcentaje_gastos_generales'] ?? $configSet->porcentaje_gastos_generales);
+        $porUtil = (float) ($datos['porcentaje_utilidad_esperada'] ?? $configSet->porcentaje_utilidad_esperada);
+        $umbral  = (float) $configSet->umbral_rentabilidad_minima;
+
+        $usaFijoMO   = (bool) ($datos['usa_monto_fijo_mo']  ?? false);
+        $usaFijoGG   = (bool) ($datos['usa_monto_fijo_gg']  ?? false);
+        $usaFijoUtil = (bool) ($datos['usa_monto_fijo_util'] ?? false);
+
+        // Calcular componentes
+        $presupMO   = $usaFijoMO   ? (float) ($datos['presupuesto_mano_obra']        ?? 0) : $contractual * $porMO   / 100;
+        $presupGG   = $usaFijoGG   ? (float) ($datos['presupuesto_gastos_generales'] ?? 0) : $contractual * $porGG   / 100;
+        $presupUtil = $usaFijoUtil  ? (float) ($datos['presupuesto_utilidad_esperada'] ?? 0) : $contractual * $porUtil / 100;
+        // presupuesto_materiales: use explicit override if sent, otherwise compute as residual
+        $presupMat  = (isset($datos['presupuesto_materiales']) && $datos['presupuesto_materiales'] !== null)
+            ? (float) $datos['presupuesto_materiales']
+            : max(0.0, $contractual - $presupMO - $presupGG - $presupUtil);
+
+        // Calcular rentabilidad estimada
+        $costos       = $presupMat + $presupMO + $presupGG;
+        $rentabilidad = $contractual - $costos;
+        $pctUtil      = $contractual > 0 ? ($rentabilidad / $contractual) * 100 : 0;
+
+        // Si rentabilidad < umbral, exigir justificación
+        if ($contractual > 0 && $pctUtil < $umbral) {
+            $justificacion = trim($datos['justificacion_rentabilidad_baja'] ?? '');
+            if (empty($justificacion)) {
                 throw ValidationException::withMessages([
-                    'monto_garantia' => "El monto de garantía no puede superar el 30% del presupuesto (Bs. " . number_format($limite, 2) . ")."
+                    'justificacion_rentabilidad_baja' => "La rentabilidad estimada ({$pctUtil}%) está bajo el umbral mínimo ({$umbral}%). Debes proporcionar una justificación.",
                 ]);
             }
         }
 
-        // Regla 23: Validar administrador
-        if (!empty($datos['administrador_id'])) {
-            $admin = User::with('rol')->find($datos['administrador_id']);
-            if (!$admin || $admin->estado !== 'activo') {
-                throw ValidationException::withMessages(['administrador_id' => 'El administrador debe ser un usuario activo.']);
-            }
-            $rolesPermitidos = ['gerente', 'administrador_proyecto'];
-            if (!$admin->rol || !in_array($admin->rol->nombre, $rolesPermitidos)) {
-                throw ValidationException::withMessages(['administrador_id' => 'El administrador debe tener rol de gerente o administrador de proyecto.']);
-            }
+        // Separar opciones de cascada
+        $opcionesCascada = [
+            'cantidad_fases'         => $datos['cantidad_fases'] ?? 1,
+            'fases_config'           => $fasesConfig,
+            'cantidad_beneficiarios' => $datos['cantidad_beneficiarios'] ?? 0,
+            'hitos_cobro'            => $hitosData,
+        ];
+
+        $camposProyecto = array_diff_key($datos, array_flip([
+            'cantidad_fases', 'fases_config', 'hitos_cobro', 'productos_contractuales',
+        ]));
+
+        // Añadir campos financieros calculados
+        $camposProyecto['monto_contractual']             = $contractual ?: null;
+        $camposProyecto['porcentaje_mano_obra']          = $porMO;
+        $camposProyecto['porcentaje_gastos_generales']   = $porGG;
+        $camposProyecto['porcentaje_utilidad_esperada']  = $porUtil;
+        $camposProyecto['presupuesto_materiales']        = $presupMat;
+        $camposProyecto['presupuesto_mano_obra']         = $presupMO;
+        $camposProyecto['presupuesto_gastos_generales']  = $presupGG;
+        $camposProyecto['presupuesto_utilidad_esperada'] = $presupUtil;
+        $camposProyecto['salud_financiera']              = $contractual > 0
+            ? ($pctUtil >= $umbral + 5 ? 'saludable' : ($pctUtil >= $umbral ? 'atencion' : 'critico'))
+            : null;
+        $camposProyecto['usa_monto_fijo_mo']             = $usaFijoMO;
+        $camposProyecto['usa_monto_fijo_gg']             = $usaFijoGG;
+        $camposProyecto['usa_monto_fijo_util']           = $usaFijoUtil;
+
+        // Para proyectos sociales, retención siempre activa
+        if ($categoria === 'social') {
+            $camposProyecto['aplica_retencion_7_porciento'] = true;
         }
 
-        return DB::transaction(function () use ($datos, $actorId) {
-            // Regla 1-2: Generar código PRJ-{año}-{secuencial 4 dígitos}
-            $anio = date('Y');
-            $ultimo = Proyecto::withTrashed()
-                ->where('codigo', 'LIKE', "PRJ-{$anio}-%")
-                ->count();
-            $datos['codigo'] = 'PRJ-' . $anio . '-' . str_pad($ultimo + 1, 4, '0', STR_PAD_LEFT);
+        return DB::transaction(function () use ($camposProyecto, $actorId, $opcionesCascada) {
+            $anio   = date('Y');
+            $ultimo = Proyecto::withTrashed()->where('codigo', 'LIKE', "PRJ-{$anio}-%")->count();
+            $camposProyecto['codigo']        = 'PRJ-' . $anio . '-' . str_pad($ultimo + 1, 4, '0', STR_PAD_LEFT);
+            $camposProyecto['creado_por_id'] = $actorId;
+            $camposProyecto['estado']        = 'formulacion';
 
-            $datos['usuario_creador_id'] = $actorId;
-            if (empty($datos['estado'])) {
-                $datos['estado'] = 'borrador';
+            if (!empty($camposProyecto['fecha_inicio_planificada']) && !empty($camposProyecto['fecha_fin_planificada'])) {
+                $ini = \Carbon\Carbon::parse($camposProyecto['fecha_inicio_planificada']);
+                $fin = \Carbon\Carbon::parse($camposProyecto['fecha_fin_planificada']);
+                $camposProyecto['plazo_dias'] = $ini->diffInDays($fin);
             }
 
-            // Regla 22: Calcular duración planificada
-            if (!empty($datos['fecha_inicio_planificada']) && !empty($datos['fecha_fin_planificada'])) {
-                $inicio = Carbon::parse($datos['fecha_inicio_planificada']);
-                $fin = Carbon::parse($datos['fecha_fin_planificada']);
-                $datos['duracion_dias_planificada'] = $inicio->diffInDays($fin);
-            }
+            $proyecto = Proyecto::create($camposProyecto);
 
-            $proyecto = Proyecto::create($datos);
+            $this->cascada->ejecutar($proyecto, $opcionesCascada);
 
-            $this->auditoria->registrarCreacion('proyecto.creado', 'proyectos', $proyecto->id, $proyecto->toArray());
-
-            return $proyecto->load(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'administrador']);
+            return $proyecto->load(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'responsable', 'almacen', 'hitosCobro']);
         });
     }
 
@@ -195,31 +285,12 @@ class ProyectoService
     {
         $proyecto = Proyecto::findOrFail($id);
 
-        // Regla 25: No modificar si finalizado o cancelado (excepto reactivar cancelado por gerente)
         if (in_array($proyecto->estado, ['finalizado'])) {
             throw new ProyectoEnEstadoNoModificableException("No se puede modificar un proyecto finalizado.");
         }
 
         // Proteger campos inmutables
-        unset($datos['codigo'], $datos['categoria'], $datos['usuario_creador_id'], $datos['estado']);
-
-        // Regla 18: Validar garantía si cambia
-        if (isset($datos['monto_garantia']) && $proyecto->es_social) {
-            $presupuesto = $datos['presupuesto_total'] ?? $proyecto->presupuesto_total;
-            $limite = $presupuesto * 0.30;
-            if ($datos['monto_garantia'] > $limite) {
-                throw ValidationException::withMessages([
-                    'monto_garantia' => "El monto de garantía no puede superar el 30% del presupuesto."
-                ]);
-            }
-        }
-
-        // Recalcular duración si cambian fechas
-        $fechaInicio = $datos['fecha_inicio_planificada'] ?? $proyecto->fecha_inicio_planificada;
-        $fechaFin = $datos['fecha_fin_planificada'] ?? $proyecto->fecha_fin_planificada;
-        if ($fechaInicio && $fechaFin) {
-            $datos['duracion_dias_planificada'] = Carbon::parse($fechaInicio)->diffInDays(Carbon::parse($fechaFin));
-        }
+        unset($datos['codigo'], $datos['creado_por_id'], $datos['estado']);
 
         $datosAnteriores = $proyecto->toArray();
         $proyecto->fill($datos);
@@ -238,22 +309,22 @@ class ProyectoService
         return DB::transaction(function () use ($proyecto, $cambiosReales, $nuevosReales) {
             $proyecto->save();
 
-            // Auditoría especial para presupuesto y garantía
             $evento = 'proyecto.actualizado';
-            if (isset($cambiosReales['presupuesto_total']) || isset($cambiosReales['monto_garantia'])) {
+            if (isset($cambiosReales['presupuesto_referencial']) || isset($cambiosReales['monto_contrato'])) {
                 $evento = 'proyecto.presupuesto_modificado';
             }
 
-            $this->auditoria->registrarActualizacion($evento, 'proyectos', $proyecto->id, $cambiosReales, $nuevosReales);
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarActualizacion($evento, 'proyectos', $proyecto->id, $cambiosReales, $nuevosReales);
 
-            return $proyecto->load(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'administrador']);
+            return $proyecto->load(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'responsable']);
         });
     }
 
     public function cambiarEstado(int $id, string $nuevoEstado, ?string $razon, int $actorId, bool $esGerente): Proyecto
     {
         return DB::transaction(function () use ($id, $nuevoEstado, $razon, $actorId, $esGerente) {
-            $proyecto = Proyecto::with(['beneficiarios', 'viviendas', 'fasesProyecto'])->findOrFail($id);
+            $proyecto = Proyecto::with(['beneficiarios', 'fasesProyecto'])->findOrFail($id);
             $estadoAnterior = $proyecto->estado;
 
             if (!$proyecto->puedeTransicionarA($nuevoEstado)) {
@@ -263,72 +334,43 @@ class ProyectoService
                 );
             }
 
-            // Regla: cancelado → planificacion solo por gerente
+            // cancelado → formulacion solo por gerente
             if ($estadoAnterior === 'cancelado' && !$esGerente) {
                 throw new TransicionEstadoNoPermitidaException('Solo el gerente puede reactivar un proyecto cancelado.');
             }
 
-            // Regla 12: Cancelado o pausado requiere razón
+            // Cancelado o pausado requiere razón
             if (in_array($nuevoEstado, ['cancelado', 'pausado']) && empty(trim($razon ?? ''))) {
                 throw ValidationException::withMessages(['razon' => "Se requiere una razón para cambiar a '{$nuevoEstado}'."]);
             }
 
-            // Regla 9: borrador → planificacion: campos mínimos
-            if ($estadoAnterior === 'borrador' && $nuevoEstado === 'planificacion') {
-                $errores = [];
-                if (!$proyecto->tipo_proyecto_id) $errores[] = 'tipo de proyecto';
-                if (!$proyecto->fecha_inicio_planificada) $errores[] = 'fecha inicio planificada';
-                if (!$proyecto->fecha_fin_planificada) $errores[] = 'fecha fin planificada';
-                if ($proyecto->presupuesto_total <= 0) $errores[] = 'presupuesto mayor a 0';
-                $contraparte = $proyecto->es_social ? $proyecto->entidad_estatal_id : $proyecto->cliente_id;
-                if (!$contraparte) $errores[] = 'contraparte (cliente o entidad estatal)';
-                if (!empty($errores)) {
-                    throw ValidationException::withMessages([
-                        'requisitos' => 'Faltan campos obligatorios: ' . implode(', ', $errores)
-                    ]);
+            // adjudicado → en_ejecucion: debe tener al menos 1 fase definida
+            if ($estadoAnterior === 'adjudicado' && $nuevoEstado === 'en_ejecucion') {
+                if ($proyecto->fasesProyecto->count() === 0) {
+                    throw new TransicionEstadoNoPermitidaException('El proyecto debe tener al menos 1 fase definida antes de iniciar ejecución.');
                 }
             }
 
-            // Regla 10: planificacion → en_ejecucion
-            if ($estadoAnterior === 'planificacion' && $nuevoEstado === 'en_ejecucion') {
-                if ($proyecto->es_social && $proyecto->beneficiarios->where('estado_seleccion', 'aceptado')->count() === 0) {
-                    throw new TransicionEstadoNoPermitidaException('El proyecto social debe tener al menos 1 beneficiario aceptado.');
-                }
-                if ($proyecto->es_privado && $proyecto->fasesProyecto->count() === 0) {
-                    throw new TransicionEstadoNoPermitidaException('El proyecto privado debe tener al menos 1 fase definida.');
-                }
-            }
-
-            // Regla 11: → finalizado: avance=100% y viviendas entregadas / fases completadas
+            // → finalizado: avance=100% y fases completadas
             if ($nuevoEstado === 'finalizado') {
-                if ($proyecto->es_social) {
-                    $noEntregadas = $proyecto->viviendas->where('estado', '!=', 'entregada')->count();
-                    if ($noEntregadas > 0) {
-                        throw new TransicionEstadoNoPermitidaException("Quedan {$noEntregadas} viviendas sin entregar.");
-                    }
-                } else {
-                    $noCompletadas = $proyecto->fasesProyecto->whereNotIn('estado', ['completada', 'cancelada'])->count();
-                    if ($noCompletadas > 0) {
-                        throw new TransicionEstadoNoPermitidaException("Quedan {$noCompletadas} fases sin completar.");
-                    }
+                $noCompletadas = $proyecto->fasesProyecto->whereNotIn('estado', ['completada'])->count();
+                if ($noCompletadas > 0) {
+                    throw new TransicionEstadoNoPermitidaException("Quedan {$noCompletadas} fases sin completar.");
                 }
-                if ($proyecto->porcentaje_avance < 100) {
-                    throw new TransicionEstadoNoPermitidaException("El avance debe ser 100% para finalizar (actual: {$proyecto->porcentaje_avance}%).");
+                if ($proyecto->avance_fisico < 100) {
+                    throw new TransicionEstadoNoPermitidaException("El avance físico debe ser 100% para finalizar (actual: {$proyecto->avance_fisico}%).");
                 }
             }
 
             $proyecto->estado = $nuevoEstado;
 
-            // Regla 20: fecha_inicio_real al pasar a en_ejecucion
             if ($nuevoEstado === 'en_ejecucion' && !$proyecto->fecha_inicio_real) {
                 $proyecto->fecha_inicio_real = now()->toDateString();
             }
-            // Regla 21: fecha_fin_real al finalizar
             if ($nuevoEstado === 'finalizado' && !$proyecto->fecha_fin_real) {
                 $proyecto->fecha_fin_real = now()->toDateString();
             }
 
-            // Guardar razón en observaciones
             if (in_array($nuevoEstado, ['cancelado', 'pausado']) && $razon) {
                 $obs = $proyecto->observaciones ? $proyecto->observaciones . "\n\n" : "";
                 $proyecto->observaciones = $obs . "[{$nuevoEstado} - " . date('Y-m-d') . "]: {$razon}";
@@ -336,9 +378,9 @@ class ProyectoService
 
             $proyecto->save();
 
-            $this->auditoria->registrarCambioEstado('proyecto.estado_cambiado', 'proyectos', $proyecto->id, $estadoAnterior, $nuevoEstado, $razon);
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarCambioEstado('proyecto.estado_cambiado', 'proyectos', $proyecto->id, $estadoAnterior, $nuevoEstado, $razon);
 
-            // Notificar gerente en cambios críticos
             if (in_array($nuevoEstado, ['cancelado', 'finalizado'])) {
                 $this->notificacion->enviarAGerente(
                     "Proyecto {$nuevoEstado}: {$proyecto->codigo}",
@@ -352,41 +394,37 @@ class ProyectoService
         });
     }
 
-    public function cambiarAdministrador(int $id, int $nuevoAdminId, int $actorId): Proyecto
+    public function cambiarResponsable(int $id, int $nuevoResponsableId, int $actorId): Proyecto
     {
         $proyecto = Proyecto::findOrFail($id);
-        $admin = User::with('rol')->findOrFail($nuevoAdminId);
+        $resp = User::with('rol')->findOrFail($nuevoResponsableId);
 
-        if ($admin->estado !== 'activo') {
-            throw ValidationException::withMessages(['administrador_id' => 'El usuario debe estar activo.']);
+        if ($resp->estado !== 'activo') {
+            throw ValidationException::withMessages(['responsable_id' => 'El usuario debe estar activo.']);
         }
         $rolesPermitidos = ['gerente', 'administrador_proyecto'];
-        if (!$admin->rol || !in_array($admin->rol->nombre, $rolesPermitidos)) {
-            throw ValidationException::withMessages(['administrador_id' => 'El usuario debe tener rol de gerente o administrador de proyecto.']);
+        if (!$resp->rol || !in_array($resp->rol->nombre, $rolesPermitidos)) {
+            throw ValidationException::withMessages(['responsable_id' => 'El usuario debe tener rol de gerente o administrador de proyecto.']);
         }
 
-        $anteriorId = $proyecto->administrador_id;
-        $proyecto->administrador_id = $nuevoAdminId;
+        $anteriorId = $proyecto->responsable_id;
+        $proyecto->responsable_id = $nuevoResponsableId;
         $proyecto->save();
 
-        $this->auditoria->registrarActualizacion('proyecto.administrador_cambiado', 'proyectos', $proyecto->id, ['administrador_id' => $anteriorId], ['administrador_id' => $nuevoAdminId]);
+        // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+        // $this->auditoria->registrarActualizacion('proyecto.responsable_cambiado', 'proyectos', $proyecto->id, ['responsable_id' => $anteriorId], ['responsable_id' => $nuevoResponsableId]);
 
-        return $proyecto->load('administrador');
+        return $proyecto->load('responsable');
     }
 
     public function eliminar(int $id, int $actorId, string $razon): bool
     {
-        $proyecto = Proyecto::withCount(['viviendas', 'fasesProyecto', 'beneficiarios'])->findOrFail($id);
+        $proyecto = Proyecto::withCount(['fasesProyecto', 'beneficiarios'])->findOrFail($id);
 
-        // Regla 25: No eliminar si en_ejecucion o finalizado
         if (in_array($proyecto->estado, ['en_ejecucion', 'finalizado'])) {
             throw new ProyectoEnEstadoNoModificableException("No se puede eliminar un proyecto en estado '{$proyecto->estado}'.");
         }
 
-        // Regla 25: Verificar dependencias
-        if ($proyecto->viviendas_count > 0) {
-            throw new ProyectoConDependenciasException("El proyecto tiene {$proyecto->viviendas_count} viviendas. Elimínalas primero.", 'viviendas', $proyecto->viviendas_count);
-        }
         if ($proyecto->fases_proyecto_count > 0) {
             throw new ProyectoConDependenciasException("El proyecto tiene {$proyecto->fases_proyecto_count} fases. Elimínalas primero.", 'fases', $proyecto->fases_proyecto_count);
         }
@@ -396,7 +434,8 @@ class ProyectoService
 
         return DB::transaction(function () use ($proyecto, $razon) {
             $proyecto->delete();
-            $this->auditoria->registrarEliminacion('proyecto.eliminado', 'proyectos', $proyecto->id, $proyecto->toArray(), $razon);
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarEliminacion('proyecto.eliminado', 'proyectos', $proyecto->id, $proyecto->toArray(), $razon);
             $this->notificacion->enviarAGerente("Proyecto eliminado", "El proyecto {$proyecto->codigo} - {$proyecto->nombre} fue eliminado.", 'info');
             return true;
         });
@@ -408,49 +447,49 @@ class ProyectoService
 
         return DB::transaction(function () use ($proyecto) {
             $proyecto->restore();
-            $this->auditoria->registrarActualizacion('proyecto.restaurado', 'proyectos', $proyecto->id, ['deleted_at' => $proyecto->deleted_at], ['deleted_at' => null]);
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarActualizacion('proyecto.restaurado', 'proyectos', $proyecto->id, ...);
             return $proyecto;
         });
+    }
+
+    public function cambiarAdministrador(int $id, int $administradorId, int $actorId): Proyecto
+    {
+        return $this->cambiarResponsable($id, $administradorId, $actorId);
     }
 
     public function obtenerEstadisticasGenerales(): array
     {
         return [
-            'total' => Proyecto::count(),
-            'por_categoria' => [
-                'social' => Proyecto::sociales()->count(),
-                'privado' => Proyecto::privados()->count(),
-            ],
-            'por_estado' => [
-                'borrador' => Proyecto::porEstado('borrador')->count(),
-                'planificacion' => Proyecto::porEstado('planificacion')->count(),
+            'total'       => Proyecto::count(),
+            'por_estado'  => [
+                'formulacion'  => Proyecto::porEstado('formulacion')->count(),
+                'licitacion'   => Proyecto::porEstado('licitacion')->count(),
+                'adjudicado'   => Proyecto::porEstado('adjudicado')->count(),
                 'en_ejecucion' => Proyecto::porEstado('en_ejecucion')->count(),
-                'pausado' => Proyecto::porEstado('pausado')->count(),
-                'finalizado' => Proyecto::porEstado('finalizado')->count(),
-                'cancelado' => Proyecto::porEstado('cancelado')->count(),
+                'pausado'      => Proyecto::porEstado('pausado')->count(),
+                'finalizado'   => Proyecto::porEstado('finalizado')->count(),
+                'cancelado'    => Proyecto::porEstado('cancelado')->count(),
             ],
-            'avance_promedio' => round(Proyecto::activos()->avg('porcentaje_avance') ?? 0, 2),
-            'presupuesto_total_activos' => Proyecto::activos()->sum('presupuesto_total'),
-            'creados_ultimo_mes' => Proyecto::where('created_at', '>=', now()->subMonth())->count(),
+            'por_categoria' => [
+                'social'  => Proyecto::where('categoria', 'social')->count(),
+                'privado' => Proyecto::where('categoria', 'privado')->count(),
+            ],
+            'avance_promedio'          => round(Proyecto::activos()->avg('avance_fisico') ?? 0, 2),
+            'presupuesto_total_activos' => Proyecto::activos()->sum('presupuesto_referencial'),
+            'creados_ultimo_mes'       => Proyecto::where('created_at', '>=', now()->subMonth())->count(),
         ];
     }
 
     private function obtenerEstadisticasProyecto(Proyecto $proyecto): array
     {
-        $stats = ['avance' => (float) $proyecto->porcentaje_avance];
+        $stats = ['avance' => (float) $proyecto->avance_fisico];
 
-        if ($proyecto->es_social) {
-            $stats['total_viviendas'] = $proyecto->viviendas->count();
-            $stats['viviendas_entregadas'] = $proyecto->viviendas->where('estado', 'entregada')->count();
-            $stats['viviendas_con_observaciones'] = $proyecto->viviendas->where('tiene_observaciones_activas', true)->count();
-            $stats['total_beneficiarios'] = $proyecto->beneficiarios->count() ?? 0;
-        } else {
-            $stats['total_fases'] = $proyecto->fasesProyecto->count();
-            $stats['fases_completadas'] = $proyecto->fasesProyecto->where('estado', 'completada')->count();
-            $stats['fases_en_proceso'] = $proyecto->fasesProyecto->where('estado', 'en_proceso')->count();
-        }
+        $stats['total_fases']      = $proyecto->fasesProyecto->count();
+        $stats['fases_completadas'] = $proyecto->fasesProyecto->where('estado', 'completada')->count();
+        $stats['fases_en_progreso'] = $proyecto->fasesProyecto->where('estado', 'en_progreso')->count();
+        $stats['total_beneficiarios'] = $proyecto->beneficiarios->count();
 
-        $stats['personal_asignado'] = $proyecto->asignacionesPersonal->count();
         return $stats;
     }
 }

@@ -4,7 +4,7 @@ namespace App\Services\Beneficiarios;
 
 use App\Models\Beneficiario;
 use App\Models\Proyecto;
-use App\Services\AuditoriaService;
+use App\Models\Vivienda;
 use App\Services\NotificacionService;
 use App\Exceptions\Beneficiarios\BeneficiarioDuplicadoException;
 use App\Exceptions\Beneficiarios\ProyectoNoSocialException;
@@ -14,22 +14,16 @@ use App\Exceptions\Beneficiarios\BeneficiarioConViviendaEnProcesoException;
 use App\Exceptions\Beneficiarios\OperacionRequiereGerenteException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Carbon\Carbon;
 
 class BeneficiarioService
 {
-    protected AuditoriaService $auditoria;
-    protected NotificacionService $notificacion;
-
-    public function __construct(AuditoriaService $auditoria, NotificacionService $notificacion)
-    {
-        $this->auditoria = $auditoria;
-        $this->notificacion = $notificacion;
-    }
+    public function __construct(
+        protected NotificacionService $notificacion
+    ) {}
 
     public function listarConFiltros(array $filtros, int $perPage = 20): LengthAwarePaginator
     {
-        $query = Beneficiario::with(['proyecto.entidadEstatal', 'tipoVivienda', 'registrador']);
+        $query = Beneficiario::with(['proyecto.entidadEstatal', 'tipoVivienda', 'registrador', 'vivienda']);
 
         if (!empty($filtros['busqueda'])) {
             $query->buscar($filtros['busqueda']);
@@ -37,6 +31,10 @@ class BeneficiarioService
 
         if (!empty($filtros['proyecto_id'])) {
             $query->delProyecto($filtros['proyecto_id']);
+        }
+
+        if (!empty($filtros['comunidad'])) {
+            $query->where('comunidad', 'LIKE', '%' . $filtros['comunidad'] . '%');
         }
 
         if (!empty($filtros['estado_seleccion']) && $filtros['estado_seleccion'] !== 'todos') {
@@ -67,12 +65,6 @@ class BeneficiarioService
             $query->whereNotNull('foto_titular_url');
         }
 
-        if (isset($filtros['con_visitas_pendientes']) && $filtros['con_visitas_pendientes']) {
-            $query->whereHas('visitasDomiciliarias', function($q) {
-                $q->pendientes();
-            });
-        }
-
         if (!empty($filtros['creado_desde'])) {
             $query->whereDate('created_at', '>=', $filtros['creado_desde']);
         }
@@ -81,19 +73,15 @@ class BeneficiarioService
             $query->whereDate('created_at', '<=', $filtros['creado_hasta']);
         }
 
-        $ordenarPor = $filtros['ordenar_por'] ?? 'created_at';
-        $orden = $filtros['orden'] ?? 'desc';
-        
-        // Mapeo simple de ordenamiento
-        $columnaOrden = match($ordenarPor) {
-            'nombre' => 'nombre',
-            'ci' => 'ci',
-            'fecha_aceptacion' => 'fecha_aceptacion',
+        $columnaOrden = match($filtros['ordenar_por'] ?? '') {
+            'nombre'              => 'nombre',
+            'ci'                  => 'ci',
+            'fecha_aceptacion'    => 'fecha_aceptacion',
             'codigo_beneficiario' => 'codigo_beneficiario',
-            default => 'created_at'
+            default               => 'created_at',
         };
 
-        $query->orderBy($columnaOrden, $orden);
+        $query->orderBy($columnaOrden, $filtros['orden'] ?? 'desc');
 
         return $query->paginate($perPage);
     }
@@ -101,31 +89,16 @@ class BeneficiarioService
     public function obtenerCompleto(int $id, int $actorId, bool $puedeVerDatosSensibles): array
     {
         $beneficiario = Beneficiario::with([
-            'proyecto.entidadEstatal', 'tipoVivienda', 'registrador',
-            'visitasDomiciliarias' => function($q) {
-                $q->orderBy('fecha_visita', 'desc')->orderBy('hora_visita', 'desc');
-            },
-            'visitasDomiciliarias.visitador'
+            'proyecto.entidadEstatal', 'tipoVivienda', 'registrador', 'vivienda',
         ])->findOrFail($id);
 
-        $visitas = $beneficiario->visitasDomiciliarias;
-        
-        $stats = [
-            'total_visitas' => $visitas->count(),
-            'visitas_exitosas' => $visitas->where('resultado', 'exitosa')->count(),
-            'visitas_no_encontrado' => $visitas->where('resultado', 'no_encontrado')->count(),
-            'monto_total_transporte' => $visitas->sum('gasto_transporte'),
-        ];
-
-        // Ocultar datos sensibles si no tiene permiso
         if (!$puedeVerDatosSensibles) {
             $beneficiario->ingreso_mensual_familiar = null;
             $beneficiario->ingreso_mensual_familiar_oculto = '***';
         }
 
         return [
-            'beneficiario' => $beneficiario,
-            'estadisticas' => $stats,
+            'beneficiario'          => $beneficiario,
             'transiciones_permitidas' => $beneficiario->getTransicionesPermitidas(),
         ];
     }
@@ -139,7 +112,7 @@ class BeneficiarioService
                 throw new ProyectoNoSocialException("Solo los proyectos sociales pueden tener beneficiarios.");
             }
 
-            if (!$proyecto->tipoProyecto->requiere_beneficiarios) {
+            if ($proyecto->tipoProyecto && !$proyecto->tipoProyecto->requiere_beneficiarios) {
                 throw new ProyectoNoSocialException("Este tipo de proyecto social no requiere beneficiarios según su configuración.");
             }
 
@@ -147,7 +120,6 @@ class BeneficiarioService
                 throw new ProyectoNoActivoException("El proyecto {$proyecto->codigo} no permite agregar beneficiarios en su estado actual ({$proyecto->estado}).");
             }
 
-            // Validar unicidad del CI en el MISMO proyecto (incluso softdeleted para evitar choques si se restaura, o solo activos)
             $ciExiste = Beneficiario::where('proyecto_id', $proyecto->id)
                 ->where('ci', $datos['ci'])
                 ->exists();
@@ -156,15 +128,13 @@ class BeneficiarioService
                 throw new BeneficiarioDuplicadoException("El CI {$datos['ci']} ya está registrado en este proyecto.");
             }
 
-            // Generar Código Beneficiario: BNF-{año}-{codigo_proyecto_4digitos}-{secuencia_3digitos}
+            // Código: BNF-{año}-{codigo_proyecto_4digitos}-{secuencia_3digitos}
             $anio = date('Y');
             $codigoProyectoPuro = substr($proyecto->codigo, strrpos($proyecto->codigo, '-') + 1);
-            
-            // Contar totales en el proyecto
             $cantidadActual = Beneficiario::withTrashed()->where('proyecto_id', $proyecto->id)->count();
             $secuencia = str_pad($cantidadActual + 1, 3, '0', STR_PAD_LEFT);
             $datos['codigo_beneficiario'] = "BNF-{$anio}-{$codigoProyectoPuro}-{$secuencia}";
-            
+
             $datos['usuario_registrador_id'] = $actorId;
 
             if (!isset($datos['estado_seleccion'])) {
@@ -175,31 +145,53 @@ class BeneficiarioService
                 $datos['fecha_aceptacion'] = now()->toDateString();
             }
 
-            $beneficiario = Beneficiario::create($datos);
-
-            // Auditoría
-            $datosAuditoria = $datos;
-            if (isset($datosAuditoria['ingreso_mensual_familiar'])) {
-                $datosAuditoria['ingreso_mensual_familiar'] = '***'; // Ofuscar en log
+            // Hard limit: cantidad_beneficiarios
+            if ($proyecto->cantidad_beneficiarios !== null) {
+                $totalActivos = Beneficiario::where('proyecto_id', $proyecto->id)->count();
+                if ($totalActivos >= (int) $proyecto->cantidad_beneficiarios) {
+                    throw new \RuntimeException(
+                        "El proyecto ha alcanzado el límite de {$proyecto->cantidad_beneficiarios} beneficiarios."
+                    );
+                }
             }
 
-            $this->auditoria->registrarCreacion(
-                'beneficiario.creado',
-                'beneficiarios',
-                $beneficiario->id,
-                $datosAuditoria
-            );
+            $beneficiario = Beneficiario::create($datos);
 
-            return $beneficiario->load('proyecto', 'tipoVivienda');
+            // Buscar vivienda libre existente (en orden numérico); si no hay, crear una nueva
+            $vivienda = Vivienda::where('proyecto_id', $proyecto->id)
+                ->whereNull('beneficiario_id')
+                ->orderByRaw("CAST(SUBSTRING_INDEX(codigo, '-', -1) AS UNSIGNED) ASC")
+                ->lockForUpdate()
+                ->first();
+
+            if (!$vivienda) {
+                $totalViv = Vivienda::where('proyecto_id', $proyecto->id)->withTrashed()->count();
+                $seq      = str_pad($totalViv + 1, 3, '0', STR_PAD_LEFT);
+                $vivienda = Vivienda::create([
+                    'codigo'             => 'VIV-' . $proyecto->codigo . '-' . $seq,
+                    'proyecto_id'        => $proyecto->id,
+                    'estado'             => 'planificada',
+                    'porcentaje_avance'  => 0,
+                    'usuario_creador_id' => $actorId,
+                ]);
+            }
+
+            $vivienda->beneficiario_id = $beneficiario->id;
+            // Copiar tipo_vivienda_id del beneficiario a la vivienda asignada
+            if (!empty($datos['tipo_vivienda_id'])) {
+                $vivienda->tipo_vivienda_id = $datos['tipo_vivienda_id'];
+            }
+            $vivienda->save();
+
+            return $beneficiario->load('proyecto', 'tipoVivienda', 'vivienda');
         });
     }
 
     public function actualizar(int $id, array $datos, int $actorId): Beneficiario
     {
-        return DB::transaction(function () use ($id, $datos, $actorId) {
+        return DB::transaction(function () use ($id, $datos) {
             $beneficiario = Beneficiario::findOrFail($id);
 
-            // Evitar modificar campos inmutables desde aquí
             unset($datos['proyecto_id'], $datos['codigo_beneficiario'], $datos['estado_seleccion']);
 
             if (isset($datos['ci']) && $datos['ci'] !== $beneficiario->ci) {
@@ -213,19 +205,7 @@ class BeneficiarioService
                 }
             }
 
-            $datosAnteriores = $beneficiario->getOriginal();
             $beneficiario->update($datos);
-            $cambios = $beneficiario->getChanges();
-
-            if (!empty($cambios)) {
-                $this->auditoria->registrarActualizacion(
-                    'beneficiario.actualizado',
-                    'beneficiarios',
-                    $beneficiario->id,
-                    $datosAnteriores,
-                    $cambios
-                );
-            }
 
             return $beneficiario;
         });
@@ -233,7 +213,7 @@ class BeneficiarioService
 
     public function cambiarEstado(int $id, string $nuevoEstado, ?string $razon, int $actorId, bool $esGerente): Beneficiario
     {
-        return DB::transaction(function () use ($id, $nuevoEstado, $razon, $actorId, $esGerente) {
+        return DB::transaction(function () use ($id, $nuevoEstado, $razon, $esGerente) {
             $beneficiario = Beneficiario::findOrFail($id);
             $estadoAnterior = $beneficiario->estado_seleccion;
 
@@ -260,7 +240,6 @@ class BeneficiarioService
                 if (!$beneficiario->fecha_entrega_vivienda) {
                     $beneficiario->fecha_entrega_vivienda = now()->toDateString();
                 }
-                // Notificar al gerente
                 $this->notificacion->enviarAGerente(
                     "Vivienda Entregada",
                     "Se ha registrado la entrega de vivienda al beneficiario {$beneficiario->codigo_beneficiario}.",
@@ -272,23 +251,13 @@ class BeneficiarioService
             if (in_array($nuevoEstado, ['retirado', 'rechazado'])) {
                 $observacionesPrevias = $beneficiario->observaciones ? $beneficiario->observaciones . "\n\n" : "";
                 $beneficiario->observaciones = $observacionesPrevias . "[Razón {$nuevoEstado} - " . date('Y-m-d') . "]: {$razon}";
+
+                // Liberar vivienda asociada (conservar el avance, solo cambiar titular)
+                Vivienda::where('beneficiario_id', $beneficiario->id)
+                    ->update(['beneficiario_id' => null]);
             }
 
             $beneficiario->save();
-
-            $this->auditoria->registrar(
-                'beneficiario.estado_cambiado',
-                'beneficiarios',
-                $beneficiario->id,
-                [
-                    'datos_anteriores' => ['estado' => $estadoAnterior],
-                    'datos_nuevos'     => [
-                        'estado'       => $nuevoEstado,
-                        'razon'        => $razon,
-                        'fecha_efecto' => now()->toDateTimeString(),
-                    ],
-                ]
-            );
 
             return $beneficiario;
         });
@@ -302,24 +271,15 @@ class BeneficiarioService
             throw new TransicionEstadoNoPermitidaException("No se puede cambiar el tipo de vivienda de un beneficiario con vivienda entregada.");
         }
 
-        $anterior = $beneficiario->tipo_vivienda_id;
         $beneficiario->tipo_vivienda_id = $tipoViviendaId;
         $beneficiario->save();
-
-        $this->auditoria->registrarActualizacion(
-            'beneficiario.tipo_vivienda_asignado',
-            'beneficiarios',
-            $beneficiario->id,
-            ['tipo_vivienda_id' => $anterior],
-            ['tipo_vivienda_id' => $tipoViviendaId]
-        );
 
         return $beneficiario->load('tipoVivienda');
     }
 
     public function eliminar(int $id, int $actorId, ?string $razon): bool
     {
-        return DB::transaction(function () use ($id, $actorId, $razon) {
+        return DB::transaction(function () use ($id, $razon) {
             $beneficiario = Beneficiario::findOrFail($id);
 
             if (in_array($beneficiario->estado_seleccion, ['en_construccion', 'vivienda_entregada'])) {
@@ -332,67 +292,57 @@ class BeneficiarioService
 
             $beneficiario->delete();
 
-            $this->auditoria->registrarEliminacion(
-                'beneficiario.eliminado',
-                'beneficiarios',
-                $beneficiario->id,
-                [],
-                $razon
-            );
-
             return true;
         });
     }
 
-    public function obtenerEstadisticasProyecto(int $proyectoId, bool $puedeVerDatosSensibles)
+    public function obtenerEstadisticasProyecto(int $proyectoId, bool $puedeVerDatosSensibles): array
     {
         $beneficiarios = Beneficiario::where('proyecto_id', $proyectoId)->get();
 
         $stats = [
-            'total' => $beneficiarios->count(),
+            'total'     => $beneficiarios->count(),
             'por_estado' => [
-                'candidato' => $beneficiarios->where('estado_seleccion', 'candidato')->count(),
-                'aceptado' => $beneficiarios->where('estado_seleccion', 'aceptado')->count(),
-                'en_construccion' => $beneficiarios->where('estado_seleccion', 'en_construccion')->count(),
+                'candidato'         => $beneficiarios->where('estado_seleccion', 'candidato')->count(),
+                'aceptado'          => $beneficiarios->where('estado_seleccion', 'aceptado')->count(),
+                'en_construccion'   => $beneficiarios->where('estado_seleccion', 'en_construccion')->count(),
                 'vivienda_entregada' => $beneficiarios->where('estado_seleccion', 'vivienda_entregada')->count(),
-                'retirado' => $beneficiarios->where('estado_seleccion', 'retirado')->count(),
-                'rechazado' => $beneficiarios->where('estado_seleccion', 'rechazado')->count(),
+                'retirado'          => $beneficiarios->where('estado_seleccion', 'retirado')->count(),
+                'rechazado'         => $beneficiarios->where('estado_seleccion', 'rechazado')->count(),
             ],
             'por_genero' => [
                 'masculino' => $beneficiarios->where('genero', 'masculino')->count(),
-                'femenino' => $beneficiarios->where('genero', 'femenino')->count(),
-                'otro' => $beneficiarios->where('genero', 'otro')->count(),
+                'femenino'  => $beneficiarios->where('genero', 'femenino')->count(),
+                'otro'      => $beneficiarios->where('genero', 'otro')->count(),
             ],
             'promedio_familiares' => round($beneficiarios->avg('cantidad_familiares') ?? 0, 1),
-            'total_dependientes' => $beneficiarios->sum('personas_dependientes'),
-            'sin_documento' => $beneficiarios->whereNull('documento_propiedad_terreno_url')->count(),
+            'total_dependientes'  => $beneficiarios->sum('personas_dependientes'),
+            'sin_documento'       => $beneficiarios->whereNull('documento_propiedad_terreno_url')->count(),
         ];
 
         if ($puedeVerDatosSensibles) {
             $stats['ingreso_promedio'] = round($beneficiarios->avg('ingreso_mensual_familiar') ?? 0, 2);
-            $stats['ingreso_total'] = $beneficiarios->sum('ingreso_mensual_familiar');
+            $stats['ingreso_total']    = $beneficiarios->sum('ingreso_mensual_familiar');
         }
 
         return $stats;
     }
 
-    public function obtenerMapaProyecto(int $proyectoId)
+    public function obtenerMapaProyecto(int $proyectoId): \Illuminate\Support\Collection
     {
         return Beneficiario::with('tipoVivienda')
             ->where('proyecto_id', $proyectoId)
             ->whereNotNull('latitud_terreno')
             ->whereNotNull('longitud_terreno')
             ->get(['id', 'codigo_beneficiario', 'nombre', 'apellido_paterno', 'apellido_materno', 'latitud_terreno', 'longitud_terreno', 'estado_seleccion', 'tipo_vivienda_id'])
-            ->map(function ($b) {
-                return [
-                    'id' => $b->id,
-                    'codigo' => $b->codigo_beneficiario,
-                    'nombre_completo' => $b->nombre_completo,
-                    'latitud' => $b->latitud_terreno,
-                    'longitud' => $b->longitud_terreno,
-                    'estado' => $b->estado_seleccion,
-                    'tipo_vivienda' => $b->tipoVivienda ? $b->tipoVivienda->nombre : 'No asignada'
-                ];
-            });
+            ->map(fn ($b) => [
+                'id'           => $b->id,
+                'codigo'       => $b->codigo_beneficiario,
+                'nombre_completo' => $b->nombre_completo,
+                'latitud'      => $b->latitud_terreno,
+                'longitud'     => $b->longitud_terreno,
+                'estado'       => $b->estado_seleccion,
+                'tipo_vivienda' => $b->tipoVivienda?->nombre ?? 'No asignada',
+            ]);
     }
 }

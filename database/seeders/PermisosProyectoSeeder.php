@@ -26,6 +26,11 @@ class PermisosProyectoSeeder extends Seeder
             ['codigo' => 'viviendas.eliminar', 'nombre_visible' => 'Eliminar Viviendas', 'accion' => 'eliminar', 'modulo' => 'viviendas', 'descripcion' => 'Eliminar viviendas'],
             ['codigo' => 'viviendas.cambiar_estado', 'nombre_visible' => 'Cambiar Estado Viviendas', 'accion' => 'cambiar_estado', 'modulo' => 'viviendas', 'descripcion' => 'Cambiar estado de viviendas'],
 
+            // Configuración presupuestal (solo gerente y super_admin)
+            ['codigo' => 'configuracion.porcentajes_presupuestales', 'nombre_visible' => 'Configurar Porcentajes Presupuestales', 'accion' => 'editar', 'modulo' => 'configuracion', 'descripcion' => 'Editar sets de porcentajes MO/GG/Util para proyectos'],
+            // Aprobación de rentabilidad baja
+            ['codigo' => 'proyectos.aprobar_rentabilidad_baja', 'nombre_visible' => 'Aprobar Rentabilidad Baja', 'accion' => 'aprobar', 'modulo' => 'proyectos', 'descripcion' => 'Aprobar proyectos con rentabilidad bajo el umbral mínimo'],
+
             // Fases
             ['codigo' => 'fases.ver', 'nombre_visible' => 'Ver Fases', 'accion' => 'ver', 'modulo' => 'fases', 'descripcion' => 'Ver fases de proyectos privados'],
             ['codigo' => 'fases.crear', 'nombre_visible' => 'Crear Fases', 'accion' => 'crear', 'modulo' => 'fases', 'descripcion' => 'Crear fases'],
@@ -35,13 +40,13 @@ class PermisosProyectoSeeder extends Seeder
         ];
 
         foreach ($permisos as $p) {
-            Permiso::firstOrCreate(['codigo' => $p['codigo']], $p);
+            Permiso::firstOrCreate(['codigo' => $p['codigo']], array_merge($p, ['nombre' => $p['nombre_visible']]));
         }
 
         // ── Asignación a roles ──────────────────────────────────────────
         $gerente = Rol::where('nombre', 'gerente')->first();
         if ($gerente) {
-            $ids = Permiso::whereIn('modulo', ['proyectos', 'viviendas', 'fases'])->pluck('id')->toArray();
+            $ids = Permiso::whereIn('modulo', ['proyectos', 'viviendas', 'fases', 'configuracion'])->pluck('id')->toArray();
             $gerente->permisos()->syncWithoutDetaching($ids);
         }
 

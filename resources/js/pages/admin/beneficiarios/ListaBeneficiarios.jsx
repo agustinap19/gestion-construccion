@@ -51,7 +51,7 @@ const ListaBeneficiarios = () => {
                 estado_seleccion: estadoSeleccionado
             };
             const response = await beneficiarioService.getAll(filtros);
-            setBeneficiarios(response.data || []); // asumiendo paginación
+            setBeneficiarios(response.data?.data || []);
 
             if (proyectoId) {
                 const statsResponse = await beneficiarioService.obtenerEstadisticasProyecto(proyectoId);

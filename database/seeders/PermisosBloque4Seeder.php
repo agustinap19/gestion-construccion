@@ -25,7 +25,7 @@ class PermisosBloque4Seeder extends Seeder
         ];
 
         foreach ($permisos as $p) {
-            Permiso::firstOrCreate(['codigo' => $p['codigo']], $p);
+            Permiso::firstOrCreate(['codigo' => $p['codigo']], array_merge($p, ['nombre' => $p['nombre_visible']]));
         }
 
         // Asignación de roles

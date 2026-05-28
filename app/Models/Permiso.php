@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Builder;
 
 class Permiso extends Model
 {
@@ -14,11 +15,17 @@ class Permiso extends Model
 
     protected $fillable = [
         'codigo',
+        'nombre',
         'nombre_visible',
         'modulo',
         'accion',
         'descripcion',
     ];
+
+    public function scopePorModulo(Builder $query, string $modulo): Builder
+    {
+        return $query->where('modulo', $modulo);
+    }
 
     public function roles(): BelongsToMany
     {

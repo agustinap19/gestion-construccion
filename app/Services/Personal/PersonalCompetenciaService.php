@@ -4,29 +4,18 @@ namespace App\Services\Personal;
 
 use App\Models\Competencia;
 use App\Models\Personal;
-use App\Services\AuditoriaService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Exception;
 
 class PersonalCompetenciaService
 {
-    public function __construct(
-        protected AuditoriaService $auditoriaService
-    ) {}
-
-    /**
-     * Lista las competencias de un personal con datos completos.
-     */
     public function listarPorPersonal(int $personalId): Collection
     {
         $personal = Personal::findOrFail($personalId);
         return $personal->competencias()->orderBy('personal_competencia.created_at', 'desc')->get();
     }
 
-    /**
-     * Asigna una competencia a un personal.
-     */
     public function asignar(int $personalId, int $competenciaId, array $datos, int $actorId): array
     {
         $personal = Personal::findOrFail($personalId);
@@ -55,24 +44,18 @@ class PersonalCompetenciaService
         }
 
         $pivotData = [
-            'fecha_emision' => $datos['fecha_emision'],
-            'fecha_vencimiento' => $datos['fecha_vencimiento'] ?? null,
-            'entidad_emisora' => $datos['entidad_emisora'] ?? null,
+            'fecha_emision'      => $datos['fecha_emision'],
+            'fecha_vencimiento'  => $datos['fecha_vencimiento'] ?? null,
+            'entidad_emisora'    => $datos['entidad_emisora'] ?? null,
             'numero_certificado' => $datos['numero_certificado'] ?? null,
-            'archivo_url' => $datos['archivo_url'] ?? null,
-            'estado' => $estado,
+            'archivo_url'        => $datos['archivo_url'] ?? null,
+            'estado'             => $estado,
         ];
 
         $personal->competencias()->attach($competenciaId, $pivotData);
 
-        $this->auditoriaService->registrar('personal.competencia_asignada', 'personal', $personalId, [
-            'datos_nuevos' => [
-                'competencia' => $competencia->nombre,
-                'fecha_emision' => $datos['fecha_emision'],
-                'fecha_vencimiento' => $datos['fecha_vencimiento'] ?? 'N/A',
-                'estado' => $estado,
-            ],
-        ]);
+        // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+        // $this->auditoriaService->registrar('personal.competencia_asignada', 'personal', $personalId, [...]);
 
         // Retornar el registro recién creado
         $registro = DB::table('personal_competencia')
@@ -84,9 +67,6 @@ class PersonalCompetenciaService
         return (array) $registro;
     }
 
-    /**
-     * Actualiza una asignación de competencia existente.
-     */
     public function actualizar(int $pivotId, array $datos, int $actorId): array
     {
         $registro = DB::table('personal_competencia')->where('id', $pivotId)->first();
@@ -116,18 +96,13 @@ class PersonalCompetenciaService
             $datosUpdate['updated_at'] = now();
             DB::table('personal_competencia')->where('id', $pivotId)->update($datosUpdate);
 
-            $this->auditoriaService->registrar('personal.competencia_actualizada', 'personal', $registro->personal_id, [
-                'datos_anteriores' => (array) $registro,
-                'datos_nuevos' => $datosUpdate,
-            ]);
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoriaService->registrar('personal.competencia_actualizada', 'personal', $registro->personal_id, [...]);
         }
 
         return (array) DB::table('personal_competencia')->where('id', $pivotId)->first();
     }
 
-    /**
-     * Desasigna una competencia de un personal.
-     */
     public function desasignar(int $pivotId, int $actorId): bool
     {
         $registro = DB::table('personal_competencia')->where('id', $pivotId)->first();
@@ -135,21 +110,13 @@ class PersonalCompetenciaService
             throw new Exception('Registro de competencia no encontrado.');
         }
 
-        $competencia = Competencia::find($registro->competencia_id);
-
-        $this->auditoriaService->registrar('personal.competencia_desasignada', 'personal', $registro->personal_id, [
-            'datos_anteriores' => [
-                'competencia' => $competencia->nombre ?? 'Desconocida',
-                'fecha_emision' => $registro->fecha_emision,
-            ],
-        ]);
+        // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+        // $competencia = Competencia::find($registro->competencia_id);
+        // $this->auditoriaService->registrar('personal.competencia_desasignada', ...);
 
         return DB::table('personal_competencia')->where('id', $pivotId)->delete() > 0;
     }
 
-    /**
-     * Obtiene competencias próximas a vencer en los próximos N días.
-     */
     public function obtenerProximasAVencer(int $diasAdvertencia = 30): Collection
     {
         return collect(
@@ -172,9 +139,6 @@ class PersonalCompetenciaService
         );
     }
 
-    /**
-     * Actualiza estados de competencias vencidas (para cron diario).
-     */
     public function actualizarEstadosVencimientos(): int
     {
         return DB::table('personal_competencia')

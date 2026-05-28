@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 
+// TODO: reactivar OwenIt\Auditing\Auditable cuando la tabla `audits` sea creada (sprint de auditoría)
+
 class Personal extends Model
 {
     use HasFactory, SoftDeletes;

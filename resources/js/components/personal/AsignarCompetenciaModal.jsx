@@ -2,138 +2,247 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
-import FloatingInput from '../ui/FloatingInput';
-import api from '../../services/api';
+import competenciaService from '../../services/competenciaService';
 import personalService from '../../services/personalService';
 
-const AsignarCompetenciaModal = ({ personalId, competenciaId = null, onClose, onSuccess }) => {
-    const [loading, setLoading] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [competenciasDisponibles, setCompetenciasDisponibles] = useState([]);
-    
-    const [formData, setFormData] = useState({
-        competencia_id: '',
-        fecha_emision: new Date().toISOString().split('T')[0],
-        fecha_vencimiento: '',
-        entidad_emisora: '',
+// Calcula semáforo: green=vigente, yellow=por_vencer (≤30d), red=vencida
+const calcSemaforo = (fechaVencimiento) => {
+    if (!fechaVencimiento) return null;
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const [y, m, d] = fechaVencimiento.split('-').map(Number);
+    const vence = new Date(y, m - 1, d);
+    const diffDays = Math.floor((vence - hoy) / 86400000);
+    if (diffDays < 0) return { color: '#ef4444', label: 'Vencida', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.25)' };
+    if (diffDays <= 30) return { color: '#f59e0b', label: `Vence en ${diffDays}d`, bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' };
+    return { color: '#10b981', label: 'Vigente', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)' };
+};
+
+const CAMPO_CLS = [
+    'w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-all duration-200',
+    'bg-white border-slate-200 text-slate-900 dark:bg-slate-900/50 dark:border-slate-700/50 dark:text-slate-200',
+    'border focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/40',
+].join(' ');
+
+const CAMPO_ERR_CLS = [
+    'w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-all duration-200',
+    'bg-white dark:bg-slate-900/50 dark:text-slate-200',
+    'ring-2 ring-red-500/40 border border-red-500/30',
+].join(' ');
+
+const AsignarCompetenciaModal = ({ personalId, competenciaId = null, pivotId = null, onClose, onSuccess }) => {
+    const isEdit = !!pivotId;
+    const [cargando, setCargando] = useState(true);
+    const [guardando, setGuardando] = useState(false);
+    const [catalogo, setCatalogo] = useState([]);
+    const [errores, setErrores] = useState({});
+
+    const [form, setForm] = useState({
+        competencia_id:     competenciaId ? String(competenciaId) : '',
+        fecha_emision:      new Date().toISOString().split('T')[0],
+        fecha_vencimiento:  '',
+        entidad_emisora:    '',
         numero_certificado: '',
-        archivo_url: ''
+        archivo_url:        '',
     });
 
-    const [competenciaSeleccionada, setCompetenciaSeleccionada] = useState(null);
+    const competenciaSeleccionada = catalogo.find(c => String(c.id) === String(form.competencia_id));
+    const semaforo = calcSemaforo(form.fecha_vencimiento);
 
     useEffect(() => {
-        const fetchDatos = async () => {
+        const init = async () => {
             try {
-                setLoading(true);
-                const res = await api.get('/competencias'); // Asumiendo que existe endpoint
-                setCompetenciasDisponibles(res.data.data || []);
-                
-                // Si es edición, falta cargar datos específicos pero por simplificación
-                // en este flujo lo asumimos como creación para no complicar el modal.
-                // En un caso real haríamos un fetch de la pivot.
-            } catch (e) {
-                toast.error('Error al cargar competencias');
+                setCargando(true);
+                // Cargar catálogo
+                const res = await competenciaService.listar({}, 200);
+                const lista = res.data?.data ?? res.data ?? [];
+                setCatalogo(lista);
+
+                // Si es edición y tenemos pivotId, cargar datos del pivot desde competencias del personal
+                if (isEdit && personalId && competenciaId) {
+                    const compRes = await personalService.obtenerCompetencias(personalId);
+                    const compData = compRes.data ?? [];
+                    const registro = compData.find(c => c.id === Number(competenciaId));
+                    if (registro?.pivot) {
+                        setForm({
+                            competencia_id:     String(registro.id),
+                            fecha_emision:      registro.pivot.fecha_emision ?? '',
+                            fecha_vencimiento:  registro.pivot.fecha_vencimiento ?? '',
+                            entidad_emisora:    registro.pivot.entidad_emisora ?? '',
+                            numero_certificado: registro.pivot.numero_certificado ?? '',
+                            archivo_url:        registro.pivot.archivo_url ?? '',
+                        });
+                    }
+                }
+            } catch {
+                toast.error('Error al cargar datos');
                 onClose();
             } finally {
-                setLoading(false);
+                setCargando(false);
             }
         };
-        fetchDatos();
-    }, [onClose]);
+        init();
+    }, [personalId, competenciaId, isEdit, onClose]);
 
+    // Si la competencia no requiere renovación, limpiar fecha_vencimiento
     useEffect(() => {
-        if (formData.competencia_id) {
-            const comp = competenciasDisponibles.find(c => c.id === Number(formData.competencia_id));
-            setCompetenciaSeleccionada(comp);
-            if (comp && !comp.requiere_renovacion) {
-                setFormData(prev => ({ ...prev, fecha_vencimiento: '' }));
-            }
-        } else {
-            setCompetenciaSeleccionada(null);
+        if (competenciaSeleccionada && !competenciaSeleccionada.requiere_renovacion) {
+            setForm(p => ({ ...p, fecha_vencimiento: '' }));
         }
-    }, [formData.competencia_id, competenciasDisponibles]);
+    }, [form.competencia_id, competenciaSeleccionada]);
 
-    const handleInput = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-    const handleSubmit = async () => {
-        if (!formData.competencia_id || !formData.fecha_emision) {
-            return toast.error('Competencia y fecha de emisión son obligatorias');
-        }
-        if (competenciaSeleccionada?.requiere_renovacion && !formData.fecha_vencimiento) {
-            return toast.error('Esta competencia requiere fecha de vencimiento');
-        }
-        if (formData.fecha_vencimiento && formData.fecha_vencimiento <= formData.fecha_emision) {
-            return toast.error('La fecha de vencimiento debe ser posterior a la emisión');
-        }
+    const validar = () => {
+        const e = {};
+        if (!form.competencia_id) e.competencia_id = 'Selecciona una competencia';
+        if (!form.fecha_emision) e.fecha_emision = 'Obligatoria';
+        if (competenciaSeleccionada?.requiere_renovacion && !form.fecha_vencimiento) e.fecha_vencimiento = 'Obligatoria para esta competencia';
+        if (form.fecha_vencimiento && form.fecha_vencimiento <= form.fecha_emision) e.fecha_vencimiento = 'Debe ser posterior a la emisión';
+        setErrores(e);
+        return Object.keys(e).length === 0;
+    };
 
+    const handleGuardar = async () => {
+        if (!validar()) return;
         try {
-            setSaving(true);
-            if (competenciaId) {
-                await personalService.actualizarCompetencia(personalId, competenciaId, formData);
+            setGuardando(true);
+            const datos = {
+                competencia_id:     Number(form.competencia_id),
+                fecha_emision:      form.fecha_emision,
+                fecha_vencimiento:  form.fecha_vencimiento || null,
+                entidad_emisora:    form.entidad_emisora.trim() || null,
+                numero_certificado: form.numero_certificado.trim() || null,
+                archivo_url:        form.archivo_url.trim() || null,
+            };
+
+            if (isEdit) {
+                // El pivotId es el ID de la fila en personal_competencia
+                await personalService.actualizarCompetencia(personalId, pivotId, datos);
                 toast.success('Competencia actualizada');
             } else {
-                await personalService.asignarCompetencia(personalId, formData);
+                await personalService.asignarCompetencia(personalId, datos);
                 toast.success('Competencia asignada');
             }
             onSuccess();
             onClose();
         } catch (e) {
-            toast.error(e.response?.data?.message || 'Error al guardar');
+            const data = e.response?.data;
+            if (data?.errors) setErrores(data.errors);
+            else toast.error(data?.message ?? 'Error al guardar');
         } finally {
-            setSaving(false);
+            setGuardando(false);
         }
     };
 
     return (
-        <Modal open={true} onClose={onClose} title={competenciaId ? "Editar Competencia" : "Asignar Nueva Competencia"} size="md"
-            footer={<>
-                <Button variant="secondary" onClick={onClose} disabled={saving}>Cancelar</Button>
-                <Button onClick={handleSubmit} loading={saving}>{competenciaId ? 'Guardar Cambios' : 'Asignar'}</Button>
-            </>}>
-            
-            {loading ? (
-                <div className="py-8 flex justify-center"><div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div></div>
+        <Modal
+            open={true}
+            onClose={onClose}
+            title={isEdit ? 'Editar Competencia Asignada' : 'Asignar Competencia'}
+            size="md"
+            footer={
+                <>
+                    <Button variant="secondary" onClick={onClose} disabled={guardando}>Cancelar</Button>
+                    <Button onClick={handleGuardar} loading={guardando}>
+                        {isEdit ? 'Guardar cambios' : 'Asignar'}
+                    </Button>
+                </>
+            }>
+            {cargando ? (
+                <div className="py-10 flex justify-center">
+                    <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                </div>
             ) : (
                 <div className="space-y-4">
-                    <div className="flex flex-col gap-1">
-                        <label className="text-xs font-medium text-slate-500 dark:text-slate-400 ml-1">Competencia / Certificación <span className="text-red-500">*</span></label>
-                        <select name="competencia_id" value={formData.competencia_id} onChange={handleInput} disabled={!!competenciaId}
-                            className="w-full h-[46px] px-3 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-600/50 disabled:bg-slate-50 dark:disabled:bg-slate-800">
-                            <option value="">Seleccione una competencia...</option>
-                            {competenciasDisponibles.map(c => (
-                                <option key={c.id} value={c.id}>{c.nombre} ({c.tipo.replace('_', ' ')})</option>
+                    {/* Competencia */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                            Competencia / Certificación <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            value={form.competencia_id}
+                            onChange={e => set('competencia_id', e.target.value)}
+                            disabled={isEdit}
+                            className={errores.competencia_id ? CAMPO_ERR_CLS : CAMPO_CLS + ' disabled:opacity-60 disabled:cursor-not-allowed'}>
+                            <option value="">Selecciona una competencia…</option>
+                            {catalogo.map(c => (
+                                <option key={c.id} value={c.id}>
+                                    {c.nombre} — {c.tipo.replace('_', ' ')}
+                                    {c.requiere_renovacion ? ` (${c.vigencia_meses}m)` : ' (permanente)'}
+                                </option>
                             ))}
                         </select>
+                        {errores.competencia_id && <p className="text-xs text-red-400 mt-1">{errores.competencia_id}</p>}
                     </div>
-                    
+
+                    {/* Info competencia seleccionada */}
                     {competenciaSeleccionada && (
-                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs text-slate-600 dark:text-slate-400">
-                            <p>{competenciaSeleccionada.descripcion || 'Sin descripción'}</p>
-                            <p className="mt-1 font-medium text-emerald-600 dark:text-emerald-400">
-                                {competenciaSeleccionada.requiere_renovacion ? `Requiere renovación (Válida por ${competenciaSeleccionada.duracion_validez_meses} meses)` : 'No requiere renovación (Permanente)'}
+                        <div className="p-3 rounded-xl text-xs"
+                            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <p className="text-slate-400">{competenciaSeleccionada.descripcion || 'Sin descripción'}</p>
+                            <p className="mt-1.5 font-semibold" style={{ color: competenciaSeleccionada.requiere_renovacion ? '#f59e0b' : '#10b981' }}>
+                                {competenciaSeleccionada.requiere_renovacion
+                                    ? `Requiere renovación cada ${competenciaSeleccionada.vigencia_meses} meses`
+                                    : 'Permanente — no requiere renovación'}
                             </p>
                         </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400 ml-1">Fecha de Emisión <span className="text-red-500">*</span></label>
-                            <input type="date" name="fecha_emision" value={formData.fecha_emision} onChange={handleInput} max={new Date().toISOString().split('T')[0]}
-                                className="w-full h-[46px] px-3 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-600/50" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400 ml-1">
-                                Fecha de Vencimiento {competenciaSeleccionada?.requiere_renovacion && <span className="text-red-500">*</span>}
+                    {/* Fechas */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                                Fecha emisión <span className="text-red-500">*</span>
                             </label>
-                            <input type="date" name="fecha_vencimiento" value={formData.fecha_vencimiento} onChange={handleInput} disabled={!competenciaSeleccionada?.requiere_renovacion}
-                                className="w-full h-[46px] px-3 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm text-slate-900 dark:text-slate-200 outline-none focus:ring-2 focus:ring-emerald-600/50 disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-400" />
+                            <input type="date" value={form.fecha_emision}
+                                max={new Date().toISOString().split('T')[0]}
+                                onChange={e => set('fecha_emision', e.target.value)}
+                                className={errores.fecha_emision ? CAMPO_ERR_CLS : CAMPO_CLS} />
+                            {errores.fecha_emision && <p className="text-xs text-red-400 mt-1">{errores.fecha_emision}</p>}
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                                Fecha vencimiento
+                                {competenciaSeleccionada?.requiere_renovacion && <span className="text-red-500 ml-0.5">*</span>}
+                            </label>
+                            <input type="date" value={form.fecha_vencimiento}
+                                disabled={!competenciaSeleccionada?.requiere_renovacion}
+                                onChange={e => set('fecha_vencimiento', e.target.value)}
+                                className={(errores.fecha_vencimiento ? CAMPO_ERR_CLS : CAMPO_CLS) + ' disabled:opacity-40 disabled:cursor-not-allowed'} />
+                            {errores.fecha_vencimiento && <p className="text-xs text-red-400 mt-1">{errores.fecha_vencimiento}</p>}
                         </div>
                     </div>
 
-                    <FloatingInput label="Entidad Emisora (Opcional)" name="entidad_emisora" value={formData.entidad_emisora} onChange={handleInput} placeholder="Ej: Universidad, Instituto, SIB..." />
-                    <FloatingInput label="Número de Certificado/Matrícula (Opcional)" name="numero_certificado" value={formData.numero_certificado} onChange={handleInput} />
-                    <FloatingInput label="URL del Documento (Drive, Dropbox, etc)" name="archivo_url" value={formData.archivo_url} onChange={handleInput} type="url" placeholder="https://..." />
+                    {/* Semáforo de vencimiento */}
+                    {semaforo && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
+                            style={{ background: semaforo.bg, border: `1px solid ${semaforo.border}`, color: semaforo.color }}>
+                            <span className="w-2 h-2 rounded-full" style={{ background: semaforo.color }} />
+                            {semaforo.label}
+                        </div>
+                    )}
+
+                    {/* Entidad emisora */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Entidad emisora</label>
+                        <input value={form.entidad_emisora} onChange={e => set('entidad_emisora', e.target.value)}
+                            placeholder="Ej: Universidad, Instituto, SIB…" className={CAMPO_CLS} />
+                    </div>
+
+                    {/* Número certificado */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Número de certificado</label>
+                        <input value={form.numero_certificado} onChange={e => set('numero_certificado', e.target.value)}
+                            placeholder="Nro. matrícula o registro…" className={CAMPO_CLS} />
+                    </div>
+
+                    {/* URL documento */}
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">URL del documento</label>
+                        <input type="url" value={form.archivo_url} onChange={e => set('archivo_url', e.target.value)}
+                            placeholder="https://drive.google.com/…" className={CAMPO_CLS} />
+                    </div>
                 </div>
             )}
         </Modal>

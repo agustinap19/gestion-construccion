@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Exception;
 
+// AuditoriaService eliminado: el trait Auditable de owen-it en User registra cambios automáticamente.
+
 class UsuarioService
 {
     private const PERMISOS_CRITICOS = [
@@ -24,7 +26,6 @@ class UsuarioService
     ];
 
     public function __construct(
-        protected AuditoriaService $auditoriaService,
         protected NotificacionService $notificacionService
     ) {}
 
@@ -136,16 +137,12 @@ class UsuarioService
             'sesiones_activas_count' => $sesiones->count(),
         ];
 
-        // Auditoría (últimos 10 eventos donde el usuario es objetivo)
-        $auditoria = $this->auditoriaService->obtenerPorTabla('usuarios', $usuario->id);
-
         return [
-            'usuario' => $usuario,
-            'sesiones' => $sesiones,
-            'dispositivos' => $dispositivos,
+            'usuario'        => $usuario,
+            'sesiones'       => $sesiones,
+            'dispositivos'   => $dispositivos,
             'intentos_acceso' => $intentosAcceso,
-            'estadisticas' => $estadisticas,
-            'auditoria' => $auditoria,
+            'estadisticas'   => $estadisticas,
         ];
     }
 
@@ -210,16 +207,6 @@ class UsuarioService
             // Enviar correo con credenciales
             Mail::to($usuario->email)->send(new UsuarioCreadoMail($usuario, $passwordTemporal));
 
-            // Auditoría
-            $this->auditoriaService->registrar('usuario.creado', 'usuarios', $usuario->id, [
-                'datos_nuevos' => [
-                    'nombre' => $usuario->nombre . ' ' . $usuario->apellido_paterno,
-                    'email' => $usuario->email,
-                    'rol_id' => $usuario->rol_id,
-                    'personal_vinculado' => !empty($datos['crear_personal_vinculado']),
-                ],
-            ]);
-
             return $usuario->load('rol');
         });
     }
@@ -256,12 +243,6 @@ class UsuarioService
         $datosNuevos = $usuario->only(['nombre', 'apellido_paterno', 'apellido_materno', 'ci', 'telefono', 'direccion', 'fecha_nacimiento', 'rol_id']);
 
         if ($datosAnteriores != $datosNuevos) {
-            $this->auditoriaService->registrar('usuario.actualizado', 'usuarios', $usuario->id, [
-                'datos_anteriores' => $datosAnteriores,
-                'datos_nuevos' => $datosNuevos,
-            ]);
-
-            // Notificar al usuario
             $this->notificacionService->enviarA($usuario->id, [
                 'tipo' => 'info',
                 'titulo' => 'Datos actualizados',
@@ -290,12 +271,6 @@ class UsuarioService
         $rolNuevo = Rol::findOrFail($nuevoRolId);
 
         $usuario->update(['rol_id' => $nuevoRolId]);
-
-        $this->auditoriaService->registrar('usuario.rol_cambiado', 'usuarios', $usuario->id, [
-            'datos_anteriores' => ['rol' => $rolAnterior->nombre_visible, 'rol_id' => $rolAnterior->id],
-            'datos_nuevos' => ['rol' => $rolNuevo->nombre_visible, 'rol_id' => $rolNuevo->id],
-            'razon' => $razon,
-        ]);
 
         $this->notificacionService->enviarA($usuario->id, [
             'tipo' => 'warning',
@@ -334,7 +309,6 @@ class UsuarioService
 
         $usuario->update(['estado' => $nuevoEstado]);
 
-        // Si pasa a suspendido o inactivo: cerrar sesiones
         if (in_array($nuevoEstado, ['suspendido', 'inactivo'])) {
             DB::table('personal_access_tokens')
                 ->where('tokenable_id', $usuario->id)
@@ -342,19 +316,12 @@ class UsuarioService
                 ->delete();
         }
 
-        // Si pasa a activo desde suspendido: resetear bloqueo
         if ($nuevoEstado === 'activo' && $estadoAnterior === 'suspendido') {
             $usuario->update([
                 'intentos_fallidos' => 0,
                 'bloqueado_hasta' => null,
             ]);
         }
-
-        $this->auditoriaService->registrar('usuario.estado_cambiado', 'usuarios', $usuario->id, [
-            'datos_anteriores' => ['estado' => $estadoAnterior],
-            'datos_nuevos' => ['estado' => $nuevoEstado],
-            'razon' => $razon,
-        ]);
 
         $this->notificacionService->enviarA($usuario->id, [
             'tipo' => $nuevoEstado === 'activo' ? 'success' : ($nuevoEstado === 'suspendido' ? 'error' : 'warning'),
@@ -383,14 +350,9 @@ class UsuarioService
             'bloqueado_hasta' => null,
         ]);
 
-        // Si estaba suspendido, pasar a inactivo
         if ($usuario->estado === 'suspendido') {
             $usuario->update(['estado' => 'inactivo']);
         }
-
-        $this->auditoriaService->registrar('usuario.desbloqueado', 'usuarios', $usuario->id, [
-            'datos_nuevos' => ['intentos_fallidos' => 0, 'bloqueado_hasta' => null],
-        ]);
 
         $this->notificacionService->enviarA($usuario->id, [
             'tipo' => 'success',
@@ -424,10 +386,6 @@ class UsuarioService
 
         Mail::to($usuario->email)->send(new UsuarioCreadoMail($usuario, $passwordTemporal));
 
-        $this->auditoriaService->registrar('usuario.reenvio_password', 'usuarios', $usuario->id, [
-            'datos_nuevos' => ['motivo' => 'reenvio_password_admin'],
-        ]);
-
         return $usuario->load('rol');
     }
 
@@ -443,10 +401,6 @@ class UsuarioService
             ->delete();
 
         if ($deleted) {
-            $this->auditoriaService->registrar('usuario.sesion_cerrada', 'usuarios', $usuarioId, [
-                'datos_nuevos' => ['token_id' => $tokenId],
-            ]);
-
             $this->notificacionService->enviarA($usuarioId, [
                 'tipo' => 'warning',
                 'titulo' => 'Sesión cerrada',
@@ -469,10 +423,6 @@ class UsuarioService
             ->delete();
 
         if ($count > 0) {
-            $this->auditoriaService->registrar('usuario.sesiones_cerradas', 'usuarios', $usuarioId, [
-                'datos_nuevos' => ['sesiones_cerradas' => $count],
-            ]);
-
             $this->notificacionService->enviarA($usuarioId, [
                 'tipo' => 'warning',
                 'titulo' => 'Todas las sesiones cerradas',
@@ -495,10 +445,6 @@ class UsuarioService
 
         $dispositivo->update(['activo' => false]);
 
-        $this->auditoriaService->registrar('usuario.dispositivo_revocado', 'usuarios', $usuarioId, [
-            'datos_nuevos' => ['dispositivo_id' => $dispositivoId, 'nombre' => $dispositivo->nombre_dispositivo],
-        ]);
-
         $this->notificacionService->enviarA($usuarioId, [
             'tipo' => 'warning',
             'titulo' => 'Dispositivo revocado',
@@ -517,12 +463,6 @@ class UsuarioService
         $count = DispositivoConfiable::where('usuario_id', $usuarioId)
             ->where('activo', true)
             ->update(['activo' => false]);
-
-        if ($count > 0) {
-            $this->auditoriaService->registrar('usuario.dispositivos_revocados', 'usuarios', $usuarioId, [
-                'datos_nuevos' => ['dispositivos_revocados' => $count],
-            ]);
-        }
 
         return $count;
     }
@@ -548,14 +488,6 @@ class UsuarioService
         // Revocar dispositivos
         DispositivoConfiable::where('usuario_id', $usuario->id)->update(['activo' => false]);
 
-        $this->auditoriaService->registrar('usuario.eliminado', 'usuarios', $usuario->id, [
-            'datos_anteriores' => [
-                'nombre' => $usuario->nombre . ' ' . $usuario->apellido_paterno,
-                'email' => $usuario->email,
-            ],
-            'razon' => $razon,
-        ]);
-
         return $usuario->delete();
     }
 
@@ -567,10 +499,6 @@ class UsuarioService
         $usuario = User::withTrashed()->findOrFail($id);
         $usuario->restore();
         $usuario->update(['estado' => 'inactivo']);
-
-        $this->auditoriaService->registrar('usuario.restaurado', 'usuarios', $usuario->id, [
-            'datos_nuevos' => ['estado' => 'inactivo'],
-        ]);
 
         return $usuario->load('rol');
     }

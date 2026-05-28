@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Exceptions\Beneficiarios\TransicionEstadoNoPermitidaException;
 
+// TODO: reactivar OwenIt\Auditing\Auditable cuando la tabla `audits` sea creada (sprint de auditoría)
+
 class Beneficiario extends Model
 {
     use HasFactory, SoftDeletes;
@@ -20,6 +22,7 @@ class Beneficiario extends Model
         'nombre',
         'apellido_paterno',
         'apellido_materno',
+        'apellido_conyuge',
         'ci',
         'ci_complemento',
         'fecha_nacimiento',
@@ -31,6 +34,7 @@ class Beneficiario extends Model
         'cantidad_familiares',
         'personas_dependientes',
         'ingreso_mensual_familiar',
+        'comunidad',
         'direccion_actual',
         'direccion_terreno',
         'latitud_terreno',
@@ -81,16 +85,20 @@ class Beneficiario extends Model
         return $this->belongsTo(User::class, 'usuario_registrador_id');
     }
 
-    public function visitasDomiciliarias()
+    public function vivienda()
     {
-        return $this->hasMany(VisitaDomiciliaria::class, 'beneficiario_id');
+        return $this->hasOne(Vivienda::class, 'beneficiario_id');
     }
 
     // Accessors
     public function getNombreCompletoAttribute()
     {
         $partes = array_filter([$this->nombre, $this->apellido_paterno, $this->apellido_materno]);
-        return implode(' ', $partes);
+        $nombre = implode(' ', $partes);
+        if ($this->apellido_conyuge) {
+            $nombre .= ' (cónyuge: ' . $this->apellido_conyuge . ')';
+        }
+        return $nombre;
     }
 
     public function getCiCompletoAttribute()

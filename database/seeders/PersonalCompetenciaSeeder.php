@@ -44,7 +44,7 @@ class PersonalCompetenciaSeeder extends Seeder
                     $estado = 'vigente';
 
                     if ($comp->requiere_renovacion) {
-                        $meses = $comp->duracion_validez_meses;
+                        $meses = $comp->vigencia_meses ?? 12;
                         $fechaVencObj = (new \DateTime($fechaEmision))->modify("+$meses months");
                         $fechaVenc = $fechaVencObj->format('Y-m-d');
                         

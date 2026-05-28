@@ -13,7 +13,7 @@ class AccionMasivaRequest extends FormRequest
         return [
             'accion' => ['required', 'in:activar,desactivar,suspender,reenviar_password,cerrar_sesiones,revocar_dispositivos,eliminar'],
             'usuario_ids' => ['required', 'array', 'min:1'],
-            'usuario_ids.*' => ['integer', 'exists:usuarios,id'],
+            'usuario_ids.*' => ['integer', 'exists:users,id'],
             'razon' => ['required_if:accion,suspender,eliminar', 'nullable', 'string', 'max:500'],
         ];
     }

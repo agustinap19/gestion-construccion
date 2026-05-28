@@ -3,12 +3,9 @@
 namespace App\Services\Clientes;
 
 use App\Models\EntidadEstatal;
-use App\Models\Auditoria;
 use App\Models\User;
-use App\Services\AuditoriaService;
 use App\Services\NotificacionService;
 use App\Exceptions\Clientes\EntidadDuplicadaException;
-use App\Exceptions\Clientes\EntidadConDependenciasException;
 use App\Exceptions\Clientes\OperacionNoPermitidaException;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
@@ -17,14 +14,9 @@ use Carbon\Carbon;
 
 class EntidadEstatalService
 {
-    protected $auditoriaService;
-    protected $notificacionService;
-
-    public function __construct(AuditoriaService $auditoriaService, NotificacionService $notificacionService)
-    {
-        $this->auditoriaService = $auditoriaService;
-        $this->notificacionService = $notificacionService;
-    }
+    public function __construct(
+        protected NotificacionService $notificacionService
+    ) {}
 
     public function listarConFiltros(array $filtros, int $perPage = 20): LengthAwarePaginator
     {
@@ -53,7 +45,7 @@ class EntidadEstatalService
 
         $allowedSorts = ['nombre', 'nit', 'created_at', 'estado'];
         $ordenarPor = in_array($filtros['ordenar_por'] ?? '', $allowedSorts) ? $filtros['ordenar_por'] : 'created_at';
-        $direccion = in_array(strtolower($filtros['direccion'] ?? ''), ['asc', 'desc']) ? strtolower($filtros['direccion']) : 'desc';
+        $direccion  = in_array(strtolower($filtros['direccion'] ?? ''), ['asc', 'desc']) ? strtolower($filtros['direccion']) : 'desc';
 
         $query->orderBy($ordenarPor, $direccion);
 
@@ -63,41 +55,31 @@ class EntidadEstatalService
     public function obtenerCompleto(int $id): array
     {
         $entidad = EntidadEstatal::with(['zona', 'creador'])->findOrFail($id);
-        
-        $auditoria = Auditoria::with('actor:id,email')
-            ->where('tabla_afectada', 'entidades_estatales')
-            ->where('registro_id', $id)
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
 
         $antiguedad_meses = Carbon::parse($entidad->created_at)->diffInMonths(now());
 
         return [
-            'entidad' => $entidad,
-            'auditoria' => $auditoria,
+            'entidad'      => $entidad,
             'estadisticas' => [
-                'cantidad_proyectos' => 0, // Placeholder
-                'monto_historico_contratado' => 0, // Placeholder
-                'antiguedad_meses' => $antiguedad_meses
-            ]
+                'cantidad_proyectos'          => 0,
+                'monto_historico_contratado'   => 0,
+                'antiguedad_meses'             => $antiguedad_meses,
+            ],
         ];
     }
 
     public function crear(array $datos, int $actorId): EntidadEstatal
     {
-        // Validación NIT único en toda la tabla (incluso soft-deleted si es necesario, pero `unique` rules ya cubren. Aquí reforzamos)
         $existeNit = EntidadEstatal::where('nit', $datos['nit'])->exists();
         if ($existeNit) {
             throw new EntidadDuplicadaException('nit', $datos['nit']);
         }
 
-        // Validación combinada de negocio
         $existeCombo = EntidadEstatal::where('nombre', $datos['nombre'])
             ->where('nivel', $datos['nivel'])
             ->where('zona_id', $datos['zona_id'])
             ->exists();
-        
+
         if ($existeCombo) {
             throw new EntidadDuplicadaException('nombre_nivel_zona', $datos['nombre']);
         }
@@ -109,13 +91,6 @@ class EntidadEstatalService
             }
 
             $entidad = EntidadEstatal::create($datos);
-
-            $this->auditoriaService->registrarCreacion(
-                'entidad.creada',
-                'entidades_estatales',
-                $entidad->id,
-                $entidad->toArray()
-            );
 
             $this->notificacionService->notificarAUsuariosConRol(
                 'gerente',
@@ -131,8 +106,7 @@ class EntidadEstatalService
     public function actualizar(int $id, array $datos, int $actorId): EntidadEstatal
     {
         $entidad = EntidadEstatal::findOrFail($id);
-        
-        // Unicidad NIT
+
         if (isset($datos['nit'])) {
             $existeNit = EntidadEstatal::where('nit', $datos['nit'])->where('id', '!=', $id)->exists();
             if ($existeNit) {
@@ -140,34 +114,16 @@ class EntidadEstatalService
             }
         }
 
-        unset($datos['usuario_creador_id']);
-        unset($datos['estado']);
+        unset($datos['usuario_creador_id'], $datos['estado']);
 
-        $datosAnteriores = $entidad->toArray();
         $entidad->fill($datos);
-        
-        $cambiosReales = [];
-        $nuevosReales = [];
-        foreach ($entidad->getDirty() as $atributo => $valorNuevo) {
-            $cambiosReales[$atributo] = $datosAnteriores[$atributo] ?? null;
-            $nuevosReales[$atributo] = $valorNuevo;
-        }
 
-        if (empty($cambiosReales)) {
+        if (empty($entidad->getDirty())) {
             return $entidad;
         }
 
-        return DB::transaction(function () use ($entidad, $actorId, $cambiosReales, $nuevosReales) {
+        return DB::transaction(function () use ($entidad) {
             $entidad->save();
-
-            $this->auditoriaService->registrarActualizacion(
-                'entidad.actualizada',
-                'entidades_estatales',
-                $entidad->id,
-                $cambiosReales,
-                $nuevosReales
-            );
-
             return $entidad->load(['zona', 'creador']);
         });
     }
@@ -175,7 +131,7 @@ class EntidadEstatalService
     public function cambiarEstado(int $id, string $nuevoEstado, ?string $razon, int $actorId): EntidadEstatal
     {
         $entidad = EntidadEstatal::findOrFail($id);
-        
+
         if ($entidad->estado === $nuevoEstado) {
             return $entidad;
         }
@@ -184,19 +140,9 @@ class EntidadEstatalService
             throw ValidationException::withMessages(['razon' => 'Debe especificar una razón al marcar a la entidad en disputa.']);
         }
 
-        return DB::transaction(function () use ($entidad, $nuevoEstado, $razon, $actorId) {
-            $estadoAnterior = $entidad->estado;
+        return DB::transaction(function () use ($entidad, $nuevoEstado, $razon) {
             $entidad->estado = $nuevoEstado;
             $entidad->save();
-
-            $this->auditoriaService->registrarCambioEstado(
-                'entidad.estado_cambiado',
-                'entidades_estatales',
-                $entidad->id,
-                $estadoAnterior,
-                $nuevoEstado,
-                $razon
-            );
 
             if ($nuevoEstado === 'en_disputa') {
                 $mensaje = "La entidad {$entidad->nombre_completo} ha sido marcada en disputa por: {$razon}";
@@ -212,27 +158,8 @@ class EntidadEstatalService
     {
         $entidad = EntidadEstatal::findOrFail($id);
 
-        /*
-        if ($entidad->proyectos()->count() > 0) {
-            throw new EntidadConDependenciasException(
-                "Esta entidad estatal tiene proyectos asociados. Reasígnalos o termínalos antes de eliminar.",
-                'proyectos',
-                $entidad->proyectos()->count()
-            );
-        }
-        */
-
-        return DB::transaction(function () use ($entidad, $actorId, $razon) {
+        return DB::transaction(function () use ($entidad) {
             $entidad->delete();
-
-            $this->auditoriaService->registrarEliminacion(
-                'entidad.eliminada',
-                'entidades_estatales',
-                $entidad->id,
-                $entidad->toArray(),
-                $razon
-            );
-
             return true;
         });
     }
@@ -245,28 +172,19 @@ class EntidadEstatalService
         }
 
         $entidad = EntidadEstatal::onlyTrashed()->findOrFail($id);
-        
-        return DB::transaction(function () use ($entidad, $actorId) {
+
+        return DB::transaction(function () use ($entidad) {
             $entidad->restore();
-
-            $this->auditoriaService->registrarActualizacion(
-                'entidad.restaurada',
-                'entidades_estatales',
-                $entidad->id,
-                ['deleted_at' => $entidad->deleted_at],
-                ['deleted_at' => null]
-            );
-
             return $entidad;
         });
     }
 
     public function obtenerEstadisticasGenerales(): array
     {
-        $baseQuery = EntidadEstatal::query();
-        $totalActivas = (clone $baseQuery)->activas()->count();
+        $baseQuery     = EntidadEstatal::query();
+        $totalActivas  = (clone $baseQuery)->activas()->count();
         $totalInactivas = (clone $baseQuery)->where('estado', 'inactiva')->count();
-        $totalDisputa = (clone $baseQuery)->where('estado', 'en_disputa')->count();
+        $totalDisputa  = (clone $baseQuery)->where('estado', 'en_disputa')->count();
 
         $distribucionNivel = DB::table('entidades_estatales')
             ->select('nivel', DB::raw('count(*) as count'))
@@ -276,11 +194,11 @@ class EntidadEstatalService
             ->toArray();
 
         return [
-            'total_activas' => $totalActivas,
-            'total_inactivas' => $totalInactivas,
-            'total_disputa' => $totalDisputa,
-            'distribucion_nivel' => $distribucionNivel,
-            'top_entidades_proyectos' => [] // Placeholder
+            'total_activas'        => $totalActivas,
+            'total_inactivas'      => $totalInactivas,
+            'total_disputa'        => $totalDisputa,
+            'distribucion_nivel'   => $distribucionNivel,
+            'top_entidades_proyectos' => [],
         ];
     }
 }

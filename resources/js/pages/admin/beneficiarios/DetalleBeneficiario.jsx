@@ -16,6 +16,7 @@ import EstadoBeneficiarioBadge from '../../../components/beneficiarios/EstadoBen
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import beneficiarioService from '../../../services/beneficiarioService';
+import AuditoriaTimeline from '../../../components/ui/AuditoriaTimeline';
 
 const DetalleBeneficiario = () => {
     const { id } = useParams();
@@ -78,14 +79,11 @@ const DetalleBeneficiario = () => {
 
     if (loading || !data) return <div className="text-center py-12 text-slate-400">Cargando perfil...</div>;
 
-    const { beneficiario, estadisticas, transiciones_permitidas } = data;
+    const { beneficiario, transiciones_permitidas } = data;
 
     const dropdownItems = [];
     if (hasPermission('beneficiarios.editar')) {
         dropdownItems.push({ label: 'Editar Datos', onClick: () => navigate(`/dashboard/beneficiarios/${id}/editar`) });
-    }
-    if (hasPermission('visitas.crear')) {
-        dropdownItems.push({ label: 'Registrar Visita', onClick: () => toast.info('Modal de visita pendiente') });
     }
     if (hasPermission('beneficiarios.eliminar')) {
         dropdownItems.push({ separator: true });
@@ -306,64 +304,10 @@ const DetalleBeneficiario = () => {
             )
         },
         {
-            id: 'visitas',
-            label: 'Visitas Domiciliarias',
-            icon: <MapPin className="w-4 h-4" />,
-            content: (
-                <div className="space-y-6 animate-fadeIn">
-                    <div className="flex justify-between items-center">
-                        <div className="flex gap-4">
-                            <div className="px-4 py-2 bg-slate-800 rounded-lg border border-slate-700 text-center">
-                                <span className="block text-xl font-bold text-slate-200">{estadisticas.total_visitas}</span>
-                                <span className="text-xs text-slate-400 uppercase">Totales</span>
-                            </div>
-                            <div className="px-4 py-2 bg-slate-800 rounded-lg border border-slate-700 text-center">
-                                <span className="block text-xl font-bold text-emerald-400">{estadisticas.visitas_exitosas}</span>
-                                <span className="text-xs text-slate-400 uppercase">Exitosas</span>
-                            </div>
-                        </div>
-                        {hasPermission('visitas.crear') && (
-                            <Button variant="primary">
-                                <Plus className="w-4 h-4 mr-2" /> Nueva Visita
-                            </Button>
-                        )}
-                    </div>
-
-                    <div className="space-y-4">
-                        {beneficiario.visitas_domiciliarias?.length === 0 ? (
-                            <Card className="text-center py-12 bg-slate-800/30">
-                                <MapPin className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                                <p className="text-slate-400 text-lg">No hay visitas domiciliarias registradas.</p>
-                            </Card>
-                        ) : (
-                            beneficiario.visitas_domiciliarias?.map(visita => (
-                                <Card key={visita.id} className="p-4 hover:bg-slate-800/80 transition-colors cursor-pointer border-l-4" style={{borderLeftColor: visita.resultado === 'exitosa' ? '#10b981' : '#f59e0b'}}>
-                                    <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-slate-400 shrink-0">
-                                                <Calendar className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <p className="font-medium text-slate-200 capitalize">{visita.tipo_visita} - {visita.fecha_visita}</p>
-                                                <p className="text-sm text-slate-500">Por: {visita.visitador?.nombre} {visita.visitador?.apellido_paterno}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <Badge variant={visita.resultado === 'exitosa' ? 'success' : 'warning'}>{visita.resultado.replace('_', ' ')}</Badge>
-                                            <Button variant="ghost" size="sm"><Eye className="w-4 h-4 text-slate-400"/></Button>
-                                        </div>
-                                    </div>
-                                    {visita.observaciones && (
-                                        <p className="mt-3 text-sm text-slate-400 italic bg-slate-900/50 p-3 rounded-lg border border-slate-700/30">
-                                            "{visita.observaciones}"
-                                        </p>
-                                    )}
-                                </Card>
-                            ))
-                        )}
-                    </div>
-                </div>
-            )
+            id: 'auditoria',
+            label: 'Auditoría',
+            icon: <Shield className="w-4 h-4" />,
+            content: <AuditoriaTimeline entidad="beneficiarios" id={id} />
         }
     ];
 
@@ -435,7 +379,7 @@ const DetalleBeneficiario = () => {
                 title="Eliminar Beneficiario"
                 message={<>
                     <p className="mb-4">¿Estás seguro de que deseas eliminar a <strong>{beneficiario.nombre_completo}</strong>?</p>
-                    <p className="mb-4 text-orange-400 text-sm">Esta acción ocultará el registro del sistema, pero su historial y visitas previas se conservarán.</p>
+                    <p className="mb-4 text-orange-400 text-sm">Esta acción ocultará el registro del sistema, pero su historial de cambios se conservará.</p>
                     <div className="mt-4">
                         <label className="block text-sm font-medium text-slate-400 mb-2">Razón obligatoria <span className="text-red-400">*</span></label>
                         <textarea

@@ -14,20 +14,17 @@ class ActualizarRolRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nombre_visible' => ['required', 'string', 'max:80'],
-            'descripcion' => ['nullable', 'string', 'max:500'],
-            'estado' => ['required', 'in:activo,inactivo'],
+            'nombre_visible' => ['required', 'string', 'max:50'],
+            'descripcion'    => ['nullable', 'string', 'max:100'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'nombre_visible.required' => 'El nombre visible del rol es obligatorio.',
-            'nombre_visible.max' => 'El nombre visible no puede exceder los 80 caracteres.',
-            'descripcion.max' => 'La descripción no puede exceder los 500 caracteres.',
-            'estado.required' => 'El estado del rol es obligatorio.',
-            'estado.in' => 'El estado debe ser activo o inactivo.',
+            'nombre_visible.required' => 'El nombre del rol es obligatorio.',
+            'nombre_visible.max'      => 'El nombre no puede exceder los 50 caracteres.',
+            'descripcion.max'         => 'La descripción no puede exceder los 100 caracteres.',
         ];
     }
 }

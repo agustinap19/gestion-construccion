@@ -8,13 +8,12 @@ import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
 import Modal from '../../../components/ui/Modal';
-import Tabs from '../../../components/ui/Tabs';
 import Skeleton from '../../../components/ui/Skeleton';
 import Avatar from '../../../components/ui/Avatar';
 import SearchInput from '../../../components/ui/SearchInput';
-import Tooltip from '../../../components/ui/Tooltip';
 import EmptyState from '../../../components/ui/EmptyState';
-import { Shield, Edit, Trash, ArrowLeft, Users, Key, History, Check, Info, ShieldCheck, Eye } from '../../../components/icons/Icons';
+import { Shield, Edit, Trash, ArrowLeft, Users, Key, Check, Info, ShieldCheck, Eye } from '../../../components/icons/Icons';
+import { useBreadcrumbTitle } from '../../../context/BreadcrumbContext';
 
 const DetalleRol = () => {
     const { id } = useParams();
@@ -24,13 +23,15 @@ const DetalleRol = () => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('info');
+    const [estadoCambiando, setEstadoCambiando] = useState(false);
+
+    useBreadcrumbTitle(`/dashboard/roles/${id}`, data?.rol?.nombre_visible);
 
     // Modal editar permisos
     const [modalPermisos, setModalPermisos] = useState(false);
     const [todosPermisos, setTodosPermisos] = useState({});
     const [permisosSeleccionados, setPermisosSeleccionados] = useState([]);
     const [busquedaPermisos, setBusquedaPermisos] = useState('');
-    const [razonCambio, setRazonCambio] = useState('');
     const [guardandoPermisos, setGuardandoPermisos] = useState(false);
     const [modulosAbiertos, setModulosAbiertos] = useState({});
 
@@ -51,14 +52,26 @@ const DetalleRol = () => {
         cargarDatos();
     }, [cargarDatos]);
 
+    const handleToggleEstado = async () => {
+        if (estadoCambiando || data?.rol?.es_sistema) return;
+        try {
+            setEstadoCambiando(true);
+            await rolService.cambiarEstado(id);
+            await cargarDatos();
+            toast.success('Estado actualizado');
+        } catch {
+            toast.error('No se pudo cambiar el estado');
+        } finally {
+            setEstadoCambiando(false);
+        }
+    };
+
     const abrirModalPermisos = async () => {
         try {
             const res = await rolService.obtenerPermisosAgrupados();
             setTodosPermisos(res.data || {});
-            // Pre-seleccionar permisos actuales
             const idsActuales = data.rol.permisos.map(p => p.id);
             setPermisosSeleccionados(idsActuales);
-            // Abrir todos los módulos
             const modulos = {};
             Object.keys(res.data || {}).forEach(m => modulos[m] = true);
             setModulosAbiertos(modulos);
@@ -68,17 +81,17 @@ const DetalleRol = () => {
         }
     };
 
-    const togglePermiso = (id) => {
+    const togglePermiso = (pid) => {
         setPermisosSeleccionados(prev =>
-            prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+            prev.includes(pid) ? prev.filter(p => p !== pid) : [...prev, pid]
         );
     };
 
     const toggleModulo = (modulo, permisos) => {
         const ids = permisos.map(p => p.id);
-        const todosSeleccionados = ids.every(id => permisosSeleccionados.includes(id));
+        const todosSeleccionados = ids.every(pid => permisosSeleccionados.includes(pid));
         if (todosSeleccionados) {
-            setPermisosSeleccionados(prev => prev.filter(id => !ids.includes(id)));
+            setPermisosSeleccionados(prev => prev.filter(pid => !ids.includes(pid)));
         } else {
             setPermisosSeleccionados(prev => [...new Set([...prev, ...ids])]);
         }
@@ -91,10 +104,9 @@ const DetalleRol = () => {
     const guardarPermisos = async () => {
         try {
             setGuardandoPermisos(true);
-            await rolService.actualizarPermisos(id, permisosSeleccionados, razonCambio || null);
+            await rolService.actualizarPermisos(id, permisosSeleccionados, null);
             toast.success('Permisos actualizados exitosamente');
             setModalPermisos(false);
-            setRazonCambio('');
             cargarDatos();
         } catch (err) {
             const msg = err.response?.data?.message || 'Error al actualizar permisos';
@@ -109,7 +121,6 @@ const DetalleRol = () => {
         const b = busquedaPermisos.toLowerCase();
         return permisos.filter(p =>
             p.nombre_visible.toLowerCase().includes(b) ||
-            p.codigo.toLowerCase().includes(b) ||
             (p.descripcion && p.descripcion.toLowerCase().includes(b))
         );
     };
@@ -135,13 +146,12 @@ const DetalleRol = () => {
 
     if (!data) return null;
 
-    const { rol, permisos_agrupados, usuarios, auditoria } = data;
+    const { rol, permisos_agrupados, usuarios } = data;
 
     const tabs = [
         { key: 'info', label: 'Información', icon: <Info size={16} /> },
         { key: 'permisos', label: 'Permisos', icon: <Key size={16} />, badge: <Badge variant="neutral">{rol.permisos?.length || 0}</Badge> },
         { key: 'usuarios', label: 'Usuarios', icon: <Users size={16} />, badge: <Badge variant="neutral">{rol.usuarios_count || 0}</Badge> },
-        { key: 'auditoria', label: 'Auditoría', icon: <History size={16} /> },
     ];
 
     const formatFecha = (fecha) => {
@@ -149,6 +159,30 @@ const DetalleRol = () => {
         return new Date(fecha).toLocaleDateString('es-BO', {
             year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
         });
+    };
+
+    /* ── Estado toggle button ── */
+    const EstadoBtn = ({ className = '' }) => {
+        const esActivo = rol.estado === 'activo';
+        return (
+            <button
+                onClick={handleToggleEstado}
+                disabled={estadoCambiando || rol.es_sistema}
+                title={rol.es_sistema ? 'No se puede cambiar el estado de un rol del sistema' : `Cambiar a ${esActivo ? 'inactivo' : 'activo'}`}
+                className={[
+                    'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-200 select-none',
+                    rol.es_sistema ? 'cursor-not-allowed opacity-75' : 'cursor-pointer hover:scale-105 active:scale-95',
+                    estadoCambiando ? 'opacity-60' : '',
+                    esActivo
+                        ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-500/25'
+                        : 'bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/25',
+                    className,
+                ].join(' ')}
+            >
+                <span className={`w-1.5 h-1.5 rounded-full ${esActivo ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                {estadoCambiando ? 'Cambiando...' : rol.estado}
+            </button>
+        );
     };
 
     return (
@@ -168,13 +202,10 @@ const DetalleRol = () => {
                 title={rol.nombre_visible}
                 subtitle={
                     <span className="flex items-center gap-3">
-                        <span className="font-mono text-slate-400">{rol.nombre}</span>
                         <Badge variant={rol.es_sistema ? 'info' : 'tech'}>
                             {rol.es_sistema ? 'Sistema' : 'Personalizado'}
                         </Badge>
-                        <Badge variant={rol.estado === 'activo' ? 'success' : 'danger'}>
-                            {rol.estado}
-                        </Badge>
+                        <EstadoBtn />
                     </span>
                 }
                 icon={<ShieldCheck size={24} className="text-emerald-600 dark:text-emerald-400" />}
@@ -202,18 +233,13 @@ const DetalleRol = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
                         <Card title="Datos del Rol">
                             <div className="space-y-4">
-                                <InfoRow label="Nombre visible" value={rol.nombre_visible} />
-                                <InfoRow label="Nombre interno" value={<span className="font-mono text-emerald-600 dark:text-emerald-400">{rol.nombre}</span>} />
+                                <InfoRow label="Nombre" value={rol.nombre_visible} />
                                 <InfoRow label="Tipo" value={
                                     <Badge variant={rol.es_sistema ? 'info' : 'tech'}>
                                         {rol.es_sistema ? 'Rol del sistema' : 'Rol personalizado'}
                                     </Badge>
                                 } />
-                                <InfoRow label="Estado" value={
-                                    <Badge variant={rol.estado === 'activo' ? 'success' : 'danger'}>
-                                        {rol.estado}
-                                    </Badge>
-                                } />
+                                <InfoRow label="Estado" value={<EstadoBtn />} />
                                 <InfoRow label="Descripción" value={rol.descripcion || 'Sin descripción'} />
                             </div>
                         </Card>
@@ -280,10 +306,7 @@ const DetalleRol = () => {
                                             {permisos.map(p => (
                                                 <div key={p.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                                                     <Check size={14} className="text-emerald-500 shrink-0" />
-                                                    <div className="min-w-0">
-                                                        <span className="text-sm text-slate-700 dark:text-slate-300">{p.nombre_visible}</span>
-                                                        <span className="text-xs text-slate-400 dark:text-slate-500 ml-2 font-mono">{p.codigo}</span>
-                                                    </div>
+                                                    <span className="text-sm text-slate-700 dark:text-slate-300">{p.nombre_visible}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -332,99 +355,6 @@ const DetalleRol = () => {
                         )}
                     </div>
                 )}
-
-                {/* TAB: Auditoría */}
-                {activeTab === 'auditoria' && (
-                    <div className="animate-fade-in">
-                        {(!auditoria || auditoria.length === 0) ? (
-                            <EmptyState
-                                icon={<History size={32} />}
-                                title="Sin historial"
-                                description="No hay eventos de auditoría registrados para este rol."
-                            />
-                        ) : (
-                            <Card>
-                                <div className="relative">
-                                    {/* Timeline line */}
-                                    <div className="absolute left-[19px] top-0 bottom-0 w-[2px] bg-slate-200 dark:bg-slate-800" />
-
-                                    <div className="space-y-6">
-                                        {auditoria.map((evento, idx) => (
-                                            <div key={evento.id || idx} className="relative flex gap-4 pl-2">
-                                                {/* Dot */}
-                                                <div className={`relative z-10 w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 ${
-                                                    evento.evento.includes('eliminado')
-                                                        ? 'bg-red-50 dark:bg-red-500/10 border-red-300 dark:border-red-500/30'
-                                                        : evento.evento.includes('creado') || evento.evento.includes('duplicado')
-                                                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30'
-                                                        : 'bg-blue-50 dark:bg-blue-500/10 border-blue-300 dark:border-blue-500/30'
-                                                }`}>
-                                                    <History size={14} className={
-                                                        evento.evento.includes('eliminado')
-                                                            ? 'text-red-500'
-                                                            : evento.evento.includes('creado') || evento.evento.includes('duplicado')
-                                                            ? 'text-emerald-500'
-                                                            : 'text-blue-500'
-                                                    } />
-                                                </div>
-
-                                                {/* Content */}
-                                                <div className="flex-1 pb-2">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                                                            {evento.actor
-                                                                ? `${evento.actor.nombre} ${evento.actor.apellido_paterno}`
-                                                                : 'Sistema'}
-                                                        </span>
-                                                        <Badge variant={
-                                                            evento.evento.includes('eliminado') ? 'danger'
-                                                                : evento.evento.includes('creado') || evento.evento.includes('duplicado') ? 'success'
-                                                                : 'info'
-                                                        }>
-                                                            {evento.evento.replace('rol.', '').replace(/_/g, ' ')}
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                                        {formatFecha(evento.created_at)}
-                                                    </p>
-
-                                                    {/* Datos del cambio */}
-                                                    {(evento.datos_anteriores || evento.datos_nuevos) && (
-                                                        <div className="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 text-xs">
-                                                            {evento.datos_nuevos?.agregados && evento.datos_nuevos.agregados.length > 0 && (
-                                                                <div className="mb-1">
-                                                                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">+ Agregados: </span>
-                                                                    <span className="text-slate-600 dark:text-slate-300">{evento.datos_nuevos.agregados.join(', ')}</span>
-                                                                </div>
-                                                            )}
-                                                            {evento.datos_nuevos?.eliminados && evento.datos_nuevos.eliminados.length > 0 && (
-                                                                <div className="mb-1">
-                                                                    <span className="text-red-500 font-medium">− Removidos: </span>
-                                                                    <span className="text-slate-600 dark:text-slate-300">{evento.datos_nuevos.eliminados.join(', ')}</span>
-                                                                </div>
-                                                            )}
-                                                            {evento.datos_anteriores && !evento.datos_nuevos?.agregados && (
-                                                                <pre className="text-slate-500 dark:text-slate-400 whitespace-pre-wrap font-mono">
-                                                                    {JSON.stringify(evento.datos_anteriores, null, 2)}
-                                                                </pre>
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                    {evento.razon && (
-                                                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 italic">
-                                                            Razón: "{evento.razon}"
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </Card>
-                        )}
-                    </div>
-                )}
             </div>
 
             {/* Modal Edición de Permisos */}
@@ -461,12 +391,11 @@ const DetalleRol = () => {
                             const filtrados = permisosFiltrados(permisos);
                             if (filtrados.length === 0) return null;
                             const ids = permisos.map(p => p.id);
-                            const todosCheck = ids.every(id => permisosSeleccionados.includes(id));
-                            const algunosCheck = ids.some(id => permisosSeleccionados.includes(id)) && !todosCheck;
+                            const todosCheck = ids.every(pid => permisosSeleccionados.includes(pid));
+                            const algunosCheck = ids.some(pid => permisosSeleccionados.includes(pid)) && !todosCheck;
 
                             return (
                                 <div key={modulo} className="border border-slate-200 dark:border-slate-800/50 rounded-xl overflow-hidden">
-                                    {/* Módulo Header */}
                                     <button
                                         onClick={() => toggleModuloAbierto(modulo)}
                                         className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
@@ -488,7 +417,6 @@ const DetalleRol = () => {
                                         </svg>
                                     </button>
 
-                                    {/* Permisos del módulo */}
                                     {modulosAbiertos[modulo] && (
                                         <div className="p-3 space-y-1">
                                             {filtrados.map(p => (
@@ -504,7 +432,6 @@ const DetalleRol = () => {
                                                     />
                                                     <div>
                                                         <p className="text-sm text-slate-700 dark:text-slate-300">{p.nombre_visible}</p>
-                                                        <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{p.codigo}</p>
                                                         {p.descripcion && (
                                                             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{p.descripcion}</p>
                                                         )}
@@ -517,28 +444,12 @@ const DetalleRol = () => {
                             );
                         })}
                     </div>
-
-                    {/* Razón del cambio */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                            Razón del cambio <span className="text-slate-400">(opcional)</span>
-                        </label>
-                        <textarea
-                            value={razonCambio}
-                            onChange={e => setRazonCambio(e.target.value)}
-                            placeholder="Describe el motivo del cambio de permisos..."
-                            rows={2}
-                            maxLength={500}
-                            className="w-full px-3 py-2 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm text-slate-900 dark:text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-emerald-600/50 focus:border-emerald-600/50 outline-none transition-all resize-none"
-                        />
-                    </div>
                 </div>
             </Modal>
         </div>
     );
 };
 
-// Componente auxiliar para filas de información
 const InfoRow = ({ label, value }) => (
     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
         <span className="text-sm text-slate-500 dark:text-slate-400 sm:w-40 shrink-0">{label}</span>

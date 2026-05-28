@@ -2,37 +2,61 @@
 
 namespace Database\Seeders;
 
-// use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
         $this->call([
+            // Base: roles, permisos, usuarios
             RolSeeder::class,
             PermisoSeeder::class,
-            RolPermisoSeeder::class,
-            UsuarioSeeder::class,
             PermisosBloque3Seeder::class,
+            PermisosBloque4Seeder::class,
+            PermisosProyectoSeeder::class,
+            PermisoAlmacenesSeeder::class,
+            PermisoBibliotecaSeeder::class,
+            RolPermisoSeeder::class,
+            UserSeeder::class,
+
+            // Catálogos geográficos y de cliente
             ZonaGeograficaSeeder::class,
             ClienteSeeder::class,
             EntidadEstatalSeeder::class,
+
+            // Personal
             CompetenciaSeeder::class,
             PersonalSeeder::class,
             PersonalCompetenciaSeeder::class,
-            PlanillaPagoSeeder::class,
-            DetallePlanillaSeeder::class,
-            PermisosBloque4Seeder::class,
+
+            // Catálogos de proyectos
             TipoProyectoSeeder::class,
+            PlantillaChecklistSeeder::class,
+
+            // Configuración del sistema
+            ConfiguracionSistemaSeeder::class,
+            ConfiguracionPorcentajesPresupuestoSeeder::class,
+
+            // Almacenes y Materiales
+            MaterialSeeder::class,
+            AlmacenCentralSeeder::class,
+
+            // Biblioteca Constructiva (Sub-fase B)
+            CategoriasConstructivasSeeder::class,
+            ItemsConstructivosSeeder::class,
+            PlantillasConstructivasSeeder::class,
+
+            // TipoVivienda después de plantillas: requiere plantilla_constructiva_id resuelto
             TipoViviendaSeeder::class,
+
+            // Datos demo — proyectos, beneficiarios, viviendas
             ProyectoSeeder::class,
             BeneficiarioSeeder::class,
-            VisitaDomiciliariaSeeder::class,
+            ViviendaSeeder::class,
+
+            // Módulos en pausa — no sembrar datos de:
+            // FaseProyectoSeeder, PlanillaPagoSeeder, DetallePlanillaSeeder
         ]);
     }
 }

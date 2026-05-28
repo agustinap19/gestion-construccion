@@ -3,13 +3,44 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import usuarioService from '../../../services/usuarioService';
-import PageHeader from '../../../components/layout/PageHeader';
-import Card from '../../../components/ui/Card';
-import Button from '../../../components/ui/Button';
-import Badge from '../../../components/ui/Badge';
-import FloatingInput from '../../../components/ui/FloatingInput';
 import Skeleton from '../../../components/ui/Skeleton';
-import { Users, ArrowLeft, Edit, Info } from '../../../components/icons/Icons';
+import Badge from '../../../components/ui/Badge';
+import { Users, ArrowLeft, Edit, Info, Check } from '../../../components/icons/Icons';
+
+/* ── Glass helpers ── */
+const GF = ({ label, error, children, required }) => (
+    <div>
+        {label && (
+            <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-[0.08em] mb-1.5">
+                {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+            </label>
+        )}
+        {children}
+        {error && <p className="text-xs text-red-400 mt-1">{Array.isArray(error) ? error[0] : error}</p>}
+    </div>
+);
+
+const glassInput = (hasErr, disabled) => [
+    'w-full px-3 py-2.5 rounded-xl text-sm outline-none transition-all duration-200',
+    disabled ? 'opacity-40 cursor-not-allowed text-slate-500' : 'text-slate-100 placeholder-slate-600',
+    'bg-white/[0.05] border',
+    hasErr
+        ? 'ring-2 ring-red-500/40 border-red-500/30'
+        : disabled
+            ? 'border-white/[0.06]'
+            : 'border-white/[0.09] hover:border-white/[0.16] focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40',
+].join(' ');
+
+const GlassCard = ({ title, accent = '#34d399', children }) => (
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        {title && (
+            <div className="px-6 pt-5 pb-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: accent }}>{title}</h3>
+            </div>
+        )}
+        <div className="p-6">{children}</div>
+    </div>
+);
 
 const EditarUsuario = () => {
     const { id } = useParams();
@@ -19,7 +50,6 @@ const EditarUsuario = () => {
     const [guardando, setGuardando] = useState(false);
     const [usuario, setUsuario] = useState(null);
     const [errores, setErrores] = useState({});
-    const [tienePersonal, setTienePersonal] = useState(false);
     const esGerente = user?.rol?.nombre === 'gerente';
 
     const [form, setForm] = useState({
@@ -41,11 +71,10 @@ const EditarUsuario = () => {
                     fecha_nacimiento: u.fecha_nacimiento ? u.fecha_nacimiento.split('T')[0] : '',
                     direccion: u.direccion || '',
                 });
-                // Check if has linked personal
-                // Simple check: we don't have a direct endpoint, so just show info note
-                setTienePersonal(false); // Would need a dedicated check
-            } catch { toast.error('Error al cargar usuario'); navigate('/dashboard/usuarios'); }
-            finally { setLoading(false); }
+            } catch {
+                toast.error('Error al cargar usuario');
+                navigate('/dashboard/usuarios');
+            } finally { setLoading(false); }
         };
         cargar();
     }, [id, navigate]);
@@ -57,7 +86,8 @@ const EditarUsuario = () => {
         if (!form.nombre.trim()) e.nombre = 'Obligatorio';
         if (!form.apellido_paterno.trim()) e.apellido_paterno = 'Obligatorio';
         if (!form.ci.trim()) e.ci = 'Obligatorio';
-        setErrores(e); return Object.keys(e).length === 0;
+        setErrores(e);
+        return Object.keys(e).length === 0;
     };
 
     const handleGuardar = async () => {
@@ -65,7 +95,7 @@ const EditarUsuario = () => {
         try {
             setGuardando(true);
             await usuarioService.actualizar(id, form);
-            toast.success('Usuario actualizado exitosamente');
+            toast.success('Usuario actualizado');
             navigate(`/dashboard/usuarios/${id}`);
         } catch (e) {
             if (e.response?.data?.errors) setErrores(e.response.data.errors);
@@ -73,74 +103,112 @@ const EditarUsuario = () => {
         } finally { setGuardando(false); }
     };
 
-    if (loading) return <div className="animate-fade-in space-y-4"><Skeleton width="200px" height="1.5rem" /><Skeleton width="100%" height="300px" /></div>;
+    if (loading) {
+        return (
+            <div className="animate-fade-in space-y-4 max-w-2xl mx-auto">
+                <Skeleton height="1.5rem" width="200px" />
+                <Skeleton height="300px" className="rounded-2xl" />
+            </div>
+        );
+    }
     if (!usuario) return null;
 
-    const FieldErr = ({ name }) => errores[name] ? <p className="text-xs text-red-500 -mt-2 mb-2 pl-1">{Array.isArray(errores[name]) ? errores[name][0] : errores[name]}</p> : null;
-
     return (
-        <div className="animate-fade-in">
-            <button onClick={() => navigate(`/dashboard/usuarios/${id}`)} className="inline-flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors mb-4"><ArrowLeft size={16} /> Volver al detalle</button>
+        <div className="animate-fade-in max-w-2xl mx-auto">
+            {/* Back */}
+            <button onClick={() => navigate(`/dashboard/usuarios/${id}`)}
+                className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-emerald-400 transition-colors mb-6">
+                <ArrowLeft size={16} /> Volver al detalle
+            </button>
 
-            <PageHeader title={`Editar: ${usuario.nombre} ${usuario.apellido_paterno}`}
-                subtitle="Modifica los datos personales del usuario"
-                icon={<Edit size={24} className="text-emerald-600 dark:text-emerald-400" />} />
+            {/* Header */}
+            <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                    style={{ background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.2)' }}>
+                    <Edit size={22} className="text-blue-400" />
+                </div>
+                <div>
+                    <h1 className="text-xl font-bold text-white">Editar Usuario</h1>
+                    <p className="text-sm text-slate-500">{usuario.nombre} {usuario.apellido_paterno}</p>
+                </div>
+            </div>
 
-            <div className="max-w-3xl mx-auto space-y-5 mt-6">
-                {/* Email (solo lectura) */}
-                <Card title="Datos de Acceso (Solo lectura)">
+            <div className="space-y-5">
+                {/* Datos de acceso (readonly) */}
+                <GlassCard title="Datos de Acceso" accent="#60a5fa">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Email</label>
-                            <div className="h-[42px] px-3 flex items-center bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed">
-                                {usuario.email}
+                        <GF label="Email">
+                            <div className={glassInput(false, true)} style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
+                                <span className="text-slate-500">{usuario.email}</span>
                             </div>
-                            <p className="text-xs text-slate-400 mt-1">El email no se puede cambiar por seguridad.</p>
-                        </div>
-                        <div>
-                            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Rol</label>
-                            <div className="h-[42px] px-3 flex items-center gap-2 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm cursor-not-allowed">
+                            <p className="text-xs text-slate-600 mt-1">No se puede modificar por seguridad</p>
+                        </GF>
+                        <GF label="Rol">
+                            <div className={glassInput(false, true)} style={{ display: 'flex', alignItems: 'center', height: '42px' }}>
                                 <Badge variant="info">{usuario.rol?.nombre_visible}</Badge>
                             </div>
-                            <p className="text-xs text-slate-400 mt-1">El rol se cambia desde el detalle del usuario.</p>
-                        </div>
+                            <p className="text-xs text-slate-600 mt-1">Cambiar desde el detalle del usuario</p>
+                        </GF>
                     </div>
-                </Card>
+                </GlassCard>
 
                 {/* Datos personales */}
-                <Card title="Datos Personales">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-                        <div><FloatingInput label="Nombre *" value={form.nombre} onChange={e => set('nombre', e.target.value)} error={!!errores.nombre} /><FieldErr name="nombre" /></div>
-                        <div><FloatingInput label="Apellido paterno *" value={form.apellido_paterno} onChange={e => set('apellido_paterno', e.target.value)} error={!!errores.apellido_paterno} /><FieldErr name="apellido_paterno" /></div>
-                        <div><FloatingInput label="Apellido materno" value={form.apellido_materno} onChange={e => set('apellido_materno', e.target.value)} /></div>
+                <GlassCard title="Datos Personales" accent="#34d399">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <GF label="Nombre" required error={errores.nombre}>
+                            <input className={glassInput(!!errores.nombre, false)} value={form.nombre} onChange={e => set('nombre', e.target.value)} />
+                        </GF>
+                        <GF label="Apellido Paterno" required error={errores.apellido_paterno}>
+                            <input className={glassInput(!!errores.apellido_paterno, false)} value={form.apellido_paterno} onChange={e => set('apellido_paterno', e.target.value)} />
+                        </GF>
+                        <GF label="Apellido Materno">
+                            <input className={glassInput(false, false)} value={form.apellido_materno} onChange={e => set('apellido_materno', e.target.value)} />
+                        </GF>
                         <div className="flex gap-2">
-                            <div className="flex-1"><FloatingInput label={`CI *${!esGerente ? ' (solo gerente edita)' : ''}`} value={form.ci} onChange={e => set('ci', e.target.value)} disabled={!esGerente} error={!!errores.ci} /><FieldErr name="ci" /></div>
-                            <div className="w-24"><FloatingInput label="Compl." value={form.ci_complemento} onChange={e => set('ci_complemento', e.target.value)} disabled={!esGerente} /></div>
+                            <div className="flex-1">
+                                <GF label={`CI${!esGerente ? ' (solo gerente)' : ''}`} required error={errores.ci}>
+                                    <input className={glassInput(!!errores.ci, !esGerente)} value={form.ci} disabled={!esGerente} onChange={e => set('ci', e.target.value)} />
+                                </GF>
+                            </div>
+                            <div className="w-24">
+                                <GF label="Compl.">
+                                    <input className={glassInput(false, !esGerente)} value={form.ci_complemento} disabled={!esGerente} onChange={e => set('ci_complemento', e.target.value)} />
+                                </GF>
+                            </div>
                         </div>
                     </div>
-                </Card>
+                </GlassCard>
 
                 {/* Contacto */}
-                <Card title="Contacto y Ubicación">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-                        <div><FloatingInput label="Teléfono" value={form.telefono} onChange={e => set('telefono', e.target.value)} /></div>
-                        <div><FloatingInput label="Fecha nacimiento" type="date" value={form.fecha_nacimiento} onChange={e => set('fecha_nacimiento', e.target.value)} /></div>
-                        <div className="sm:col-span-2"><FloatingInput label="Dirección" value={form.direccion} onChange={e => set('direccion', e.target.value)} /></div>
+                <GlassCard title="Contacto y Ubicación" accent="#a78bfa">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <GF label="Teléfono">
+                            <input className={glassInput(false, false)} value={form.telefono} onChange={e => set('telefono', e.target.value)} placeholder="71234567" />
+                        </GF>
+                        <GF label="Fecha de Nacimiento">
+                            <input type="date" className={glassInput(false, false)} value={form.fecha_nacimiento} onChange={e => set('fecha_nacimiento', e.target.value)} />
+                        </GF>
+                        <GF label="Dirección" error={undefined}>
+                            <div className="sm:col-span-2">
+                                <input className={glassInput(false, false)} value={form.direccion} onChange={e => set('direccion', e.target.value)} placeholder="Av. Principal 123" />
+                            </div>
+                        </GF>
                     </div>
-                </Card>
-
-                {/* Nota personal vinculado */}
-                {tienePersonal && (
-                    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/10 flex items-start gap-3">
-                        <Info size={18} className="text-blue-500 shrink-0 mt-0.5" />
-                        <p className="text-sm text-slate-700 dark:text-slate-300">Este usuario tiene ficha de personal vinculada. Para editar datos laborales ve a <strong>Gestión de Personal</strong>.</p>
-                    </div>
-                )}
+                </GlassCard>
 
                 {/* Acciones */}
-                <div className="flex justify-end gap-3 pt-4">
-                    <Button variant="secondary" onClick={() => navigate(`/dashboard/usuarios/${id}`)}>Cancelar</Button>
-                    <Button onClick={handleGuardar} loading={guardando}>Guardar cambios</Button>
+                <div className="flex justify-end gap-3 pt-2">
+                    <button onClick={() => navigate(`/dashboard/usuarios/${id}`)}
+                        className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white transition-all"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        Cancelar
+                    </button>
+                    <button onClick={handleGuardar} disabled={guardando}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40"
+                        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.9), rgba(5,150,105,0.8))', boxShadow: '0 4px 16px rgba(16,185,129,0.3)' }}>
+                        {guardando ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check size={16} />}
+                        Guardar cambios
+                    </button>
                 </div>
             </div>
         </div>

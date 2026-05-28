@@ -13,13 +13,18 @@ class Competencia extends Model
     protected $table = 'competencias';
 
     protected $fillable = [
-        'nombre', 'descripcion', 'tipo', 'requiere_renovacion', 'duracion_validez_meses'
+        'nombre', 'descripcion', 'tipo', 'requiere_renovacion', 'vigencia_meses'
+    ];
+
+    protected $casts = [
+        'requiere_renovacion' => 'boolean',
+        'vigencia_meses' => 'integer',
     ];
 
     public function personal(): BelongsToMany
     {
         return $this->belongsToMany(Personal::class, 'personal_competencia', 'competencia_id', 'personal_id')
-                    ->withPivot(['fecha_emision', 'fecha_vencimiento', 'entidad_emisora', 'numero_certificado', 'archivo_url', 'estado'])
+                    ->withPivot(['id', 'fecha_emision', 'fecha_vencimiento', 'entidad_emisora', 'numero_certificado', 'archivo_url', 'estado'])
                     ->withTimestamps();
     }
 }

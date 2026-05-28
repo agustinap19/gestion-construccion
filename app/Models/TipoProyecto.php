@@ -16,11 +16,12 @@ class TipoProyecto extends Model
         'descripcion',
         'categoria',
         'requiere_beneficiarios',
-        'requiere_entidad_estatal'
+        'requiere_entidad_estatal',
+        'estado',
     ];
 
     protected $casts = [
-        'requiere_beneficiarios' => 'boolean',
+        'requiere_beneficiarios'   => 'boolean',
         'requiere_entidad_estatal' => 'boolean',
     ];
 

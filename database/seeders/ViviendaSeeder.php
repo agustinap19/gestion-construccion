@@ -18,7 +18,7 @@ class ViviendaSeeder extends Seeder
         $tipoVivienda = TipoVivienda::first();
         $beneficiarios = Beneficiario::where('proyecto_id', $proyecto->id)->get();
 
-        $estados = ['planificada', 'en_construccion', 'obra_gruesa', 'acabados', 'inspeccion', 'entregada', 'planificada', 'en_construccion'];
+        $estados = ['planificada', 'cimentacion', 'obra_gruesa', 'acabados', 'obra_fina', 'entregada', 'planificada', 'cimentacion'];
         $avances = [0, 15, 40, 65, 80, 100, 0, 15];
 
         for ($i = 1; $i <= 8; $i++) {
@@ -26,19 +26,18 @@ class ViviendaSeeder extends Seeder
             $beneficiario = $beneficiarios->get($idx);
 
             Vivienda::firstOrCreate(
-                ['codigo' => "VIV-PRJ-2026-0001-" . str_pad($i, 3, '0', STR_PAD_LEFT)],
+                ['proyecto_id' => $proyecto->id, 'codigo' => "VIV-PRJ-2026-0001-" . str_pad($i, 3, '0', STR_PAD_LEFT)],
                 [
-                    'proyecto_id' => $proyecto->id,
-                    'tipo_vivienda_id' => $tipoVivienda?->id,
-                    'beneficiario_id' => $beneficiario?->id,
-                    'codigo' => "VIV-PRJ-2026-0001-" . str_pad($i, 3, '0', STR_PAD_LEFT),
-                    'estado' => $estados[$idx],
-                    'porcentaje_avance' => $avances[$idx],
-                    'latitud' => -16.540123 + ($i * 0.001),
-                    'longitud' => -68.182456 + ($i * 0.001),
-                    'direccion' => "Zona Senkata, Manzano {$i}, Lote " . ($i * 3),
+                    'proyecto_id'                => $proyecto->id,
+                    'tipo_vivienda_id'           => $tipoVivienda?->id,
+                    'beneficiario_id'            => $beneficiario?->id,
+                    'codigo'                     => "VIV-PRJ-2026-0001-" . str_pad($i, 3, '0', STR_PAD_LEFT),
+                    'estado'                     => $estados[$idx],
+                    'porcentaje_avance'          => $avances[$idx],
+                    'latitud'                    => -16.540123 + ($i * 0.001),
+                    'longitud'                   => -68.182456 + ($i * 0.001),
                     'tiene_observaciones_activas' => false,
-                    'usuario_creador_id' => 1,
+                    'usuario_creador_id'         => 1,
                 ]
             );
         }

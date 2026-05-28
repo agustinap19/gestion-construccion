@@ -40,11 +40,31 @@ const proyectoService = {
     },
 
     /**
-     * Crea un nuevo proyecto
+     * Crea un nuevo proyecto (JSON)
      */
     crear: async (datos) => {
         try {
             const response = await api.post('/proyectos', datos);
+            return response.data;
+        } catch (error) {
+            if (error.response?.status === 422) {
+                const msg = error.response.data.message || 'Error de validación';
+                const err = new Error(msg);
+                err.errors = error.response.data.errors;
+                throw err;
+            }
+            throw error;
+        }
+    },
+
+    /**
+     * Crea un nuevo proyecto con soporte multipart (PDF adjunto)
+     */
+    crearFormData: async (formData) => {
+        try {
+            const response = await api.post('/proyectos', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
             return response.data;
         } catch (error) {
             if (error.response?.status === 422) {
@@ -148,6 +168,27 @@ const proyectoService = {
         } catch (error) {
             throw error;
         }
+    },
+
+    /**
+     * Obtiene datos del dashboard individual del proyecto
+     */
+    dashboard: async (id) => {
+        try {
+            const response = await api.get(`/proyectos/${id}/dashboard`);
+            return response.data.data;
+        } catch (error) {
+            throw error;
+        }
+    },
+
+    /**
+     * Retorna la URL de descarga del reporte (PDF o CSV)
+     * El navegador abre la URL directamente para disparar la descarga.
+     */
+    urlExportar: (id, tipo = 'pdf') => {
+        const base = api.defaults.baseURL ?? '/api';
+        return `${base}/proyectos/${id}/exportar?tipo=${tipo}`;
     },
 };
 

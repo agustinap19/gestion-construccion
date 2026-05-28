@@ -65,6 +65,6 @@ class RolPermisoSeeder extends Seeder
             }
         }
 
-        DB::table('rol_permiso')->insert($rolPermisos);
+        DB::table('rol_permiso')->insertOrIgnore($rolPermisos);
     }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -16,13 +15,8 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, \Laravel\Sanctum\HasApiTokens, SoftDeletes;
 
-    protected $table = 'usuarios';
+    // TODO: reactivar OwenIt\Auditing\Auditable cuando la tabla `audits` sea creada (sprint de auditoría)
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'nombre',
         'apellido_paterno',
@@ -42,28 +36,21 @@ class User extends Authenticatable
         'password_cambiado_en',
         'intentos_fallidos',
         'bloqueado_hasta',
+        'es_admin_central',
+        // Facial (columnas en DB, no usadas en código — sprint de biometría)
         'rostro_base64',
         'descriptor_facial',
         'rostro_registrado',
         'rostro_registrado_en',
-        'es_admin_central',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
+        'rostro_base64',
+        'descriptor_facial',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -75,45 +62,44 @@ class User extends Authenticatable
             'bloqueado_hasta' => 'datetime',
             'intentos_fallidos' => 'integer',
             'debe_cambiar_password' => 'boolean',
-            'descriptor_facial' => 'array',
+            'es_admin_central' => 'boolean',
             'rostro_registrado' => 'boolean',
             'rostro_registrado_en' => 'datetime',
-            'es_admin_central' => 'boolean',
         ];
     }
 
-    /**
-     * Verifica si este usuario es el administrador central protegido.
-     * No puede ser eliminado, inactivado ni suspendido.
-     */
     public function esAdminCentral(): bool
     {
         return (bool) $this->es_admin_central;
     }
 
-    /**
-     * Get the rol associated with the user.
-     */
     public function rol(): BelongsTo
     {
         return $this->belongsTo(Rol::class, 'rol_id');
     }
 
-    /**
-     * Get user permissions via role
-     */
     public function getPermisos()
     {
         if (!$this->rol) {
             return collect();
         }
-        
+
         return $this->rol->permisos->pluck('codigo');
     }
 
-    /**
-     * Get the personal record associated with the user.
-     */
+    public function hasRole(string $rolNombre): bool
+    {
+        return $this->rol && $this->rol->nombre === $rolNombre;
+    }
+
+    public function hasPermissionTo(string $codigo): bool
+    {
+        if ($this->es_admin_central) {
+            return true;
+        }
+        return $this->getPermisos()->contains($codigo);
+    }
+
     public function personal(): HasOne
     {
         return $this->hasOne(Personal::class, 'usuario_id');

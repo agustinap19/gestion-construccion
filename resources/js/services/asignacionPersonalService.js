@@ -25,6 +25,14 @@ const asignacionPersonalService = {
         const response = await api.delete(`/asignaciones-personal/${id}`);
         return response.data;
     },
+
+    buscarPersonal: async (q = '') => {
+        const response = await api.get('/personal', {
+            params: { busqueda: q, estado_laboral: 'activo', per_page: 20 },
+        });
+        const paginator = response.data?.data;
+        return paginator?.data ? paginator.data : (Array.isArray(paginator) ? paginator : []);
+    },
 };
 
 export default asignacionPersonalService;

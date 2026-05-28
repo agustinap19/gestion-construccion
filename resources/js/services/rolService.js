@@ -101,6 +101,18 @@ const rolService = {
     },
 
     /**
+     * Cambia el estado activo/inactivo de un rol
+     */
+    cambiarEstado: async (id) => {
+        try {
+            const response = await api.patch(`/roles/${id}/estado`);
+            return response.data;
+        } catch (error) {
+            throw error;
+        }
+    },
+
+    /**
      * Obtiene los usuarios asignados a un rol
      */
     obtenerUsuarios: async (id, page = 1, perPage = 15) => {

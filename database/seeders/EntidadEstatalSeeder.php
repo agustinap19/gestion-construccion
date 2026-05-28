@@ -53,7 +53,7 @@ class EntidadEstatalSeeder extends Seeder
             [
                 'nombre' => 'Agencia Estatal de Vivienda',
                 'sigla' => 'AEVIVIENDA',
-                'nivel' => 'descentralizado',
+                'nivel' => 'otro',
                 'nit' => '2000444023',
                 'zona_id' => $zonaLaPaz ? $zonaLaPaz->id : null,
                 'tipo_proyectos_que_otorga' => 'Soluciones habitacionales integrales',
@@ -63,9 +63,9 @@ class EntidadEstatalSeeder extends Seeder
             [
                 'nombre' => 'Fondo Nacional de Inversión Productiva y Social',
                 'sigla' => 'FPS',
-                'nivel' => 'descentralizado',
+                'nivel' => 'otro',
                 'nit' => '3000555024',
-                'estado' => 'en_disputa',
+                'estado' => 'inactiva',
                 'notas' => 'En proceso de auditoría externa',
                 'usuario_creador_id' => $adminId,
             ],

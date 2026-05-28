@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotificaciones } from '../../context/NotificacionContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Menu, Search, Bell, ChevronRight, LogOut, Settings, User, Sun, Moon } from '../icons/Icons';
+import { useBreadcrumb } from '../../context/BreadcrumbContext';
 import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
 import Tooltip from '../ui/Tooltip';
@@ -14,13 +15,12 @@ const TopBar = ({ onOpenMobileMenu, onOpenNotificaciones, onOpenSearch }) => {
     const { theme, toggleTheme } = useTheme();
     const location = useLocation();
     const navigate = useNavigate();
+    const { overrides } = useBreadcrumb();
 
-    // Generador simple de breadcrumbs basado en URL
     const generateBreadcrumbs = () => {
         const paths = location.pathname.split('/').filter(p => p);
         if (paths.length === 0) return [];
-        
-        // Mapeo amigable para los breadcrumbs
+
         const pathNames = {
             'dashboard': 'Inicio',
             'notificaciones': 'Notificaciones',
@@ -31,6 +31,26 @@ const TopBar = ({ onOpenMobileMenu, onOpenNotificaciones, onOpenSearch }) => {
             'materiales': 'Materiales',
             'almacenes': 'Almacenes',
             'proveedores': 'Proveedores',
+            'personal': 'Personal',
+            'beneficiarios': 'Beneficiarios',
+            'clientes': 'Clientes',
+            'entidades-estatales': 'Entidades Estatales',
+            'editar': 'Editar',
+            'crear': 'Crear',
+            'nuevo': 'Nuevo',
+            'mi-perfil': 'Mi Perfil',
+            'configuracion': 'Configuración',
+        };
+
+        // Fallback label when a numeric segment has no context override
+        const parentLabels = {
+            'roles': 'Detalle del Rol',
+            'usuarios': 'Detalle del Usuario',
+            'proyectos': 'Detalle del Proyecto',
+            'personal': 'Detalle',
+            'beneficiarios': 'Detalle',
+            'clientes': 'Detalle',
+            'entidades-estatales': 'Detalle',
         };
 
         const breadcrumbs = [];
@@ -39,23 +59,21 @@ const TopBar = ({ onOpenMobileMenu, onOpenNotificaciones, onOpenSearch }) => {
         paths.forEach((path, index) => {
             currentPath += `/${path}`;
             const isLast = index === paths.length - 1;
-            
-            // Reemplazar IDs numéricos o UUIDs por texto genérico si es necesario,
-            // o simplemente capitalizar
-            let name = pathNames[path];
-            if (!name) {
-                if (!isNaN(path)) {
-                    name = `#${path}`; // Es un ID
-                } else {
-                    name = path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, ' ');
-                }
+
+            let name;
+            if (overrides[currentPath]) {
+                name = overrides[currentPath];
+            } else if (pathNames[path]) {
+                name = pathNames[path];
+            } else if (!isNaN(path)) {
+                // Numeric ID — never expose the raw number, use a semantic label
+                const parentSeg = paths[index - 1];
+                name = parentLabels[parentSeg] || 'Detalle';
+            } else {
+                name = path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, ' ');
             }
 
-            breadcrumbs.push({
-                name,
-                path: currentPath,
-                isLast
-            });
+            breadcrumbs.push({ name, path: currentPath, isLast });
         });
 
         return breadcrumbs;
@@ -77,7 +95,7 @@ const TopBar = ({ onOpenMobileMenu, onOpenNotificaciones, onOpenSearch }) => {
     ];
 
     return (
-        <header className="sticky top-0 z-30 h-16 bg-white/80 dark:bg-[#050505]/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800/30 w-full flex items-center justify-between px-4 sm:px-6 transition-all">
+        <header className="sticky top-0 z-30 h-14 bg-white/85 dark:bg-[#080c15]/85 backdrop-blur-2xl border-b border-slate-200/70 dark:border-white/[0.05] w-full flex items-center justify-between px-4 sm:px-6 transition-all shadow-sm dark:shadow-[0_1px_0_oklch(100%_0_0/0.04)]">
             
             {/* Izquierda: Menú móvil & Breadcrumbs */}
             <div className="flex items-center gap-4">

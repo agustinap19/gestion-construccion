@@ -5,24 +5,17 @@ namespace App\Services\Proyectos;
 use App\Models\AsignacionPersonal;
 use App\Models\Proyecto;
 use App\Models\Personal;
-use App\Services\AuditoriaService;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 
 class AsignacionPersonalService
 {
-    protected AuditoriaService $auditoria;
-
-    public function __construct(AuditoriaService $auditoria)
-    {
-        $this->auditoria = $auditoria;
-    }
-
     public function listarPorProyecto(int $proyectoId): Collection
     {
-        return AsignacionPersonal::with(['personal', 'asignadoPor'])
+        return AsignacionPersonal::with(['personal', 'asignador'])
             ->where('proyecto_id', $proyectoId)
+            ->orderBy('estado')
             ->orderBy('rol_en_proyecto')
             ->get();
     }
@@ -33,7 +26,7 @@ class AsignacionPersonalService
             $proyecto = Proyecto::findOrFail($datos['proyecto_id']);
             $personal = Personal::findOrFail($datos['personal_id']);
 
-            if ($personal->estado !== 'activo') {
+            if ($personal->estado_laboral !== 'activo') {
                 throw ValidationException::withMessages(['personal_id' => 'El personal debe estar activo.']);
             }
 
@@ -47,23 +40,24 @@ class AsignacionPersonalService
             }
 
             // Solo un responsable principal por proyecto
-            if (($datos['rol_en_proyecto'] ?? '') === 'responsable_principal') {
+            if (!empty($datos['es_responsable_principal'])) {
                 $existeResp = AsignacionPersonal::where('proyecto_id', $datos['proyecto_id'])
-                    ->where('rol_en_proyecto', 'responsable_principal')
+                    ->where('es_responsable_principal', true)
                     ->where('estado', 'activa')
                     ->first();
                 if ($existeResp) {
-                    throw ValidationException::withMessages(['rol_en_proyecto' => 'Ya existe un responsable principal. Finalice la asignación actual primero.']);
+                    throw ValidationException::withMessages(['es_responsable_principal' => 'Ya existe un responsable principal activo. Finalice la asignación actual primero.']);
                 }
             }
 
-            $datos['asignado_por_id'] = $actorId;
+            $datos['usuario_asignador_id'] = $actorId;
             $datos['estado'] = 'activa';
             $datos['fecha_inicio'] = $datos['fecha_inicio'] ?? now()->toDateString();
 
             $asignacion = AsignacionPersonal::create($datos);
 
-            $this->auditoria->registrarCreacion('asignacion_personal.creada', 'asignaciones_personal', $asignacion->id, $asignacion->toArray());
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarCreacion('asignacion_personal.creada', 'asignaciones_personal', $asignacion->id, $asignacion->toArray());
 
             return $asignacion->load('personal');
         });
@@ -81,7 +75,8 @@ class AsignacionPersonalService
             if (empty($cambios)) return $asignacion;
 
             $asignacion->save();
-            $this->auditoria->registrarActualizacion('asignacion_personal.actualizada', 'asignaciones_personal', $asignacion->id, $datosAnteriores, $cambios);
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarActualizacion('asignacion_personal.actualizada', 'asignaciones_personal', $asignacion->id, $datosAnteriores, $cambios);
 
             return $asignacion->load('personal');
         });
@@ -95,7 +90,8 @@ class AsignacionPersonalService
             $asignacion->fecha_fin = now()->toDateString();
             $asignacion->save();
 
-            $this->auditoria->registrarCambioEstado('asignacion_personal.finalizada', 'asignaciones_personal', $asignacion->id, 'activa', 'finalizada');
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarCambioEstado('asignacion_personal.finalizada', 'asignaciones_personal', $asignacion->id, 'activa', 'finalizada');
 
             return $asignacion;
         });
@@ -107,7 +103,8 @@ class AsignacionPersonalService
             $asignacion = AsignacionPersonal::findOrFail($id);
             $asignacion->delete();
 
-            $this->auditoria->registrarEliminacion('asignacion_personal.eliminada', 'asignaciones_personal', $id, $asignacion->toArray());
+            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
+            // $this->auditoria->registrarEliminacion('asignacion_personal.eliminada', 'asignaciones_personal', $id, $asignacion->toArray());
             return true;
         });
     }

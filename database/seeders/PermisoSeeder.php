@@ -23,6 +23,7 @@ class PermisoSeeder extends Seeder
             foreach ($acciones as $accion) {
                 $permisos[] = [
                     'codigo' => $modulo . '.' . $accion,
+                    'nombre' => ucfirst($accion) . ' ' . ucfirst($modulo),
                     'nombre_visible' => ucfirst($accion) . ' ' . ucfirst($modulo),
                     'modulo' => $modulo,
                     'accion' => $accion,

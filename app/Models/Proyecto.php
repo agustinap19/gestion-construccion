@@ -17,55 +17,97 @@ class Proyecto extends Model
         'nombre',
         'descripcion',
         'categoria',
-        'estado',
         'prioridad',
+        'tipo_obra',
+        'cantidad_unidades',
+        'cantidad_beneficiarios',
         'tipo_proyecto_id',
         'cliente_id',
         'entidad_estatal_id',
         'zona_id',
-        'administrador_id',
-        'usuario_creador_id',
-        'presupuesto_total',
-        'monto_garantia',
-        'porcentaje_avance',
-        'cantidad_unidades',
-        'duracion_dias_planificada',
+        'comunidad',
+        'direccion_obra',
+        'latitud',
+        'longitud',
+        'estado',
         'fecha_inicio_planificada',
         'fecha_fin_planificada',
         'fecha_inicio_real',
         'fecha_fin_real',
-        'direccion_obra',
-        'latitud',
-        'longitud',
+        'plazo_dias',
+        // Financiero (legado — conservado para compatibilidad)
+        'presupuesto_referencial',
+        'monto_contrato',
+        // Financiero rediseño
+        'monto_contractual',
+        'presupuesto_materiales',
+        'porcentaje_mano_obra',
+        'porcentaje_gastos_generales',
+        'porcentaje_utilidad_esperada',
+        'presupuesto_mano_obra',
+        'presupuesto_gastos_generales',
+        'presupuesto_utilidad_esperada',
+        'usa_monto_fijo_mo',
+        'usa_monto_fijo_gg',
+        'usa_monto_fijo_util',
+        'justificacion_rentabilidad_baja',
+        'salud_financiera',
+        'aplica_retencion_7_porciento',
+        // Documentos
+        'contrato_url',
+        // Gestión
+        'avance_fisico',
+        'avance_financiero',
+        'responsable_id',
+        'creado_por_id',
         'observaciones',
+        // Sub-fase F: cierre de registros
+        'registros_beneficiarios_cerrados',
+        'fecha_cierre_registros',
+        'cerrado_registros_por_id',
     ];
+
+    protected $appends = ['es_social'];
 
     protected $casts = [
-        'presupuesto_total'        => 'decimal:2',
-        'monto_garantia'           => 'decimal:2',
-        'porcentaje_avance'        => 'decimal:2',
-        'latitud'                  => 'decimal:7',
-        'longitud'                 => 'decimal:7',
-        'cantidad_unidades'        => 'integer',
-        'duracion_dias_planificada' => 'integer',
-        'fecha_inicio_planificada' => 'date',
-        'fecha_fin_planificada'    => 'date',
-        'fecha_inicio_real'        => 'date',
-        'fecha_fin_real'           => 'date',
+        'presupuesto_referencial'           => 'decimal:2',
+        'monto_contrato'                    => 'decimal:2',
+        'monto_contractual'                 => 'decimal:2',
+        'presupuesto_materiales'            => 'decimal:2',
+        'porcentaje_mano_obra'              => 'decimal:2',
+        'porcentaje_gastos_generales'       => 'decimal:2',
+        'porcentaje_utilidad_esperada'      => 'decimal:2',
+        'presupuesto_mano_obra'             => 'decimal:2',
+        'presupuesto_gastos_generales'      => 'decimal:2',
+        'presupuesto_utilidad_esperada'     => 'decimal:2',
+        'usa_monto_fijo_mo'                 => 'boolean',
+        'usa_monto_fijo_gg'                 => 'boolean',
+        'usa_monto_fijo_util'               => 'boolean',
+        'aplica_retencion_7_porciento'      => 'boolean',
+        'avance_fisico'                     => 'decimal:2',
+        'avance_financiero'                 => 'decimal:2',
+        'latitud'                           => 'decimal:7',
+        'longitud'                          => 'decimal:7',
+        'fecha_inicio_planificada'          => 'date',
+        'fecha_fin_planificada'             => 'date',
+        'fecha_inicio_real'                 => 'date',
+        'fecha_fin_real'                    => 'date',
+        'registros_beneficiarios_cerrados'  => 'boolean',
+        'fecha_cierre_registros'            => 'datetime',
     ];
 
-    // ── Máquina de estados ──────────────────────────────────────────────────
-    // Regla 8: Matriz de transiciones permitidas
+    // ── Máquina de estados ───────────────────────────────────────────────────
     public const TRANSICIONES_PERMITIDAS = [
-        'borrador'     => ['planificacion', 'cancelado'],
-        'planificacion' => ['en_ejecucion', 'pausado', 'cancelado'],
+        'formulacion'  => ['licitacion', 'cancelado'],
+        'licitacion'   => ['adjudicado', 'cancelado'],
+        'adjudicado'   => ['en_ejecucion', 'cancelado'],
         'en_ejecucion' => ['pausado', 'finalizado', 'cancelado'],
         'pausado'      => ['en_ejecucion', 'cancelado'],
-        'finalizado'   => [],                           // Estado final
-        'cancelado'    => ['planificacion'],             // Solo gerente, con razón
+        'finalizado'   => [],
+        'cancelado'    => ['formulacion'],
     ];
 
-    // ── Relaciones ──────────────────────────────────────────────────────────
+    // ── Relaciones ───────────────────────────────────────────────────────────
 
     public function tipoProyecto()
     {
@@ -87,14 +129,14 @@ class Proyecto extends Model
         return $this->belongsTo(ZonaGeografica::class, 'zona_id');
     }
 
-    public function administrador()
+    public function responsable()
     {
-        return $this->belongsTo(User::class, 'administrador_id');
+        return $this->belongsTo(User::class, 'responsable_id');
     }
 
-    public function creador()
+    public function creadoPor()
     {
-        return $this->belongsTo(User::class, 'usuario_creador_id');
+        return $this->belongsTo(User::class, 'creado_por_id');
     }
 
     public function beneficiarios()
@@ -102,41 +144,67 @@ class Proyecto extends Model
         return $this->hasMany(Beneficiario::class, 'proyecto_id');
     }
 
-    public function viviendas()
-    {
-        return $this->hasMany(Vivienda::class, 'proyecto_id');
-    }
-
     public function fasesProyecto()
     {
         return $this->hasMany(FaseProyecto::class, 'proyecto_id');
     }
 
-    public function asignacionesPersonal()
+    public function viviendas()
     {
-        return $this->hasMany(AsignacionPersonal::class, 'proyecto_id');
+        return $this->hasMany(Vivienda::class, 'proyecto_id');
     }
 
-    public function visitasDomiciliarias()
+    public function almacen()
     {
-        return $this->hasMany(VisitaDomiciliaria::class, 'proyecto_id');
+        return $this->hasOne(Almacen::class, 'proyecto_id');
+    }
+
+    public function productosContractuales()
+    {
+        return $this->hasMany(ProductoContractual::class, 'proyecto_id')->orderBy('orden');
+    }
+
+    /** Hitos de cobro unificados (social + privado) */
+    public function hitosCobro()
+    {
+        return $this->hasMany(HitoCobro::class, 'proyecto_id')->orderBy('orden');
+    }
+
+    public function hitos()
+    {
+        return $this->hasMany(Hito::class, 'proyecto_id');
+    }
+
+    public function modificatorios()
+    {
+        return $this->hasMany(Modificatorio::class, 'proyecto_id')->latest();
+    }
+
+    public function codigosReapertura()
+    {
+        return $this->hasMany(CodigoReapertura::class, 'proyecto_id');
+    }
+
+    public function cerradoRegistrosPor()
+    {
+        return $this->belongsTo(User::class, 'cerrado_registros_por_id');
     }
 
     // ── Accessors ────────────────────────────────────────────────────────────
+
+    public function getPorcentajeAvanceAttribute(): float
+    {
+        return (float) $this->avance_fisico;
+    }
 
     public function getEsSocialAttribute(): bool
     {
         return $this->categoria === 'social';
     }
 
-    public function getEsPrivadoAttribute(): bool
-    {
-        return $this->categoria === 'privado';
-    }
-
     public function getEstaActivoAttribute(): bool
     {
-        return in_array($this->estado, ['planificacion', 'en_ejecucion', 'pausado']);
+        return in_array($this->estado, ['adjudicado', 'en_ejecucion', 'pausado']);
     }
 
     public function getEstaFinalizadoAttribute(): bool
@@ -149,52 +217,78 @@ class Proyecto extends Model
         return $this->estado === 'cancelado';
     }
 
-    public function getNombreContraparteAttribute(): ?string
+    /**
+     * Monto contractual efectivo.
+     * Usa el nuevo campo; si es null, cae al legado.
+     */
+    public function getMontoContractualEfectivoAttribute(): float
     {
-        if ($this->es_social && $this->entidadEstatal) {
-            return $this->entidadEstatal->nombre;
-        } elseif ($this->es_privado && $this->cliente) {
-            return $this->cliente->nombre_visible;
-        }
-        return null;
+        return (float) ($this->monto_contractual
+            ?? $this->monto_contrato
+            ?? $this->presupuesto_referencial
+            ?? 0);
     }
 
     /**
-     * Duración real en días (si tiene fechas reales).
+     * Total de costos operativos = Materiales + MO + GG
      */
-    public function getDuracionRealDiasAttribute(): ?int
+    public function getTotalCostosOperativosAttribute(): float
     {
-        if ($this->fecha_inicio_real && $this->fecha_fin_real) {
-            return $this->fecha_inicio_real->diffInDays($this->fecha_fin_real);
+        return (float) ($this->presupuesto_materiales ?? 0)
+            + (float) ($this->presupuesto_mano_obra ?? 0)
+            + (float) ($this->presupuesto_gastos_generales ?? 0);
+    }
+
+    /**
+     * Rentabilidad estimada = Contractual − (Materiales + MO + GG)
+     * No persistida — calculada al vuelo.
+     */
+    public function getRentabilidadEstimadaAttribute(): float
+    {
+        return $this->monto_contractual_efectivo - $this->total_costos_operativos;
+    }
+
+    /**
+     * Porcentaje de utilidad real = rentabilidad / contractual × 100
+     */
+    public function getPorcentajeUtilidadRealAttribute(): float
+    {
+        $contractual = $this->monto_contractual_efectivo;
+        if ($contractual <= 0) {
+            return 0.0;
         }
-        return null;
+        return ($this->rentabilidad_estimada / $contractual) * 100;
+    }
+
+    /**
+     * Estado de salud financiera.
+     * Usa el valor persisted por ProyectoService cuando está disponible;
+     * si no, lo calcula dinámicamente para proyectos legados/en-memoria.
+     */
+    public function getSaludFinancieraAttribute(): string
+    {
+        $stored = $this->attributes['salud_financiera'] ?? null;
+        if ($stored !== null) return $stored;
+
+        $utilReal     = $this->porcentaje_utilidad_real;
+        $utilEsperada = (float) ($this->porcentaje_utilidad_esperada ?? 15.0);
+        $umbralMin    = 5.0;
+
+        if ($utilReal >= $utilEsperada * 0.9) return 'saludable';
+        if ($utilReal >= $umbralMin) return 'atencion';
+        return 'critico';
     }
 
     // ── Scopes ───────────────────────────────────────────────────────────────
 
-    public function scopeSociales($query)
-    {
-        return $query->where('categoria', 'social');
-    }
-
-    public function scopePrivados($query)
-    {
-        return $query->where('categoria', 'privado');
-    }
-
     public function scopeActivos($query)
     {
-        return $query->whereIn('estado', ['planificacion', 'en_ejecucion', 'pausado']);
+        return $query->whereIn('estado', ['adjudicado', 'en_ejecucion', 'pausado']);
     }
 
     public function scopeEnEjecucion($query)
     {
         return $query->where('estado', 'en_ejecucion');
-    }
-
-    public function scopePorCategoria($query, string $categoria)
-    {
-        return $query->where('categoria', $categoria);
     }
 
     public function scopePorEstado($query, string $estado)
@@ -223,5 +317,26 @@ class Proyecto extends Model
     public function getTransicionesPermitidas(): array
     {
         return self::TRANSICIONES_PERMITIDAS[$this->estado] ?? [];
+    }
+
+    /**
+     * Recalcula los montos de MO, GG y Utilidad desde los porcentajes snapshot.
+     * Llama a save() al finalizar.
+     */
+    public function recalcularComponentesFinancieros(): void
+    {
+        $contractual = $this->monto_contractual_efectivo;
+
+        if (!$this->usa_monto_fijo_mo) {
+            $this->presupuesto_mano_obra = $contractual * ((float) ($this->porcentaje_mano_obra ?? 0) / 100);
+        }
+        if (!$this->usa_monto_fijo_gg) {
+            $this->presupuesto_gastos_generales = $contractual * ((float) ($this->porcentaje_gastos_generales ?? 0) / 100);
+        }
+        if (!$this->usa_monto_fijo_util) {
+            $this->presupuesto_utilidad_esperada = $contractual * ((float) ($this->porcentaje_utilidad_esperada ?? 0) / 100);
+        }
+
+        $this->save();
     }
 }

@@ -3,20 +3,28 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Proyecto;
 use App\Services\Beneficiarios\BeneficiarioService;
 use App\Http\Requests\Beneficiarios\CrearBeneficiarioRequest;
 use App\Http\Requests\Beneficiarios\ActualizarBeneficiarioRequest;
 use App\Http\Requests\Beneficiarios\CambiarEstadoBeneficiarioRequest;
 use App\Http\Requests\Beneficiarios\AsignarTipoViviendaRequest;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use App\Services\Almacenes\IntegracionBeneficiarioService;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class BeneficiarioController extends Controller
 {
     protected $beneficiarioService;
+    protected $integracionService;
 
-    public function __construct(BeneficiarioService $beneficiarioService)
-    {
+    public function __construct(
+        BeneficiarioService $beneficiarioService,
+        IntegracionBeneficiarioService $integracionService
+    ) {
         $this->beneficiarioService = $beneficiarioService;
+        $this->integracionService  = $integracionService;
         
         // Asumiendo que hay un middleware de permisos
         // $this->middleware('permission:beneficiarios.ver')->only(['index', 'show', 'estadisticasProyecto', 'mapaProyecto']);
@@ -45,11 +53,25 @@ class BeneficiarioController extends Controller
 
     public function store(CrearBeneficiarioRequest $request)
     {
-        $beneficiario = $this->beneficiarioService->crear(
-            $request->validated(),
-            $request->user()->id
-        );
-        return response()->json($beneficiario, 201);
+        try {
+            $beneficiario = $this->beneficiarioService->crear(
+                $request->validated(),
+                $request->user()->id
+            );
+
+            // Integración Sub-fase C: generar ítems de presupuesto si tiene tipo de vivienda con plantilla
+            $integracion = $this->integracionService->generarItemsParaBeneficiario(
+                $beneficiario->fresh('vivienda'),
+                $request->user()->id
+            );
+
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+        return response()->json(array_merge(
+            $beneficiario->toArray(),
+            ['integracion_plantilla' => $integracion ?? null]
+        ), 201);
     }
 
     public function update(ActualizarBeneficiarioRequest $request, int $id)
@@ -130,5 +152,54 @@ class BeneficiarioController extends Controller
     {
         $beneficiario = \App\Models\Beneficiario::findOrFail($id);
         return response()->json($beneficiario->getTransicionesPermitidas());
+    }
+
+    public function exportar(Request $request, int $proyectoId)
+    {
+        $tipo     = $request->input('tipo', 'pdf');
+        $proyecto = Proyecto::findOrFail($proyectoId);
+        $puedeVerDatosSensibles = $request->user()->hasPermissionTo('beneficiarios.ver_datos_sensibles');
+        $stats    = $this->beneficiarioService->obtenerEstadisticasProyecto($proyectoId, $puedeVerDatosSensibles);
+
+        $beneficiarios = \App\Models\Beneficiario::with(['tipoVivienda', 'vivienda'])
+            ->where('proyecto_id', $proyectoId)
+            ->orderBy('codigo_beneficiario')
+            ->get();
+
+        $nombre = preg_replace('/[^A-Za-z0-9_\-]/', '_', $proyecto->codigo ?? 'proyecto');
+
+        if ($tipo === 'excel') {
+            $csv  = "Código;Nombre;Apellido Paterno;Apellido Materno;CI;Comunidad;Tipología;Vivienda;Estado\r\n";
+            foreach ($beneficiarios as $b) {
+                $csv .= "{$b->codigo_beneficiario};{$b->nombre};{$b->apellido_paterno};{$b->apellido_materno};" .
+                        "{$b->ci};{$b->comunidad};{$b->tipoVivienda?->nombre};{$b->vivienda?->codigo};{$b->estado_seleccion}\r\n";
+            }
+            return response($csv, 200, [
+                'Content-Type'        => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => "attachment; filename=\"beneficiarios_{$nombre}.csv\"",
+            ]);
+        }
+
+        $html = view('exports.lista_beneficiarios', compact('proyecto', 'beneficiarios', 'stats'))->render();
+        $pdf  = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+        return $pdf->download("beneficiarios_{$nombre}.pdf");
+    }
+
+    public function cupoProyecto(int $proyectoId): JsonResponse
+    {
+        $proyecto    = Proyecto::findOrFail($proyectoId);
+        $cupoTotal   = (int) ($proyecto->cantidad_beneficiarios ?? 0);
+        $registrados = \App\Models\Beneficiario::where('proyecto_id', $proyectoId)->count();
+        $ocupadas    = \App\Models\Vivienda::where('proyecto_id', $proyectoId)->whereNotNull('beneficiario_id')->count();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => [
+                'cupo_total'                => $cupoTotal,
+                'viviendas_asignadas'       => $ocupadas,
+                'beneficiarios_registrados' => $registrados,
+                'cupos_disponibles'         => max(0, $cupoTotal - $registrados),
+            ],
+        ]);
     }
 }

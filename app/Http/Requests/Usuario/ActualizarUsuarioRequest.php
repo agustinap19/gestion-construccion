@@ -16,7 +16,7 @@ class ActualizarUsuarioRequest extends FormRequest
             'nombre' => ['required', 'string', 'max:80'],
             'apellido_paterno' => ['required', 'string', 'max:80'],
             'apellido_materno' => ['nullable', 'string', 'max:80'],
-            'ci' => ['required', 'string', 'max:20', "unique:usuarios,ci,{$userId}"],
+            'ci' => ['required', 'string', 'max:20', "unique:users,ci,{$userId}"],
             'ci_complemento' => ['nullable', 'string', 'max:5'],
             'telefono' => ['nullable', 'string', 'max:20'],
             'fecha_nacimiento' => ['nullable', 'date', 'before:today'],
