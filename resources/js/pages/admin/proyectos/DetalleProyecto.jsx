@@ -163,22 +163,97 @@ const SaludChip = ({ avanceReal, pctPlazo }) => {
 };
 
 /* ══════════════════════════════════════════════════
-   Salud Financiera card
+   Salud Financiera card (editable inline)
 ═══════════════════════════════════════════════════ */
-const SaludFinancieraCard = ({ proyecto }) => {
+const SALUD_FIN_META = {
+    saludable: { label: 'Saludable', color: '#34d399', bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.25)' },
+    atencion:  { label: 'Atención',  color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' },
+    critico:   { label: 'Crítico',   color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
+};
+
+const SaludFinancieraCard = ({ proyecto, canEdit = false, onRefresh }) => {
     const monto = parseFloat(proyecto.monto_contractual || proyecto.monto_contrato || proyecto.presupuesto_referencial || 0);
     if (monto <= 0) return null;
 
-    // Guard: seeded or legacy projects without financial snapshot show a placeholder
+    // Guard: legacy projects without snapshot
     const tieneDesglose = proyecto.porcentaje_mano_obra != null;
-    if (!tieneDesglose) {
+
+    // Edit mode state
+    const [editando, setEditando] = useState(false);
+    const [guardando, setGuardando] = useState(false);
+    const [form, setForm] = useState({});
+    const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+    // Snapshot for optimistic rollback
+    const snapRef = useRef(null);
+
+    const iniciarEdicion = () => {
+        setForm({
+            porcentaje_mano_obra:          String(parseFloat(proyecto.porcentaje_mano_obra        ?? 0)),
+            porcentaje_gastos_generales:   String(parseFloat(proyecto.porcentaje_gastos_generales ?? 0)),
+            porcentaje_utilidad_esperada:  String(parseFloat(proyecto.porcentaje_utilidad_esperada ?? 0)),
+            usa_monto_fijo_mo:             proyecto.usa_monto_fijo_mo   ?? false,
+            usa_monto_fijo_gg:             proyecto.usa_monto_fijo_gg   ?? false,
+            usa_monto_fijo_util:           proyecto.usa_monto_fijo_util  ?? false,
+            presupuesto_mano_obra:         String(parseFloat(proyecto.presupuesto_mano_obra         ?? 0)),
+            presupuesto_gastos_generales:  String(parseFloat(proyecto.presupuesto_gastos_generales  ?? 0)),
+            presupuesto_utilidad_esperada: String(parseFloat(proyecto.presupuesto_utilidad_esperada ?? 0)),
+            justificacion_rentabilidad_baja: proyecto.justificacion_rentabilidad_baja ?? '',
+        });
+        setEditando(true);
+    };
+
+    // Live calculation in edit mode
+    const calcLive = useMemo(() => {
+        const porMO   = parseFloat(form.porcentaje_mano_obra        || 0);
+        const porGG   = parseFloat(form.porcentaje_gastos_generales || 0);
+        const porUtil = parseFloat(form.porcentaje_utilidad_esperada || 0);
+        const pMO     = form.usa_monto_fijo_mo   ? parseFloat(form.presupuesto_mano_obra         || 0) : monto * porMO   / 100;
+        const pGG     = form.usa_monto_fijo_gg   ? parseFloat(form.presupuesto_gastos_generales  || 0) : monto * porGG   / 100;
+        const pUtil   = form.usa_monto_fijo_util  ? parseFloat(form.presupuesto_utilidad_esperada || 0) : monto * porUtil / 100;
+        const pMat    = Math.max(0, monto - pMO - pGG - pUtil);
+        const rentPct = monto > 0 ? ((monto - pMat - pMO - pGG) / monto * 100) : 0;
+        return { pMO, pGG, pUtil, pMat, rentPct };
+    }, [form, monto]);
+
+    const handleGuardar = async () => {
+        try {
+            setGuardando(true);
+            const payload = {
+                porcentaje_mano_obra:          parseFloat(form.porcentaje_mano_obra        || 0),
+                porcentaje_gastos_generales:   parseFloat(form.porcentaje_gastos_generales || 0),
+                porcentaje_utilidad_esperada:  parseFloat(form.porcentaje_utilidad_esperada || 0),
+                usa_monto_fijo_mo:             form.usa_monto_fijo_mo,
+                usa_monto_fijo_gg:             form.usa_monto_fijo_gg,
+                usa_monto_fijo_util:           form.usa_monto_fijo_util,
+                presupuesto_mano_obra:         parseFloat(form.presupuesto_mano_obra         || 0),
+                presupuesto_gastos_generales:  parseFloat(form.presupuesto_gastos_generales  || 0),
+                presupuesto_utilidad_esperada: parseFloat(form.presupuesto_utilidad_esperada || 0),
+                justificacion_rentabilidad_baja: form.justificacion_rentabilidad_baja || null,
+            };
+            await proyectoService.actualizarPorcentajesFinancieros(proyecto.id, payload);
+            toast.success('Presupuesto actualizado');
+            setEditando(false);
+            onRefresh?.();
+        } catch (e) {
+            const msg = e.response?.data?.message || e.message || 'Error al guardar';
+            toast.error(msg);
+        } finally { setGuardando(false); }
+    };
+
+    if (!tieneDesglose && !editando) {
         return (
             <GlassCard className="p-5">
                 <div className="flex items-center gap-2 mb-3">
                     <TrendingUp size={16} className="text-slate-500" />
                     <h3 className="text-sm font-bold text-white">Salud Financiera</h3>
+                    {canEdit && (
+                        <button onClick={iniciarEdicion} className="ml-auto text-xs px-2 py-1 rounded-lg text-emerald-400 hover:text-white" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
+                            <Edit size={11} className="inline mr-1" />Configurar
+                        </button>
+                    )}
                 </div>
-                <p className="text-xs text-slate-500">Este proyecto no tiene desglose financiero registrado. Crea nuevos proyectos desde el formulario para ver este panel.</p>
+                <p className="text-xs text-slate-500">Sin desglose financiero registrado.</p>
             </GlassCard>
         );
     }
@@ -186,27 +261,154 @@ const SaludFinancieraCard = ({ proyecto }) => {
     const pctMO   = parseFloat(proyecto.porcentaje_mano_obra        ?? 0);
     const pctGG   = parseFloat(proyecto.porcentaje_gastos_generales ?? 0);
     const pctUtil = parseFloat(proyecto.porcentaje_utilidad_esperada ?? 0);
-
-    // Use stored values; fall back to pct-based calculation only when field is truly absent (null/undefined)
-    const presupMO   = proyecto.presupuesto_mano_obra   != null ? parseFloat(proyecto.presupuesto_mano_obra)         : monto * pctMO   / 100;
-    const presupGG   = proyecto.presupuesto_gastos_generales  != null ? parseFloat(proyecto.presupuesto_gastos_generales)  : monto * pctGG   / 100;
+    const presupMO   = proyecto.presupuesto_mano_obra   != null ? parseFloat(proyecto.presupuesto_mano_obra)        : monto * pctMO   / 100;
+    const presupGG   = proyecto.presupuesto_gastos_generales != null ? parseFloat(proyecto.presupuesto_gastos_generales) : monto * pctGG   / 100;
     const presupUtil = proyecto.presupuesto_utilidad_esperada != null ? parseFloat(proyecto.presupuesto_utilidad_esperada) : monto * pctUtil / 100;
-    const presupMat  = proyecto.presupuesto_materiales   != null ? parseFloat(proyecto.presupuesto_materiales)        : monto - presupMO - presupGG - presupUtil;
-
+    const presupMat  = proyecto.presupuesto_materiales != null ? parseFloat(proyecto.presupuesto_materiales) : monto - presupMO - presupGG - presupUtil;
     const saludKey   = proyecto.salud_financiera ?? (pctUtil >= 15 ? 'saludable' : pctUtil >= 5 ? 'atencion' : 'critico');
-    const saludMeta  = {
-        saludable: { label: 'Saludable', color: '#34d399', bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.25)' },
-        atencion:  { label: 'Atención',  color: '#fbbf24', bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.25)' },
-        critico:   { label: 'Crítico',   color: '#f87171', bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.25)' },
-    };
-    const sm     = saludMeta[saludKey] ?? saludMeta.critico;
-    const bs     = n => `Bs. ${Math.round(n || 0).toLocaleString('es-BO')}`;
-    const pct    = n => monto > 0 ? Math.max(0, Math.min(100, n / monto * 100)) : 0;
+    const sm         = SALUD_FIN_META[saludKey] ?? SALUD_FIN_META.critico;
+    const bs         = n => `Bs. ${Math.round(n || 0).toLocaleString('es-BO')}`;
+    const pct        = n => monto > 0 ? Math.max(0, Math.min(100, n / monto * 100)) : 0;
 
+    if (editando) {
+        const liveSm = SALUD_FIN_META[calcLive.rentPct >= 10 ? 'saludable' : calcLive.rentPct >= 5 ? 'atencion' : 'critico'];
+        return (
+            <GlassCard className="p-5" style={{ borderColor: 'rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.03)' }}>
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <TrendingUp size={16} className="text-emerald-400" />
+                        <h3 className="text-sm font-bold text-white">Salud Financiera — Editar</h3>
+                    </div>
+                    <span className="text-xs text-slate-500">{bs(monto)} contractual</span>
+                </div>
+
+                {/* Live preview bar */}
+                <div className="mb-4 p-3 rounded-xl" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="flex justify-between text-[10px] text-slate-500 mb-1.5">
+                        <span>Materiales <span className="text-blue-400 font-semibold">{bs(calcLive.pMat)} ({pct(calcLive.pMat).toFixed(1)}%)</span></span>
+                        <span style={{ color: liveSm.color }}>{liveSm.label} · Util: {calcLive.rentPct.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
+                        <div style={{ width: `${pct(calcLive.pMat)}%`, background: '#60a5fa' }} className="rounded-l-full" />
+                        <div style={{ width: `${pct(calcLive.pMO)}%`, background: '#a78bfa' }} />
+                        <div style={{ width: `${pct(calcLive.pGG)}%`, background: '#fbbf24' }} />
+                        <div style={{ width: `${pct(calcLive.pUtil)}%`, background: liveSm.color }} className="rounded-r-full" />
+                    </div>
+                </div>
+
+                {/* Mano de Obra */}
+                <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-semibold text-purple-300">Mano de Obra</span>
+                        <label className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer">
+                            <input type="checkbox" checked={form.usa_monto_fijo_mo} onChange={e => setF('usa_monto_fijo_mo', e.target.checked)} className="accent-purple-500 w-3 h-3" />
+                            Monto fijo
+                        </label>
+                    </div>
+                    {form.usa_monto_fijo_mo ? (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-500">Bs.</span>
+                            <input type="number" min="0" step="100" value={form.presupuesto_mano_obra}
+                                onChange={e => setF('presupuesto_mano_obra', e.target.value)}
+                                className="flex-1 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1 focus:ring-purple-500/40" />
+                            <span className="text-[10px] text-slate-500 w-16 text-right">{pct(calcLive.pMO).toFixed(1)}% del total</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <input type="number" min="0" max="100" step="0.5" value={form.porcentaje_mano_obra}
+                                onChange={e => setF('porcentaje_mano_obra', e.target.value)}
+                                className="w-20 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1 focus:ring-purple-500/40" />
+                            <span className="text-[10px] text-slate-500">%</span>
+                            <span className="text-[10px] text-slate-500 ml-auto">{bs(calcLive.pMO)}</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Gastos Generales */}
+                <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-semibold text-yellow-300">Gastos Generales</span>
+                        <label className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer">
+                            <input type="checkbox" checked={form.usa_monto_fijo_gg} onChange={e => setF('usa_monto_fijo_gg', e.target.checked)} className="accent-yellow-500 w-3 h-3" />
+                            Monto fijo
+                        </label>
+                    </div>
+                    {form.usa_monto_fijo_gg ? (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-500">Bs.</span>
+                            <input type="number" min="0" step="100" value={form.presupuesto_gastos_generales}
+                                onChange={e => setF('presupuesto_gastos_generales', e.target.value)}
+                                className="flex-1 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1 focus:ring-yellow-500/40" />
+                            <span className="text-[10px] text-slate-500 w-16 text-right">{pct(calcLive.pGG).toFixed(1)}% del total</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <input type="number" min="0" max="100" step="0.5" value={form.porcentaje_gastos_generales}
+                                onChange={e => setF('porcentaje_gastos_generales', e.target.value)}
+                                className="w-20 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1 focus:ring-yellow-500/40" />
+                            <span className="text-[10px] text-slate-500">%</span>
+                            <span className="text-[10px] text-slate-500 ml-auto">{bs(calcLive.pGG)}</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Utilidad */}
+                <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-semibold" style={{ color: liveSm.color }}>Utilidad Esperada</span>
+                        <label className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer">
+                            <input type="checkbox" checked={form.usa_monto_fijo_util} onChange={e => setF('usa_monto_fijo_util', e.target.checked)} className="w-3 h-3" />
+                            Monto fijo
+                        </label>
+                    </div>
+                    {form.usa_monto_fijo_util ? (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-500">Bs.</span>
+                            <input type="number" min="0" step="100" value={form.presupuesto_utilidad_esperada}
+                                onChange={e => setF('presupuesto_utilidad_esperada', e.target.value)}
+                                className="flex-1 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1" />
+                            <span className="text-[10px] text-slate-500 w-16 text-right">{pct(calcLive.pUtil).toFixed(1)}% del total</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <input type="number" min="0" max="100" step="0.5" value={form.porcentaje_utilidad_esperada}
+                                onChange={e => setF('porcentaje_utilidad_esperada', e.target.value)}
+                                className="w-20 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1" />
+                            <span className="text-[10px] text-slate-500">%</span>
+                            <span className="text-[10px] text-slate-500 ml-auto">{bs(calcLive.pUtil)}</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Justificación (si rentabilidad baja) */}
+                {calcLive.rentPct < 5 && (
+                    <div className="mb-3">
+                        <label className="block text-[10px] text-red-400 mb-1">Justificación rentabilidad baja *</label>
+                        <textarea rows={2} value={form.justificacion_rentabilidad_baja}
+                            onChange={e => setF('justificacion_rentabilidad_baja', e.target.value)}
+                            className="w-full px-2 py-1.5 rounded-lg text-xs text-white outline-none resize-none bg-white/[0.06] border border-red-500/30 focus:ring-1 focus:ring-red-500/40"
+                            placeholder="Razón por baja rentabilidad…" />
+                    </div>
+                )}
+
+                <div className="flex justify-end gap-2 mt-1">
+                    <button onClick={() => setEditando(false)} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        Cancelar
+                    </button>
+                    <SpinBtn loading={guardando} onClick={handleGuardar}
+                        style={{ background: 'linear-gradient(135deg,rgba(16,185,129,0.9),rgba(5,150,105,0.8))', boxShadow: '0 4px 12px rgba(16,185,129,0.3)', padding: '6px 14px', fontSize: '12px' }}>
+                        <Check size={13} /> Guardar
+                    </SpinBtn>
+                </div>
+            </GlassCard>
+        );
+    }
+
+    // ── Read mode ──
     const barras = [
-        { label: 'Materiales',     monto: presupMat,  color: '#60a5fa' },
-        { label: `MO (${pctMO.toFixed(1)}%)`,   monto: presupMO,  color: '#a78bfa' },
-        { label: `GG (${pctGG.toFixed(1)}%)`,   monto: presupGG,  color: '#fbbf24' },
+        { label: 'Materiales',                    monto: presupMat,  color: '#60a5fa' },
+        { label: `MO (${pctMO.toFixed(1)}%)`,     monto: presupMO,   color: '#a78bfa' },
+        { label: `GG (${pctGG.toFixed(1)}%)`,     monto: presupGG,   color: '#fbbf24' },
         { label: `Utilidad (${pctUtil.toFixed(1)}%)`, monto: presupUtil, color: sm.color },
     ];
 
@@ -222,6 +424,13 @@ const SaludFinancieraCard = ({ proyecto }) => {
                     <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold" style={{ background: sm.color + '20', color: sm.color, border: `1px solid ${sm.color}40` }}>
                         {sm.label}
                     </span>
+                    {canEdit && (
+                        <button onClick={iniciarEdicion} title="Editar presupuesto"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-emerald-400 transition-colors"
+                            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <Edit size={13} />
+                        </button>
+                    )}
                 </div>
             </div>
             <div className="space-y-3">
@@ -2304,7 +2513,7 @@ const DetalleProyecto = () => {
             {/* ══════════════════════════════════════════════════
                 SALUD FINANCIERA
             ═══════════════════════════════════════════════════ */}
-            <SaludFinancieraCard proyecto={proyecto} />
+            <SaludFinancieraCard proyecto={proyecto} canEdit={canEdit} onRefresh={cargar} />
 
             {/* ══════════════════════════════════════════════════
                 FINANZAS — FLUJO DE COBRO
@@ -2360,6 +2569,11 @@ const DetalleProyecto = () => {
             />
 
             {/* ══════════════════════════════════════════════════
+                MATRIZ ÍTEMS × PRODUCTOS
+            ═══════════════════════════════════════════════════ */}
+            <MatrizItemsProductosSection proyectoId={id} canEdit={canEdit} />
+
+            {/* ══════════════════════════════════════════════════
                 PRESUPUESTO DE MATERIALES
             ═══════════════════════════════════════════════════ */}
             <PresupuestoMaterialesSection proyectoId={id} canEdit={canEdit} />
@@ -2389,6 +2603,182 @@ const DetalleProyecto = () => {
                 />
             )}
         </div>
+    );
+};
+
+/* ══════════════════════════════════════════════════
+   Matriz Items × Productos
+═══════════════════════════════════════════════════ */
+const MatrizItemsProductosSection = ({ proyectoId, canEdit }) => {
+    const [matriz, setMatriz]         = useState(null);
+    const [loading, setLoading]       = useState(true);
+    const [asignando, setAsignando]   = useState({});
+    const [autoAsign, setAutoAsign]   = useState(false);
+    const [expandido, setExpandido]   = useState(false);
+
+    const cargar = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await proyectoService.obtenerMatrizItemsProductos(proyectoId);
+            setMatriz(data);
+            // Auto-expand if there are unassigned items
+            if ((data?.totales?.items_sin_asignar ?? 0) > 0) setExpandido(true);
+        } catch { /* items section may not exist yet */ }
+        finally { setLoading(false); }
+    }, [proyectoId]);
+
+    useEffect(() => { cargar(); }, [cargar]);
+
+    if (loading) return (
+        <GlassCard className="p-5">
+            <div className="flex items-center gap-2 mb-2">
+                <Table2 size={15} className="text-slate-500" />
+                <span className="text-sm font-bold text-white">Matriz Items × Productos</span>
+            </div>
+            <Skeleton height="80px" className="rounded-xl" />
+        </GlassCard>
+    );
+
+    if (!matriz || !matriz.items || matriz.items.length === 0) return null;
+
+    const { hitos = [], items = [], totales = {} } = matriz;
+
+    const handleAsignar = async (itemId, hitoCobro_id) => {
+        setAsignando(p => ({ ...p, [itemId]: true }));
+        try {
+            await proyectoService.asignarItemAProducto(proyectoId, itemId, hitoCobro_id || null);
+            await cargar();
+        } catch { toast.error('Error al asignar ítem'); }
+        finally { setAsignando(p => ({ ...p, [itemId]: false })); }
+    };
+
+    const handleAutoAsignar = async () => {
+        setAutoAsign(true);
+        try {
+            const r = await proyectoService.asignacionAutomatica(proyectoId);
+            toast.success(r.message || 'Asignación automática completada');
+            await cargar();
+        } catch { toast.error('Error en asignación automática'); }
+        finally { setAutoAsign(false); }
+    };
+
+    const pctAsignados = totales.items_total > 0 ? Math.round(totales.items_asignados / totales.items_total * 100) : 0;
+
+    return (
+        <GlassCard className="p-5">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <button onClick={() => setExpandido(p => !p)} className="flex items-center gap-2 group">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)' }}>
+                        <Table2 size={14} className="text-blue-400" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-200">Matriz Ítems × Productos</h3>
+                    <ChevronDown size={14} className={`text-slate-500 transition-transform ${expandido ? 'rotate-180' : ''}`} />
+                </button>
+                <div className="flex items-center gap-2 ml-auto flex-wrap">
+                    <span className="text-[11px] text-slate-500">
+                        {totales.items_asignados}/{totales.items_total} asignados
+                        <span className="text-blue-400 font-semibold ml-1">({pctAsignados}%)</span>
+                    </span>
+                    {canEdit && hitos.length > 0 && (
+                        <button onClick={handleAutoAsignar} disabled={autoAsign}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-white transition-all disabled:opacity-50"
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <RefreshCw size={10} className={autoAsign ? 'animate-spin' : ''} />
+                            {autoAsign ? 'Asignando…' : 'Auto-asignar'}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-1.5 rounded-full mb-3" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${pctAsignados}%`, background: '#60a5fa' }} />
+            </div>
+
+            {!expandido ? null : (
+                <>
+                    {/* Productos legend */}
+                    {hitos.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {hitos.map((h, i) => {
+                                const colors = ['#60a5fa', '#a78bfa', '#34d399', '#fbbf24'];
+                                const c = colors[i % colors.length];
+                                return (
+                                    <span key={h.id} className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: c + '20', color: c, border: `1px solid ${c}40` }}>
+                                        {h.nombre} · {parseFloat(h.porcentaje_contrato ?? 0).toFixed(0)}%
+                                    </span>
+                                );
+                            })}
+                            <span className="px-2 py-0.5 rounded-full text-[10px] text-slate-600" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                Sin asignar ({totales.items_sin_asignar})
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Items table */}
+                    <div className="overflow-x-auto -mx-1">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-[10px] text-slate-600 uppercase tracking-wide">
+                                    <th className="text-left pb-2 pl-1">Ítem</th>
+                                    <th className="text-left pb-2">Unidad</th>
+                                    <th className="text-right pb-2">Cantidad</th>
+                                    {hitos.length > 0 && <th className="text-left pb-2 pl-2">Producto</th>}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/[0.04]">
+                                {items.map(item => {
+                                    const colors = ['#60a5fa', '#a78bfa', '#34d399', '#fbbf24'];
+                                    const hitoIdx = hitos.findIndex(h => h.id === item.hito_cobro_id);
+                                    const c = hitoIdx >= 0 ? colors[hitoIdx % colors.length] : null;
+                                    return (
+                                        <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
+                                            <td className="py-1.5 pl-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    {item.item_constructivo?.categoria?.color && (
+                                                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: item.item_constructivo.categoria.color }} />
+                                                    )}
+                                                    <span className="text-slate-300 font-medium truncate max-w-[180px]">
+                                                        {item.item_constructivo?.nombre ?? `Ítem #${item.id}`}
+                                                    </span>
+                                                    {item.vivienda && (
+                                                        <span className="text-slate-600 shrink-0">· {item.vivienda.codigo}</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="py-1.5 text-slate-500">{item.item_constructivo?.unidad_base ?? '—'}</td>
+                                            <td className="py-1.5 text-right text-slate-400">{parseFloat(item.cantidad_planificada ?? 0).toFixed(2)}</td>
+                                            {hitos.length > 0 && (
+                                                <td className="py-1.5 pl-2">
+                                                    {asignando[item.id] ? (
+                                                        <span className="text-slate-600 text-[10px]">Guardando…</span>
+                                                    ) : canEdit ? (
+                                                        <select value={item.hito_cobro_id ?? ''}
+                                                            onChange={e => handleAsignar(item.id, e.target.value ? parseInt(e.target.value) : null)}
+                                                            className="px-1.5 py-0.5 rounded-lg text-[10px] outline-none cursor-pointer"
+                                                            style={{ background: c ? c + '20' : 'rgba(255,255,255,0.05)', color: c ?? '#94a3b8', border: `1px solid ${c ? c + '40' : 'rgba(255,255,255,0.1)'}` }}>
+                                                            <option value="">— Sin asignar —</option>
+                                                            {hitos.map((h, i) => (
+                                                                <option key={h.id} value={h.id} style={{ background: '#0f172a' }}>{h.nombre}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-lg" style={{ background: c ? c + '20' : 'rgba(255,255,255,0.04)', color: c ?? '#64748b' }}>
+                                                            {item.hito_cobro?.nombre ?? '—'}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
+        </GlassCard>
     );
 };
 

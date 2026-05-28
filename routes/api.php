@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\PlantillaConstructivaController;
 use App\Http\Controllers\Api\PresupuestoItemsProyectoController;
 use App\Http\Controllers\Api\MovimientoAlmacenController;
 use App\Http\Controllers\Api\ConfiguracionPorcentajesController;
+use App\Http\Controllers\Api\RecalculoFinancieroController;
 
 // ── Auth pública ─────────────────────────────────────────────────────────────
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -207,6 +208,13 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/{proyectoId}/fases/validar-pesos', [\App\Http\Controllers\Api\FaseProyectoController::class, 'validarPesos']);
             Route::get('/{proyectoId}/personal', [\App\Http\Controllers\Api\AsignacionPersonalController::class, 'indexPorProyecto']);
             Route::post('/{proyectoId}/personal', [\App\Http\Controllers\Api\AsignacionPersonalController::class, 'store']);
+
+            // Reactividad financiera
+            Route::patch('/{id}/porcentajes-financieros', [RecalculoFinancieroController::class, 'actualizarPorcentajes']);
+            Route::get('/{id}/matriz-items-productos', [RecalculoFinancieroController::class, 'obtenerMatriz']);
+            Route::patch('/{id}/items/{itemId}/producto-contractual', [RecalculoFinancieroController::class, 'asignarItemAProducto']);
+            Route::patch('/{id}/items/{itemId}/cantidad', [RecalculoFinancieroController::class, 'actualizarCantidadItem']);
+            Route::post('/{id}/items/asignacion-automatica', [RecalculoFinancieroController::class, 'asignacionAutomatica']);
         });
 
         // Viviendas (operaciones individuales)

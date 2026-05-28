@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\HitoCobro;
 
 class PresupuestoItemProyecto extends Model
 {
@@ -14,7 +15,7 @@ class PresupuestoItemProyecto extends Model
 
     protected $fillable = [
         'proyecto_id', 'vivienda_id', 'item_constructivo_id',
-        'cantidad_planificada', 'producto_contractual_id', 'fase_id',
+        'cantidad_planificada', 'producto_contractual_id', 'hito_cobro_id', 'fase_id',
         'orden', 'ponderacion_avance', 'estado_ejecucion',
         'porcentaje_avance', 'tiene_override_receta', 'metadata',
     ];
@@ -45,6 +46,11 @@ class PresupuestoItemProyecto extends Model
     public function productoContractual()
     {
         return $this->belongsTo(ProductoContractual::class, 'producto_contractual_id');
+    }
+
+    public function hitoCobro()
+    {
+        return $this->belongsTo(HitoCobro::class, 'hito_cobro_id');
     }
 
     public function fase()

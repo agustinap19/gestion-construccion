@@ -190,6 +190,33 @@ const proyectoService = {
         const base = api.defaults.baseURL ?? '/api';
         return `${base}/proyectos/${id}/exportar?tipo=${tipo}`;
     },
+
+    // ── Reactividad financiera ────────────────────────────────────────────────
+
+    actualizarPorcentajesFinancieros: async (id, datos) => {
+        const response = await api.patch(`/proyectos/${id}/porcentajes-financieros`, datos);
+        return response.data;
+    },
+
+    obtenerMatrizItemsProductos: async (id) => {
+        const response = await api.get(`/proyectos/${id}/matriz-items-productos`);
+        return response.data.data;
+    },
+
+    asignarItemAProducto: async (proyectoId, itemId, hitoCobro_id) => {
+        const response = await api.patch(`/proyectos/${proyectoId}/items/${itemId}/producto-contractual`, { hito_cobro_id: hitoCobro_id });
+        return response.data;
+    },
+
+    actualizarCantidadItem: async (proyectoId, itemId, cantidad) => {
+        const response = await api.patch(`/proyectos/${proyectoId}/items/${itemId}/cantidad`, { cantidad_planificada: cantidad });
+        return response.data;
+    },
+
+    asignacionAutomatica: async (proyectoId) => {
+        const response = await api.post(`/proyectos/${proyectoId}/items/asignacion-automatica`);
+        return response.data;
+    },
 };
 
 export default proyectoService;
