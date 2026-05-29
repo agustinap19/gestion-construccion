@@ -4,6 +4,7 @@ namespace App\Services\Almacenes;
 
 use App\Models\ItemConstructivo;
 use App\Models\Material;
+use App\Models\OverrideItemProyecto;
 use App\Models\OverrideRecetaProyecto;
 use App\Models\PlantillaConstructiva;
 use App\Models\PresupuestoItemProyecto;
@@ -46,6 +47,12 @@ class PresupuestoAutomaticoService
                 ]);
                 $presupuestoItems[] = $pip;
             }
+
+            // Snapshot de recetas al momento de generar.
+            // Aísla el proyecto de cambios futuros en la biblioteca global.
+            // Solo crea entradas nuevas (nivel=tipologia, vivienda=null);
+            // nunca sobreescribe overrides ya configurados manualmente.
+            $this->snapshotearRecetas($proyectoId, $presupuestoItems, $actorId);
 
             $consolidado = $this->calcularConsolidado($proyectoId, $presupuestoItems, $actorId);
 
@@ -207,6 +214,44 @@ class PresupuestoAutomaticoService
     }
 
     // ─── Privados ────────────────────────────────────────────────────────────
+
+    /**
+     * Guarda un snapshot de las recetas globales como overrides de tipología.
+     * Protege al proyecto de cambios futuros en la Biblioteca Constructiva.
+     *
+     * Solo inserta registros nuevos (INSERT IGNORE / updateOrCreate).
+     * Si ya existe un override manual para ese proyecto+item+material, lo respeta.
+     */
+    private function snapshotearRecetas(int $proyectoId, array $pips, int $actorId): void
+    {
+        // Recopilar IDs únicos de ítems constructivos en este lote
+        $itemIds = collect($pips)
+            ->pluck('item_constructivo_id')
+            ->unique()
+            ->values();
+
+        // Bulk-load recetas globales de todos los ítems (sin N+1)
+        $recetas = RecetaItem::whereIn('item_constructivo_id', $itemIds)->get();
+
+        foreach ($recetas as $r) {
+            // Solo insertar si NO existe ya override tipología para este trio
+            // Esto preserva overrides configurados manualmente antes de regenerar
+            OverrideItemProyecto::firstOrCreate(
+                [
+                    'proyecto_id'          => $proyectoId,
+                    'item_constructivo_id' => $r->item_constructivo_id,
+                    'material_id'          => $r->material_id,
+                    'vivienda_id'          => null,
+                ],
+                [
+                    'cantidad_por_unidad_base' => $r->cantidad_por_unidad_base,
+                    'nivel'                    => 'tipologia',
+                    'justificacion'            => 'Snapshot automático al generar presupuesto.',
+                    'usuario_autorizador_id'   => $actorId,
+                ]
+            );
+        }
+    }
 
     private function calcularConsolidado(int $proyectoId, array $presupuestoItems, int $actorId): array
     {

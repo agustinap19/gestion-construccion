@@ -4,20 +4,25 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Almacen;
+use App\Models\DetalleMovimientoAlmacen;
+use App\Models\PresupuestoItemProyecto;
 use App\Models\StockMaterial;
 use App\Services\Almacenes\AlmacenService;
 use App\Services\Almacenes\EntregaService;
+use App\Services\Almacenes\RecetaResolverService;
 use App\Services\Almacenes\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Exception;
 
 class AlmacenController extends Controller
 {
     public function __construct(
-        protected AlmacenService $service,
-        protected StockService   $stockService,
-        protected EntregaService $entregaService
+        protected AlmacenService     $service,
+        protected StockService       $stockService,
+        protected EntregaService     $entregaService,
+        protected RecetaResolverService $recetaResolver,
     ) {}
 
     public function index(Request $request)
@@ -284,6 +289,75 @@ class AlmacenController extends Controller
         ]);
 
         return response()->json(['status' => 'success', 'data' => $stocks]);
+    }
+
+    /**
+     * GET /almacenes/{almacenId}/items/{pipId}/materiales-receta
+     * Receta resuelta (snapshot proyecto) + stock real.
+     * Garantiza que cambios en la Biblioteca Global no afectan proyectos en ejecución.
+     */
+    public function materialesReceta(Request $request, int $almacenId, int $pipId): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('almacenes.ver')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $pip = PresupuestoItemProyecto::findOrFail($pipId);
+
+        $receta = $this->recetaResolver->resolver(
+            $pip->item_constructivo_id,
+            $pip->proyecto_id,
+            $pip->vivienda_id
+        );
+
+        if ($receta->isEmpty()) {
+            return response()->json(['status' => 'success', 'materiales' => []]);
+        }
+
+        $materialIds = $receta->pluck('material_id');
+
+        $stocks = StockMaterial::whereIn('material_id', $materialIds)
+            ->where('almacen_id', $almacenId)
+            ->get()
+            ->keyBy('material_id');
+
+        $yaEntregado = DetalleMovimientoAlmacen::select('material_id', DB::raw('SUM(cantidad) as total'))
+            ->whereHas('movimiento', fn($q) => $q
+                ->where('presupuesto_item_proyecto_id', $pipId)
+                ->whereNotIn('estado', ['anulado', 'borrador'])
+            )
+            ->whereIn('material_id', $materialIds)
+            ->groupBy('material_id')
+            ->get()
+            ->keyBy('material_id');
+
+        $cantidadPlan = (float) $pip->cantidad_planificada;
+
+        $materiales = $receta->map(function (array $r) use ($stocks, $yaEntregado, $cantidadPlan) {
+            $matId        = $r['material_id'];
+            $stock        = $stocks->get($matId);
+            $disponible   = $stock ? max(0.0, (float)($stock->cantidad - $stock->cantidad_reservada)) : 0.0;
+            $teoricoTotal = round($r['cantidad_por_unidad_base'] * $cantidadPlan, 4);
+            $entregado    = (float) ($yaEntregado->get($matId)?->total ?? 0);
+            $restante     = max(0.0, $teoricoTotal - $entregado);
+            $mat          = $r['material'];
+
+            return [
+                'material_id'              => $matId,
+                'nombre'                   => $mat?->nombre,
+                'unidad'                   => $r['unidad_material'] ?: ($mat?->unidadMedida?->simbolo ?? ''),
+                'cantidad_por_unidad_base' => $r['cantidad_por_unidad_base'],
+                'fuente'                   => $r['fuente'],
+                'cantidad_teorica_total'   => $teoricoTotal,
+                'ya_entregado'             => $entregado,
+                'teorico_restante'         => $restante,
+                'disponible_en_almacen'    => $disponible,
+                'tiene_stock'              => $disponible > 0,
+                'item_completo'            => $restante <= 0,
+            ];
+        })->values();
+
+        return response()->json(['status' => 'success', 'materiales' => $materiales]);
     }
 
     public function kardex(Request $request, int $almacenId, int $materialId)

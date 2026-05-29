@@ -112,6 +112,7 @@ export default function EntregaSocialModal({ almacen, onClose, onGuardado }) {
                         item_completo:            m.item_completo,
                         cantidad_disponible_almacen: m.cantidad_disponible_almacen,
                         teorico_restante:         m.teorico_restante,
+                        fuente:                   m.fuente || 'global', // vivienda | tipologia | global
                     })));
                 } else {
                     setLineas([{ material_id: '', cantidad: '', justificacion: '', observacion: '' }]);
@@ -367,6 +368,14 @@ export default function EntregaSocialModal({ almacen, onClose, onGuardado }) {
                                                                 {!sinStock && !completo && l.cantidad_disponible_almacen !== null && (
                                                                     <span className="ml-2 text-white/30 text-xs">
                                                                         ({l.cantidad_disponible_almacen.toFixed(2)} {l.unidad} disp.)
+                                                                    </span>
+                                                                )}
+                                                                {l.fuente && l.fuente !== 'global' && (
+                                                                    <span className={`ml-2 text-xs px-1.5 py-0.5 rounded border
+                                                                        ${l.fuente === 'vivienda'
+                                                                            ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                                                                            : 'bg-violet-500/15 border-violet-500/30 text-violet-400'}`}>
+                                                                        ✦ Receta personalizada
                                                                     </span>
                                                                 )}
                                                             </div>

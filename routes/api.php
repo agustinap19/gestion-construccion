@@ -23,6 +23,7 @@ use App\Http\Middleware\ForzarCambioPassword;
 use App\Http\Controllers\Api\BibliotecaConstructivaController;
 use App\Http\Controllers\Api\PlantillaConstructivaController;
 use App\Http\Controllers\Api\PresupuestoItemsProyectoController;
+use App\Http\Controllers\Api\ItemsProyectoController;
 use App\Http\Controllers\Api\MovimientoAlmacenController;
 use App\Http\Controllers\Api\ConfiguracionPorcentajesController;
 use App\Http\Controllers\Api\RecalculoFinancieroController;
@@ -233,6 +234,13 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/{id}/beneficiario', [\App\Http\Controllers\Api\ViviendaController::class, 'asignarBeneficiario']);
             Route::delete('/{id}/beneficiario', [\App\Http\Controllers\Api\ViviendaController::class, 'desasignarBeneficiario']);
             Route::delete('/{id}', [\App\Http\Controllers\Api\ViviendaController::class, 'destroy']);
+
+            // Checklist real desde presupuesto_items_proyecto (solo lectura)
+            Route::get('/{id}/checklist', [\App\Http\Controllers\Api\ChecklistViviendaController::class, 'show']);
+
+            // Reportes de avance fotográfico (único canal para actualizar avance)
+            Route::get('/{viviendaId}/reportes-avance', [\App\Http\Controllers\Api\ReporteAvanceController::class, 'index']);
+            Route::post('/{viviendaId}/reportes-avance', [\App\Http\Controllers\Api\ReporteAvanceController::class, 'store']);
         });
 
         // Fases (operaciones individuales)
@@ -332,6 +340,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/{almacenId}/kardex/{materialId}', [AlmacenController::class, 'kardex']);
             Route::patch('/{id}/cerrar',                  [AlmacenController::class, 'cerrar']);
             Route::get('/{id}/materiales-con-stock',  [AlmacenController::class, 'materialesConStock']);
+            Route::get('/{almacenId}/items/{pipId}/materiales-receta', [AlmacenController::class, 'materialesReceta']);
         });
         Route::post('/almacenes-transferencias', [AlmacenController::class, 'transferir']);
 
@@ -441,6 +450,19 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/presupuesto-items-proyecto', [PresupuestoItemsProyectoController::class, 'porBeneficiario']);
         // FIX 2+3: receta con stock real y teórico restante
         Route::get('/presupuesto-items-proyecto/{pipId}/receta-con-stock/{almacenId}', [PresupuestoItemsProyectoController::class, 'recetaConStock']);
+
+        // Editor de items del proyecto (Parte 2)
+        Route::prefix('proyectos/{proyectoId}/items-config')->group(function () {
+            Route::get('/',                      [ItemsProyectoController::class, 'index']);
+            Route::post('/',                     [ItemsProyectoController::class, 'agregarItem']);
+            Route::patch('/{pipId}/cantidad',    [ItemsProyectoController::class, 'actualizarCantidad']);
+            Route::delete('/{pipId}',            [ItemsProyectoController::class, 'quitarItem']);
+            Route::put('/override-tipologia',    [ItemsProyectoController::class, 'overrideTipologia']);
+            Route::put('/override-vivienda',     [ItemsProyectoController::class, 'overrideVivienda']);
+            Route::post('/preview-impacto',      [ItemsProyectoController::class, 'previewImpacto']);
+            Route::post('/actualizar-recetas',   [ItemsProyectoController::class, 'actualizarRecetas']);
+            Route::get('/historial',             [ItemsProyectoController::class, 'historial']);
+        });
 
         // Configuración de porcentajes presupuestales (Rediseño Proyectos)
         Route::prefix('configuracion/porcentajes-presupuesto')->group(function () {

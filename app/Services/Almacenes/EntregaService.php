@@ -604,19 +604,23 @@ class EntregaService
             return;
         }
 
-        // Parcial: avance = MAX(ya_entregado_total / teorico_total) × 100 por material de receta
-        $item->loadMissing('itemConstructivo.receta');
-        $receta  = $item->itemConstructivo?->receta ?? collect();
+        // Parcial: avance = MAX(ya_entregado_total / teorico_total) × 100
+        // Usa el resolver para respetar el snapshot del proyecto, no la receta global
+        $receta  = $this->recetaResolver->resolver(
+            $item->item_constructivo_id,
+            $item->proyecto_id,
+            $item->vivienda_id
+        );
         $maxPct  = 0.0;
 
         foreach ($receta as $r) {
-            $teoricoTotal = (float) ($item->cantidad_planificada * $r->cantidad_por_unidad_base);
+            $teoricoTotal = (float) ($item->cantidad_planificada * $r['cantidad_por_unidad_base']);
             if ($teoricoTotal <= 0) continue;
 
             $yaEntregado = (float) DetalleMovimientoAlmacen::whereHas('movimiento', fn($q) => $q
                 ->where('presupuesto_item_proyecto_id', $item->id)
                 ->whereNotIn('estado', ['anulado', 'borrador'])
-            )->where('material_id', $r->material_id)->sum('cantidad');
+            )->where('material_id', $r['material_id'])->sum('cantidad');
 
             $pct    = min(100.0, round(($yaEntregado / $teoricoTotal) * 100, 2));
             $maxPct = max($maxPct, $pct);

@@ -10,6 +10,7 @@ import modificatorioService from '../../../services/modificatorioService';
 import { presupuestoMaterialService } from '../../../services/presupuestoMaterialService';
 import api from '../../../services/api';
 import Skeleton from '../../../components/ui/Skeleton';
+import ChecklistVivienda from './ChecklistVivienda';
 import {
     Briefcase, Edit, ArrowLeft, Users, Building, MapPin, Calendar,
     Clock, Package, TrendingUp, BarChart2, Activity, ChevronDown, ChevronRight,
@@ -1278,38 +1279,47 @@ const UnidadCard = ({ unidad, esSocial, pctPlazo, onReporteTecnico }) => {
                         <span className="text-xs font-bold" style={{ color }}>{pct.toFixed(0)}%</span>
                     </div>
 
-                    {/* Checklist con % por ítem */}
-                    {unidad.items_checklist?.length > 0 ? (
-                        <div className="mt-3 space-y-1.5">
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Checklist</p>
-                            {unidad.items_checklist.map(item => {
-                                const iPct = parseFloat(item.porcentaje_avance ?? 0);
-                                const ic = iPct >= 100 ? '#34d399' : iPct > 0 ? '#60a5fa' : '#64748b';
-                                return (
-                                    <div key={item.id} className="flex items-center gap-2.5 py-1.5 px-3 rounded-lg"
-                                        style={{ background: 'rgba(255,255,255,0.02)' }}>
-                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${item.estado === 'completado' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
-                                            {item.estado === 'completado' && <Check size={9} className="text-white" />}
-                                        </div>
-                                        <span className={`text-xs flex-1 min-w-0 truncate ${item.estado === 'completado' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
-                                            {item.nombre}
-                                        </span>
-                                        <div className="flex items-center gap-1.5 shrink-0">
-                                            <div className="w-16 h-1.5 rounded-full overflow-hidden"
-                                                style={{ background: 'rgba(255,255,255,0.06)' }}>
-                                                <div className="h-full rounded-full" style={{ width: `${Math.min(100, iPct)}%`, background: ic }} />
-                                            </div>
-                                            <span className="text-[10px] font-bold w-7 text-right" style={{ color: ic }}>
-                                                {iPct.toFixed(0)}%
-                                            </span>
-                                        </div>
-                                        <span className="text-[10px] text-slate-600 shrink-0">p:{item.ponderacion}%</span>
-                                    </div>
-                                );
-                            })}
+                    {/* Checklist con items reales desde presupuesto_items_proyecto (vivienda) o items_checklist (fase) */}
+                    {esSocial ? (
+                        <div className="mt-3">
+                            <ChecklistVivienda
+                                viviendaId={unidad.id}
+                                viviendaCodigo={unidad.nombre ?? unidad.codigo}
+                            />
                         </div>
                     ) : (
-                        <p className="text-xs text-slate-600 mt-3">Sin ítems de checklist</p>
+                        unidad.items_checklist?.length > 0 ? (
+                            <div className="mt-3 space-y-1.5">
+                                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Checklist</p>
+                                {unidad.items_checklist.map(item => {
+                                    const iPct = parseFloat(item.porcentaje_avance ?? 0);
+                                    const ic = iPct >= 100 ? '#34d399' : iPct > 0 ? '#60a5fa' : '#64748b';
+                                    return (
+                                        <div key={item.id} className="flex items-center gap-2.5 py-1.5 px-3 rounded-lg"
+                                            style={{ background: 'rgba(255,255,255,0.02)' }}>
+                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${item.estado === 'completado' ? 'bg-emerald-500 border-emerald-500' : 'border-slate-600'}`}>
+                                                {item.estado === 'completado' && <Check size={9} className="text-white" />}
+                                            </div>
+                                            <span className={`text-xs flex-1 min-w-0 truncate ${item.estado === 'completado' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                                                {item.nombre}
+                                            </span>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <div className="w-16 h-1.5 rounded-full overflow-hidden"
+                                                    style={{ background: 'rgba(255,255,255,0.06)' }}>
+                                                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, iPct)}%`, background: ic }} />
+                                                </div>
+                                                <span className="text-[10px] font-bold w-7 text-right" style={{ color: ic }}>
+                                                    {iPct.toFixed(0)}%
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-600 shrink-0">p:{item.ponderacion}%</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-slate-600 mt-3">Sin ítems de checklist</p>
+                        )
                     )}
 
                     {/* Acciones */}
@@ -2574,6 +2584,20 @@ const DetalleProyecto = () => {
                 MATRIZ ÍTEMS × PRODUCTOS
             ═══════════════════════════════════════════════════ */}
             <MatrizItemsProductosSection proyectoId={id} canEdit={canEdit} />
+
+            {/* ══════════════════════════════════════════════════
+                BOTÓN CONFIGURAR ÍTEMS
+            ═══════════════════════════════════════════════════ */}
+            {canEdit && (
+                <div className="flex justify-end">
+                    <button
+                        onClick={() => navigate(`/dashboard/proyectos/${id}/items`)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500/10 border border-violet-500/25 text-violet-300 text-sm hover:bg-violet-500/20 transition-all">
+                        <Layers size={14} />
+                        Configurar ítems del proyecto
+                    </button>
+                </div>
+            )}
 
             {/* ══════════════════════════════════════════════════
                 PRESUPUESTO DE MATERIALES

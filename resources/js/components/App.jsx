@@ -58,6 +58,7 @@ import DetalleProyecto from '../pages/admin/proyectos/DetalleProyecto';
 import EditarProyecto from '../pages/admin/proyectos/EditarProyecto';
 import AlmacenProyecto from '../pages/admin/proyectos/AlmacenProyecto';
 import BeneficiariosProyecto from '../pages/admin/proyectos/BeneficiariosProyecto';
+import ItemsProyecto from '../pages/admin/proyectos/ItemsProyecto';
 
 // Almacenes
 import MaterialesIndex from '../pages/admin/almacenes/MaterialesIndex';
@@ -126,6 +127,7 @@ const AppContent = () => {
                     <Route path="/dashboard/proyectos/:id/editar" element={<EditarProyecto />} />
                     <Route path="/dashboard/proyectos/:id/almacen" element={<AlmacenProyecto />} />
                     <Route path="/dashboard/proyectos/:id/beneficiarios" element={<BeneficiariosProyecto />} />
+                    <Route path="/dashboard/proyectos/:id/items" element={<ItemsProyecto />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />

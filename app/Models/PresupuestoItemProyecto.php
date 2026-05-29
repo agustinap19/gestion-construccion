@@ -11,6 +11,34 @@ class PresupuestoItemProyecto extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * Observer: snapshot de receta al crear cualquier PIP.
+     * Protege el proyecto de cambios futuros en la Biblioteca Constructiva.
+     * firstOrCreate garantiza idempotencia — seguro en creaciones masivas.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (self $pip) {
+            $recetas = RecetaItem::where('item_constructivo_id', $pip->item_constructivo_id)->get();
+            foreach ($recetas as $r) {
+                OverrideItemProyecto::firstOrCreate(
+                    [
+                        'proyecto_id'          => $pip->proyecto_id,
+                        'item_constructivo_id' => $pip->item_constructivo_id,
+                        'material_id'          => $r->material_id,
+                        'vivienda_id'          => null,
+                    ],
+                    [
+                        'cantidad_por_unidad_base' => $r->cantidad_por_unidad_base,
+                        'nivel'                    => 'tipologia',
+                        'justificacion'            => 'Snapshot automático al crear PIP.',
+                        'usuario_autorizador_id'   => auth()->id(),
+                    ]
+                );
+            }
+        });
+    }
+
     protected $table = 'presupuesto_items_proyecto';
 
     protected $fillable = [
