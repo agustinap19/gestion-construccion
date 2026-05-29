@@ -12,6 +12,8 @@ const movimientoAlmacenService = {
     registrarTransferencia: (data) => api.post(`${BASE}/transferencias`, data),
 
     anular: (id, motivo) => api.patch(`${BASE}/${id}/anular`, { motivo }),
+    confirmarTransferencia: (id) => api.patch(`${BASE}/${id}/confirmar`),
+    devolverCentral: (almacenId) => api.post(`${BASE}/devolver-central/${almacenId}`),
     validarConsumo: (data) => api.post(`${BASE}/validar-consumo`, data),
 };
 

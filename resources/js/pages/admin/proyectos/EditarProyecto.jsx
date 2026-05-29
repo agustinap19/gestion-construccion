@@ -5,7 +5,7 @@ import proyectoService from '../../../services/proyectoService';
 import zonaGeograficaService from '../../../services/zonaGeograficaService';
 import api from '../../../services/api';
 import Skeleton from '../../../components/ui/Skeleton';
-import { Briefcase, ArrowLeft, Check, MapPin } from '../../../components/icons/Icons';
+import { Briefcase, ArrowLeft, Check, MapPin, AlertTriangle, TrendingUp, TrendingDown } from '../../../components/icons/Icons';
 
 /* ── Glass helpers ── */
 const GF = ({ label, error, children, required }) => (
@@ -59,11 +59,13 @@ const EditarProyecto = () => {
     const [proyecto, setProyecto] = useState(null);
     const [zonas, setZonas] = useState([]);
     const [usuarios, setUsuarios] = useState([]);
+    const [configFinanciera, setConfigFinanciera] = useState({});
     const [errores, setErrores] = useState({});
 
     const [form, setForm] = useState({
         nombre: '', descripcion: '', prioridad: 'media', zona_id: '', responsable_id: '',
-        presupuesto_referencial: '', monto_contrato: '', cantidad_unidades: '',
+        presupuesto_referencial: '', monto_contrato: '', monto_contractual: '', cantidad_unidades: '',
+        porcentaje_mano_obra: '', porcentaje_gastos_generales: '', porcentaje_utilidad_esperada: '', justificacion_rentabilidad_baja: '',
         fecha_inicio_planificada: '', fecha_fin_planificada: '',
         fecha_inicio_real: '', fecha_fin_real: '',
         direccion_obra: '', observaciones: '',
@@ -73,10 +75,11 @@ const EditarProyecto = () => {
         const cargar = async () => {
             try {
                 setCargando(true);
-                const [res, zonasRes, usuariosRes] = await Promise.all([
+                const [res, zonasRes, usuariosRes, cfgRes] = await Promise.all([
                     proyectoService.obtener(id),
                     zonaGeograficaService.listar(),
                     api.get('/usuarios', { params: { estado: 'activo', per_page: 300 } }).catch(() => ({ data: { data: [] } })),
+                    api.get('/configuracion/porcentajes-presupuesto').catch(() => ({ data: { data: {} } })),
                 ]);
                 const p = res.proyecto;
                 setProyecto(p);
@@ -88,6 +91,11 @@ const EditarProyecto = () => {
                     responsable_id: p.responsable_id || '',
                     presupuesto_referencial: p.presupuesto_referencial || '',
                     monto_contrato: p.monto_contrato || '',
+                    monto_contractual: p.monto_contractual || p.monto_contrato || p.presupuesto_referencial || '',
+                    porcentaje_mano_obra: p.porcentaje_mano_obra || '',
+                    porcentaje_gastos_generales: p.porcentaje_gastos_generales || '',
+                    porcentaje_utilidad_esperada: p.porcentaje_utilidad_esperada || '',
+                    justificacion_rentabilidad_baja: p.justificacion_rentabilidad_baja || '',
                     cantidad_unidades: p.cantidad_unidades || '',
                     fecha_inicio_planificada: p.fecha_inicio_planificada?.split('T')[0] || '',
                     fecha_fin_planificada: p.fecha_fin_planificada?.split('T')[0] || '',
@@ -98,6 +106,7 @@ const EditarProyecto = () => {
                 });
                 setZonas(zonasRes || []);
                 setUsuarios(usuariosRes.data?.data?.data ?? usuariosRes.data?.data ?? []);
+                setConfigFinanciera(cfgRes.data?.data ?? {});
             } catch {
                 toast.error('Error al cargar el proyecto');
                 navigate('/dashboard/proyectos');
@@ -138,6 +147,41 @@ const EditarProyecto = () => {
     if (!proyecto) return null;
 
     const esSocial = proyecto.categoria === 'social';
+
+    /* ── Cálculos Financieros ── */
+    const montoContractual = parseFloat(form.monto_contractual || 0);
+    const cfgActual = configFinanciera?.[proyecto.categoria] ?? {};
+    const pctMO   = parseFloat(form.porcentaje_mano_obra        || cfgActual.porcentaje_mano_obra        || 0);
+    const pctGG   = parseFloat(form.porcentaje_gastos_generales || cfgActual.porcentaje_gastos_generales || 0);
+    const pctUtil = parseFloat(form.porcentaje_utilidad_esperada || cfgActual.porcentaje_utilidad_esperada || 0);
+    const presupMO   = montoContractual * pctMO   / 100;
+    const presupGG   = montoContractual * pctGG   / 100;
+    const presupUtil = montoContractual * pctUtil / 100;
+    const presupMat  = montoContractual - presupMO - presupGG - presupUtil;
+    const umbral     = parseFloat(cfgActual.umbral_rentabilidad_minima ?? 5);
+    const bajaRentabilidad = montoContractual > 0 && pctUtil < umbral;
+    const saludFinanciera  = montoContractual <= 0 ? 'sin_datos'
+        : pctUtil >= umbral + 5 ? 'saludable'
+        : pctUtil >= umbral     ? 'atencion'
+        :                         'critico';
+    const colorSalud = { saludable: '#34d399', atencion: '#fbbf24', critico: '#f87171', sin_datos: '#64748b' }[saludFinanciera];
+    const labelSalud = { saludable: 'Saludable', atencion: 'Atención', critico: 'Crítico', sin_datos: 'Sin datos' }[saludFinanciera];
+    const bs = n => `Bs. ${Math.round(n || 0).toLocaleString('es-BO')}`;
+
+    const FinBar = ({ label, monto, total, color }) => {
+        const pct = total > 0 ? Math.max(0, Math.min(100, monto / total * 100)) : 0;
+        return (
+            <div>
+                <div className="flex justify-between items-center mb-1">
+                    <span className="text-[11px] text-slate-400">{label}</span>
+                    <span className="text-[11px] font-medium text-slate-300">{bs(monto)} <span className="text-slate-600">({pct.toFixed(1)}%)</span></span>
+                </div>
+                <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="animate-fade-in max-w-3xl mx-auto">
@@ -238,23 +282,77 @@ const EditarProyecto = () => {
                 </GlassCard>
 
                 {/* Finanzas */}
-                <GlassCard title="Finanzas" accent="#60a5fa">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <GF label="Presupuesto Referencial (Bs.)" error={errores.presupuesto_referencial}>
-                            <input type="number" min="0" step="0.01" className={gI(!!errores.presupuesto_referencial)}
-                                value={form.presupuesto_referencial} onChange={e => set('presupuesto_referencial', e.target.value)} placeholder="0.00" />
-                        </GF>
-                        {esSocial && (
-                            <GF label="Monto Contrato (Bs.)">
-                                <input type="number" min="0" step="0.01" className={gI(false)}
-                                    value={form.monto_contrato} onChange={e => set('monto_contrato', e.target.value)} placeholder="0.00" />
+                <GlassCard title="Finanzas y Rentabilidad" accent="#60a5fa">
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <GF label="Monto Contractual / Presupuesto (Bs.)" required error={errores.monto_contractual}>
+                                <input type="number" min="0" step="0.01" className={gI(!!errores.monto_contractual)}
+                                    value={form.monto_contractual} 
+                                    onChange={e => {
+                                        set('monto_contractual', e.target.value);
+                                        set('monto_contrato', e.target.value);
+                                        set('presupuesto_referencial', e.target.value);
+                                    }} 
+                                    placeholder="0.00" />
+                            </GF>
+                            <GF label="% Mano de Obra" error={errores.porcentaje_mano_obra}>
+                                <div className="relative">
+                                    <input type="number" min="0" max="100" step="0.01" className={gI(!!errores.porcentaje_mano_obra)}
+                                        value={form.porcentaje_mano_obra} onChange={e => set('porcentaje_mano_obra', e.target.value)} />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                                </div>
+                            </GF>
+                            <GF label="% Gastos Generales" error={errores.porcentaje_gastos_generales}>
+                                <div className="relative">
+                                    <input type="number" min="0" max="100" step="0.01" className={gI(!!errores.porcentaje_gastos_generales)}
+                                        value={form.porcentaje_gastos_generales} onChange={e => set('porcentaje_gastos_generales', e.target.value)} />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                                </div>
+                            </GF>
+                            <GF label="% Utilidad Esperada" error={errores.porcentaje_utilidad_esperada}>
+                                <div className="relative">
+                                    <input type="number" min="0" max="100" step="0.01" className={gI(!!errores.porcentaje_utilidad_esperada)}
+                                        value={form.porcentaje_utilidad_esperada} onChange={e => set('porcentaje_utilidad_esperada', e.target.value)} />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                                </div>
+                            </GF>
+                        </div>
+
+                        {bajaRentabilidad && (
+                            <GF label="Justificación de Rentabilidad Baja" required error={errores.justificacion_rentabilidad_baja}>
+                                <textarea rows={2} className={gI(!!errores.justificacion_rentabilidad_baja) + ' resize-none'}
+                                    value={form.justificacion_rentabilidad_baja}
+                                    onChange={e => set('justificacion_rentabilidad_baja', e.target.value)}
+                                    placeholder="Explica por qué la utilidad es menor al umbral mínimo..." />
                             </GF>
                         )}
-                        {esSocial && (
-                            <GF label="Cantidad de Unidades">
-                                <input type="number" min="0" className={gI(false)}
-                                    value={form.cantidad_unidades} onChange={e => set('cantidad_unidades', e.target.value)} />
-                            </GF>
+
+                        {montoContractual > 0 && (
+                            <div className="rounded-2xl p-5 space-y-4" style={{ background: `${colorSalud}06`, border: `1px solid ${colorSalud}30` }}>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Vista Previa Financiera (Recálculo Dinámico)</p>
+                                    </div>
+                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1.5" style={{ background: `${colorSalud}20`, color: colorSalud }}>
+                                        {saludFinanciera !== 'sin_datos' && (
+                                            <>{bajaRentabilidad ? <TrendingDown size={14} /> : <TrendingUp size={14} />}</>
+                                        )}
+                                        {labelSalud}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                                    <FinBar label="Materiales (Calculado)" monto={presupMat} total={montoContractual} color="#60a5fa" />
+                                    <FinBar label={`Mano de Obra (${pctMO}%)`} monto={presupMO} total={montoContractual} color="#a78bfa" />
+                                    <FinBar label={`Gastos Generales (${pctGG}%)`} monto={presupGG} total={montoContractual} color="#fbbf24" />
+                                    <FinBar label={`Utilidad Esperada (${pctUtil}%)`} monto={presupUtil} total={montoContractual} color={colorSalud} />
+                                </div>
+                                {bajaRentabilidad && (
+                                    <div className="flex items-center gap-2 mt-2 p-2.5 rounded-xl" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                                        <AlertTriangle size={13} className="text-red-400 shrink-0" />
+                                        <p className="text-[11px] text-red-400">Rentabilidad por debajo del umbral mínimo de {umbral}%. Se requiere justificación.</p>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
                 </GlassCard>

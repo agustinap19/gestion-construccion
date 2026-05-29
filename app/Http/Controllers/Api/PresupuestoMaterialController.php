@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Proyecto;
 use App\Services\Almacenes\PresupuestoMaterialService;
+use App\Services\Almacenes\TrazabilidadMaterialesService;
 use Illuminate\Http\Request;
 use Exception;
 
 class PresupuestoMaterialController extends Controller
 {
-    public function __construct(protected PresupuestoMaterialService $service) {}
+    public function __construct(
+        protected PresupuestoMaterialService $service,
+        protected TrazabilidadMaterialesService $trazabilidad,
+    ) {}
 
     public function indexPorProyecto(Request $request, int $proyectoId)
     {
@@ -89,6 +94,58 @@ class PresupuestoMaterialController extends Controller
         try {
             $resultado = $this->service->importarDesdeArray($proyectoId, $request->input('filas'), $request->user()->id);
             return response()->json(['status' => 'success', 'data' => $resultado]);
+        } catch (Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Reconcilia manualmente las columnas de trazabilidad de un proyecto.
+     * Invocado desde el botón "Reconsolidar" del frontend.
+     */
+    public function reconciliar(Request $request, int $proyectoId)
+    {
+        if (!$request->user()->hasPermissionTo('presupuesto_materiales.gestionar')
+            && !$request->user()->esAdminCentral()) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        try {
+            $proyecto  = Proyecto::findOrFail($proyectoId);
+            $resultado = $this->trazabilidad->recalcularProyectoCompleto($proyecto);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Reconciliación completa: {$resultado['revisados']} materiales revisados, {$resultado['con_desfase']} con desfase, {$resultado['corregidos']} corregidos.",
+                'data'    => $resultado,
+            ]);
+        } catch (Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Retorna el detalle de movimientos de un tipo específico para un material en un proyecto.
+     * Usado cuando el usuario hace click en una columna de la tabla (Comprado, Transferido, etc.)
+     */
+    public function detalleMaterial(Request $request, int $proyectoId, int $materialId)
+    {
+        if (!$request->user()->hasPermissionTo('presupuesto_materiales.gestionar')
+            && !$request->user()->hasPermissionTo('almacenes.ver')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $request->validate([
+            'tipo' => 'required|in:compras,transferencias,entregas,mermas',
+        ]);
+
+        try {
+            $detalle = $this->trazabilidad->obtenerDetalleMovimientos(
+                $proyectoId,
+                $materialId,
+                $request->input('tipo')
+            );
+            return response()->json(['status' => 'success', 'data' => $detalle]);
         } catch (Exception $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
         }

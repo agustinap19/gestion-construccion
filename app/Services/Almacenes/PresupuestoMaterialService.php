@@ -22,15 +22,19 @@ class PresupuestoMaterialService
             'material.categoria:id,nombre,color',
             'material.unidadMedida:id,nombre,simbolo',
             'distribuciones',
-            'registradoPor:id,name',
+            'registradoPor:id,nombre,apellido_paterno',
         ])
         ->where('proyecto_id', $proyectoId)
         ->get()
         ->map(fn($p) => $this->formatearItem($p));
 
         $totales = [
-            'total_materiales' => $items->count(),
-            'monto_total'      => $items->sum('monto_total'),
+            'total_materiales'         => $items->count(),
+            'monto_total'              => $items->sum('monto_total'),
+            'monto_comprado'           => $items->sum('monto_comprado'),
+            'monto_en_almacen'         => $items->sum('monto_en_almacen'),
+            'monto_entregado'          => $items->sum('monto_entregado'),
+            'materiales_con_desfase'   => $items->where('identidad_contable_ok', false)->count(),
         ];
 
         return compact('items', 'totales');
@@ -189,23 +193,41 @@ class PresupuestoMaterialService
 
     private function formatearItem(PresupuestoMaterialProyecto $p): array
     {
-        $planificada = (float) $p->cantidad_total_planificada;
-        $comprada    = (float) ($p->cantidad_comprada ?? 0);
-        $entregada   = (float) ($p->cantidad_entregada_obra ?? 0);
-        $precio      = (float) $p->precio_unitario_presupuestado;
+        $planificada      = (float) $p->cantidad_total_planificada;
+        $comprada         = (float) ($p->cantidad_comprada ?? 0);
+        $enAlmacen        = (float) ($p->cantidad_en_almacen_proyecto ?? 0);
+        $devueltaCentral  = (float) ($p->cantidad_devuelta_central ?? 0);
+        $entregadaObra    = (float) ($p->cantidad_entregada_obra ?? 0);
+        $merma            = (float) ($p->cantidad_merma ?? 0);
+        $retrabajo        = (float) ($p->cantidad_retrabajo ?? 0);
+        $desfase          = (float) ($p->desfase_contable ?? 0);
+        $identidadOk      = (bool)  ($p->identidad_contable_ok ?? true);
+        $precio           = (float) $p->precio_unitario_presupuestado;
 
         return [
             'id'                            => $p->id,
             'material'                      => $p->material,
-            'cantidad_total_planificada'    => $planificada,
-            'cantidad_comprada'             => $comprada,
-            'cantidad_entregada_obra'       => $entregada,
+            // Cantidades de trazabilidad
+            'planificado'                   => $planificada,
+            'comprado'                      => $comprada,
+            'en_almacen'                    => $enAlmacen,
+            'devuelto_central'              => $devueltaCentral,
+            'entregado_obra'                => $entregadaObra,
+            'merma'                         => $merma,
+            'retrabajo'                     => $retrabajo,
+            // Montos
             'precio_unitario_presupuestado' => $precio,
             'monto_total'                   => round($planificada * $precio, 2),
             'monto_comprado'                => round($comprada * $precio, 2),
-            'monto_entregado'               => round($entregada * $precio, 2),
-            'pct_comprado'                  => $planificada > 0 ? round(($comprada / $planificada) * 100, 1) : 0,
-            'pct_entregado'                 => $planificada > 0 ? round(($entregada / $planificada) * 100, 1) : 0,
+            'monto_en_almacen'              => round($enAlmacen * $precio, 2),
+            'monto_entregado'               => round($entregadaObra * $precio, 2),
+            // Porcentajes de avance
+            'porcentaje_comprado'           => $planificada > 0 ? round(($comprada / $planificada) * 100, 1) : 0,
+            'porcentaje_entregado'          => $planificada > 0 ? round(($entregadaObra / $planificada) * 100, 1) : 0,
+            // Identidad contable
+            'identidad_contable_ok'         => $identidadOk,
+            'desfase'                       => $desfase,
+            // Control
             'bloqueado'                     => (bool) ($p->bloqueado ?? false),
             'notas'                         => $p->notas,
             'distribuciones'                => $p->distribuciones,
@@ -214,3 +236,4 @@ class PresupuestoMaterialService
         ];
     }
 }
+

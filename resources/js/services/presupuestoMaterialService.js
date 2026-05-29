@@ -32,7 +32,14 @@ export const presupuestoMaterialService = {
         `/api/exportar/proyectos/${proyectoId}/presupuesto-materiales`,
 
     reconsolidar: async (proyectoId) => {
-        const res = await api.post(`/proyectos/${proyectoId}/presupuesto-items/recalcular`);
+        const res = await api.post(`/proyectos/${proyectoId}/presupuesto-materiales/reconciliar`);
+        return res.data;
+    },
+
+    detalleMaterial: async (proyectoId, materialId, tipo) => {
+        const res = await api.get(`/proyectos/${proyectoId}/presupuesto-materiales/${materialId}/detalle`, {
+            params: { tipo },
+        });
         return res.data;
     },
 };

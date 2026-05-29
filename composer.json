@@ -12,7 +12,8 @@
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
         "maatwebsite/excel": "^3.1",
-        "owen-it/laravel-auditing": "^14.0"
+        "owen-it/laravel-auditing": "^14.0",
+        "simplesoftwareio/simple-qrcode": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

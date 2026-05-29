@@ -149,7 +149,28 @@ class CalculadoraAvanceService
             $avance = $items->avg('porcentaje_avance') ?? 0.0;
         }
 
-        $vivienda->porcentaje_avance = round((float) $avance, 2);
+        $avance = round((float) $avance, 2);
+        $vivienda->porcentaje_avance = $avance;
+
+        // Auto-actualizar estado basado en el avance (si no tiene observaciones)
+        if ($vivienda->estado !== 'con_observaciones') {
+            if ($avance >= 100) {
+                $vivienda->estado = 'entregada';
+            } elseif ($avance >= 90) {
+                $vivienda->estado = 'acabados';
+            } elseif ($avance >= 75) {
+                $vivienda->estado = 'obra_fina';
+            } elseif ($avance >= 50) {
+                $vivienda->estado = 'obra_gruesa';
+            } elseif ($avance >= 25) {
+                $vivienda->estado = 'cimentacion';
+            } elseif ($avance > 0) {
+                $vivienda->estado = 'terreno_preparado';
+            } elseif ($avance == 0) {
+                $vivienda->estado = 'planificada';
+            }
+        }
+
         $vivienda->save();
     }
 
@@ -190,7 +211,26 @@ class CalculadoraAvanceService
         }
 
         $proyecto->avance_fisico = round($avance, 2);
+
+        // Auto-actualizar el estado del proyecto
+        if ($proyecto->avance_fisico > 0 && in_array($proyecto->estado, ['formulacion', 'licitacion', 'adjudicado'])) {
+            $proyecto->estado = 'en_ejecucion';
+        } elseif ($proyecto->avance_fisico >= 100 && $proyecto->estado === 'en_ejecucion') {
+            $proyecto->estado = 'finalizado';
+        }
+
         $proyecto->save();
+
+        // Auto-actualizar hitos de cobro según avance físico
+        $acumuladoRequerido = 0;
+        foreach ($proyecto->hitosCobro()->orderBy('orden')->get() as $hito) {
+            $acumuladoRequerido += (float) $hito->porcentaje_contrato;
+            
+            if ($hito->estado === 'planificado' && $proyecto->avance_fisico >= ($acumuladoRequerido - 0.01)) {
+                $hito->estado = 'listo_para_cobro';
+                $hito->save();
+            }
+        }
     }
 
     /** Indicador de salud: al_dia | retraso_menor | retraso_critico */
@@ -338,18 +378,18 @@ class CalculadoraAvanceService
 
     private function ganttSocial(Proyecto $proyecto, $inicio, $fin, ?int $diasTotales): array
     {
-        $productos = $proyecto->productosContractuales()->get();
+        $productos = $proyecto->hitosCobro()->get();
         $hoy       = Carbon::today();
 
         $acumLeft = 0.0;
 
         return $productos->map(function ($p) use (&$acumLeft, $inicio, $diasTotales, $hoy) {
-            $porcentaje = (float) $p->porcentaje;
+            $porcentaje = (float) $p->porcentaje_contrato;
             $width      = max(1.0, $porcentaje);
             $left       = $acumLeft;
             $acumLeft  += $width;
 
-            $fechaCobro   = $p->fecha_planificada_cobro;
+            $fechaCobro   = $p->fecha_planificada;
             $posMarker    = null;
             if ($fechaCobro && $inicio && $diasTotales > 0) {
                 $posMarker = round(max(0.0, min(100.0, ($inicio->diffInDays($fechaCobro) / $diasTotales) * 100)), 2);
@@ -365,7 +405,7 @@ class CalculadoraAvanceService
                 'porcentaje'              => $porcentaje,
                 'monto_calculado'         => (float) $p->monto_calculado,
                 'fecha_planificada_cobro' => $fechaCobro?->format('Y-m-d'),
-                'fecha_cobro_real'        => $p->fecha_cobro_real?->format('Y-m-d'),
+                'fecha_cobro_real'        => $p->fecha_cobrado?->format('Y-m-d'),
                 'left'                    => round($left, 2),
                 'width'                   => round($width, 2),
                 'pos_marker'              => $posMarker,

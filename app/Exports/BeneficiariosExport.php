@@ -23,6 +23,9 @@ class BeneficiariosExport extends BaseExport
         if (!empty($filtros['comunidad'])) {
             $query->where('comunidad', 'like', "%{$filtros['comunidad']}%");
         }
+        if (!empty($filtros['tipo_vivienda_id'])) {
+            $query->where('tipo_vivienda_id', $filtros['tipo_vivienda_id']);
+        }
 
         $this->datos = $query->get();
     }

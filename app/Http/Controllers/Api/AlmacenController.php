@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Almacen;
+use App\Models\StockMaterial;
 use App\Services\Almacenes\AlmacenService;
+use App\Services\Almacenes\EntregaService;
 use App\Services\Almacenes\StockService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Exception;
 
@@ -12,7 +16,8 @@ class AlmacenController extends Controller
 {
     public function __construct(
         protected AlmacenService $service,
-        protected StockService   $stockService
+        protected StockService   $stockService,
+        protected EntregaService $entregaService
     ) {}
 
     public function index(Request $request)
@@ -228,6 +233,57 @@ class AlmacenController extends Controller
         } catch (Exception $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
         }
+    }
+
+    public function cerrar(Request $request, int $id): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('almacenes.gestionar')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $request->validate([
+            'motivo' => 'required|string|min:5',
+        ]);
+
+        $almacen = Almacen::findOrFail($id);
+
+        try {
+            $almacen = $this->entregaService->cerrarAlmacenProyecto(
+                $almacen,
+                $request->input('motivo'),
+                $request->user()->id
+            );
+            return response()->json(['status' => 'success', 'data' => $almacen]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function materialesConStock(Request $request, int $id): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('almacenes.ver')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $stocks = StockMaterial::with([
+            'material:id,nombre,codigo,unidad_medida_id',
+            'material.unidadMedida:id,nombre,simbolo',
+        ])
+        ->where('almacen_id', $id)
+        ->whereRaw('(cantidad - cantidad_reservada) > 0')
+        ->get()
+        ->sortBy(fn($s) => $s->material?->nombre ?? 'z')
+        ->values()
+        ->map(fn($s) => [
+            'material_id'         => $s->material_id,
+            'nombre'              => $s->material?->nombre,
+            'codigo'              => $s->material?->codigo,
+            'unidad'              => $s->material?->unidadMedida?->simbolo,
+            'cantidad_disponible' => (float) ($s->cantidad - $s->cantidad_reservada),
+            'pmp'                 => (float) $s->costo_promedio,
+        ]);
+
+        return response()->json(['status' => 'success', 'data' => $stocks]);
     }
 
     public function kardex(Request $request, int $almacenId, int $materialId)

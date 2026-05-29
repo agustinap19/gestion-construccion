@@ -30,7 +30,7 @@ class ProyectoController extends Controller
         $filtros = $request->only([
             'busqueda', 'categoria', 'estado', 'tipo_proyecto_id', 'zona_id',
             'responsable_id', 'cliente_id', 'entidad_estatal_id', 'prioridad',
-            'fecha_desde', 'fecha_hasta', 'ordenar_por', 'direccion',
+            'fecha_desde', 'fecha_hasta', 'ordenar_por', 'direccion', 'archivados',
         ]);
         $perPage = $request->input('per_page', 20);
 
@@ -102,7 +102,7 @@ class ProyectoController extends Controller
 
         // Cierre automático de almacenes cuando el proyecto finaliza
         $cierreInfo = null;
-        if ($request->estado === 'finalizado') {
+        if (in_array($request->estado, ['finalizado', 'pausado', 'cancelado'])) {
             try {
                 $cierreInfo = $this->cierreService->cerrarProyecto(
                     $proyecto instanceof Proyecto ? $proyecto : Proyecto::find($id),

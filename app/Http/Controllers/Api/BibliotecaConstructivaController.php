@@ -178,14 +178,16 @@ class BibliotecaConstructivaController extends Controller
 
     public function descargarPlantillaExcel(Request $request)
     {
-        $headers = ['A' => 'codigo', 'B' => 'nombre', 'C' => 'categoria', 'D' => 'unidad_base', 'E' => 'descripcion'];
-
-        return response()->streamDownload(function () use ($headers) {
-            $f = fopen('php://output', 'w');
-            fputcsv($f, array_values($headers));
-            fputcsv($f, ['ITM-EJ1', 'Ejemplo: Zapata H°A°', 'Cimientos', 'm3', 'Zapata de hormigón armado H21']);
-            fclose($f);
-        }, 'plantilla_items_constructivos.csv', ['Content-Type' => 'text/csv']);
+        return Excel::download(new class implements \Maatwebsite\Excel\Concerns\FromArray, \Maatwebsite\Excel\Concerns\WithHeadings {
+            public function array(): array {
+                return [
+                    ['ITM-EJ1', 'Ejemplo: Zapata H°A°', 'Cimientos', 'm3', 'Zapata de hormigón armado H21']
+                ];
+            }
+            public function headings(): array {
+                return ['codigo', 'nombre', 'categoria', 'unidad_base', 'descripcion'];
+            }
+        }, 'plantilla_items_constructivos.xlsx');
     }
 
     public function importarExcel(Request $request)

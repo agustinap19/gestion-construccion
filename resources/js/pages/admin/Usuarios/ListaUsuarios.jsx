@@ -217,7 +217,7 @@ const ListaUsuarios = () => {
                     <div className="flex items-center gap-2">
                         <BotonExportar
                             url="/exportar/usuarios"
-                            params={{
+                            filtros={{
                                 ...(filtros.estado && filtros.estado !== 'todos' && filtros.estado !== 'pendiente' && { estado: filtros.estado }),
                                 ...(filtros.rol_id && { rol_id: filtros.rol_id }),
                             }}

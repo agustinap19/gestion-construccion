@@ -8,7 +8,7 @@ import movimientoAlmacenService from '../../../services/movimientoAlmacenService
 import {
     Warehouse, Package, ArrowLeft, ArrowUp, ArrowDown, ArrowRight,
     AlertTriangle, TrendingUp, Search, RefreshCw, ChevronRight,
-    User, Briefcase, ShoppingCart, XCircle, Eye
+    User, Briefcase, ShoppingCart, XCircle, Eye, Check
 } from '../../../components/icons/Icons';
 import Badge from '../../../components/ui/Badge';
 import EmptyState from '../../../components/ui/EmptyState';
@@ -83,6 +83,7 @@ export default function AlmacenDetalle() {
     const [detalleMovId, setDetalleMovId] = useState(null);
     const [detalleMov, setDetalleMov]     = useState(null);
     const [anulandoId, setAnulandoId]     = useState(null);
+    const [confirmandoId, setConfirmandoId] = useState(null);
 
     const loadData = useCallback(async () => {
         try {
@@ -114,6 +115,23 @@ export default function AlmacenDetalle() {
         }
     }, [id, filtroTipo, filtroEstado, movBusqueda, movPage]);
 
+    const [devolviendo, setDevolviendo] = useState(false);
+    
+    const devolverCentral = async () => {
+        if (!confirm('¿Está seguro de transferir todo el stock restante al almacén central? Esta acción es irreversible.')) return;
+        setDevolviendo(true);
+        try {
+            await movimientoAlmacenService.devolverCentral(id);
+            toast.success('Materiales enviados al almacén central con éxito.');
+            loadData();
+            if (tab === 'movimientos') loadMovimientos();
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Error al devolver materiales.');
+        } finally {
+            setDevolviendo(false);
+        }
+    };
+
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => { if (tab === 'movimientos') loadMovimientos(); }, [tab, loadMovimientos]);
 
@@ -128,6 +146,18 @@ export default function AlmacenDetalle() {
             const res = await movimientoAlmacenService.obtener(movId);
             setDetalleMov(res.data);
         } catch { toast.error('No se pudo cargar el detalle.'); }
+    };
+
+    const confirmarTransferencia = async (mov) => {
+        setConfirmandoId(mov.id);
+        try {
+            await movimientoAlmacenService.confirmarTransferencia(mov.id);
+            toast.success('Transferencia confirmada como recibida.');
+            loadMovimientos();
+            loadData();
+        } catch (err) {
+            toast.error(err?.response?.data?.message || 'No se pudo confirmar.');
+        } finally { setConfirmandoId(null); }
     };
 
     const anular = async (mov) => {
@@ -213,6 +243,16 @@ export default function AlmacenDetalle() {
                                 <ArrowRight className="w-4 h-4" /> Transferir
                             </button>
                         )}
+                    </div>
+                )}
+                
+                {almacen.estado === 'cerrado' && almacen.tipo !== 'central' && (
+                    <div className="flex flex-wrap gap-2">
+                        <button onClick={devolverCentral} disabled={devolviendo}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-orange-600/80 hover:bg-orange-600 text-white text-sm font-medium transition-all disabled:opacity-50">
+                            <ArrowRight className="w-4 h-4" /> 
+                            {devolviendo ? 'Devolviendo...' : 'Devolver restante a Central'}
+                        </button>
                     </div>
                 )}
             </div>
@@ -398,13 +438,24 @@ export default function AlmacenDetalle() {
                                                         </span>
                                                     </td>
                                                     <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                                                        {mov.estado === 'completado' && (
-                                                            <button onClick={() => anular(mov)}
-                                                                disabled={anulandoId === mov.id}
-                                                                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 disabled:opacity-30 transition-all">
-                                                                <XCircle className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
+                                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            {mov.estado === 'en_transito' && (
+                                                                <button onClick={() => confirmarTransferencia(mov)}
+                                                                    disabled={confirmandoId === mov.id}
+                                                                    title="Confirmar recepción"
+                                                                    className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 disabled:opacity-30 transition-all">
+                                                                    <Check className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                            {mov.estado === 'completado' && (
+                                                                <button onClick={() => anular(mov)}
+                                                                    disabled={anulandoId === mov.id}
+                                                                    title="Anular movimiento"
+                                                                    className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 disabled:opacity-30 transition-all">
+                                                                    <XCircle className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -510,16 +561,19 @@ export default function AlmacenDetalle() {
                 )}
                 {modalSocialOpen && (
                     <EntregaSocialModal key="modal-social" almacen={almacen}
+                        stocks={data?.stocks || []}
                         onClose={() => setModalSocialOpen(false)}
                         onGuardado={() => { setModalSocialOpen(false); handleGuardado(); }} />
                 )}
                 {modalPrivadaOpen && (
                     <EntregaPrivadaModal key="modal-privada" almacen={almacen}
+                        stocks={data?.stocks || []}
                         onClose={() => setModalPrivadaOpen(false)}
                         onGuardado={() => { setModalPrivadaOpen(false); handleGuardado(); }} />
                 )}
                 {modalTransfer && (
                     <TransferenciaModal key="modal-transfer" almacen={almacen}
+                        stocks={data?.stocks || []}
                         onClose={() => setModalTransfer(false)}
                         onGuardado={() => { setModalTransfer(false); handleGuardado(); }} />
                 )}

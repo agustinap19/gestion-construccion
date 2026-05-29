@@ -10,6 +10,7 @@ import {
     Hammer, Ruler, Boxes, GripVertical
 } from '../../../components/icons/Icons';
 import EmptyState from '../../../components/ui/EmptyState';
+import BotonExportar from '../../../components/ui/BotonExportar';
 import ItemConstructivoModal from './ItemConstructivoModal';
 import PlantillaConstructivaModal from './PlantillaConstructivaModal';
 import CategoriasConstructivasDrawer from './CategoriasConstructivasDrawer';
@@ -185,11 +186,12 @@ export default function BibliotecaConstructiva() {
                                     <input type="file" accept=".csv,.xlsx,.xls" className="hidden"
                                         onChange={e => setImportFile(e.target.files[0])} />
                                 </label>
-                                <button onClick={bibliotecaConstructivaService.descargarPlantillaExcel}
-                                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl
-                                    bg-white/5 border border-white/10 text-white/60 text-sm hover:bg-white/10 hover:text-white transition-all">
-                                    <Download className="w-4 h-4" /> Plantilla
-                                </button>
+
+                                <BotonExportar
+                                    url="/biblioteca-constructiva/reportes/items"
+                                    filtros={{ busqueda: itemsBusqueda, categoria_id: itemsCatFiltro }}
+                                    formatos={['pdf', 'excel']}
+                                />
                                 <button onClick={() => setCatDrawer(true)}
                                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl
                                     bg-white/5 border border-white/10 text-white/60 text-sm hover:bg-white/10 hover:text-white transition-all">

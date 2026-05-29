@@ -873,9 +873,10 @@ export default function BeneficiariosProyecto() {
                             {/* Exportar lista */}
                             <BotonExportar
                                 url={`/exportar/proyectos/${id}/beneficiarios`}
-                                params={{
+                                filtros={{
                                     ...(filtroEstado    && { estado_seleccion: filtroEstado }),
                                     ...(filtroComunidad && { comunidad: filtroComunidad }),
+                                    ...(filtroTipologia && { tipo_vivienda_id: filtroTipologia }),
                                 }}
                                 formatos={[
                                     { tipo: 'pdf',   label: 'Lista PDF'   },

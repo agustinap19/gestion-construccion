@@ -107,7 +107,11 @@ const MaterialesIndex = () => {
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/60 text-sm hover:bg-white/10 hover:text-white transition-all">
                             <Tag className="w-4 h-4" /> Categorías
                         </button>
-                        <BotonExportar url="/exportar/materiales" formatos={[{ tipo: 'pdf', label: 'PDF' }]} label="Exportar"
+                        <BotonExportar 
+                            url="/exportar/materiales" 
+                            filtros={{ busqueda, tipo: filtroTipo, categoria: filtroCategoria }}
+                            formatos={['pdf', 'excel']} 
+                            label="Exportar"
                             className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20" />
                         <button onClick={() => { setSelectedMaterial(null); setModalOpen(true); }}
                             className="flex items-center gap-2 px-5 py-2.5 rounded-xl

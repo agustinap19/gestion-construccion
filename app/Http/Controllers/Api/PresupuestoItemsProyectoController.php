@@ -4,13 +4,21 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Almacenes\PresupuestoAutomaticoService;
+use App\Services\Almacenes\RecetaResolverService;
+use App\Models\DetalleMovimientoAlmacen;
 use App\Models\PresupuestoItemProyecto;
+use App\Models\StockMaterial;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Exception;
 
 class PresupuestoItemsProyectoController extends Controller
 {
-    public function __construct(protected PresupuestoAutomaticoService $service) {}
+    public function __construct(
+        protected PresupuestoAutomaticoService $service,
+        protected RecetaResolverService $recetaResolver,
+    ) {}
 
     public function consolidado(Request $request, int $proyectoId)
     {
@@ -160,6 +168,78 @@ class PresupuestoItemsProyectoController extends Controller
     }
 
     /**
+     * Receta resuelta por jerarquía (vivienda > tipología > global) + stock real.
+     * GET /presupuesto-items-proyecto/{pipId}/receta-con-stock/{almacenId}
+     */
+    public function recetaConStock(Request $request, int $pipId, int $almacenId): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('presupuesto_materiales.ver')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $pip = PresupuestoItemProyecto::findOrFail($pipId);
+
+        // Resolver con jerarquía: override vivienda > override tipología > receta global
+        $receta = $this->recetaResolver->resolver(
+            $pip->item_constructivo_id,
+            $pip->proyecto_id,
+            $pip->vivienda_id
+        );
+
+        if ($receta->isEmpty()) {
+            return response()->json(['status' => 'success', 'data' => []]);
+        }
+
+        $materialIds = $receta->pluck('material_id');
+
+        // Stock disponible (bulk, sin N+1)
+        $stocks = StockMaterial::whereIn('material_id', $materialIds)
+            ->where('almacen_id', $almacenId)
+            ->get()
+            ->keyBy('material_id');
+
+        // Ya entregado (bulk, sin N+1)
+        $yaEntregado = DetalleMovimientoAlmacen::select('material_id', DB::raw('SUM(cantidad) as total'))
+            ->whereHas('movimiento', fn($q) => $q
+                ->where('presupuesto_item_proyecto_id', $pipId)
+                ->whereNotIn('estado', ['anulado', 'borrador'])
+            )
+            ->whereIn('material_id', $materialIds)
+            ->groupBy('material_id')
+            ->get()
+            ->keyBy('material_id');
+
+        $cantidadPlan = (float) $pip->cantidad_planificada;
+
+        $data = $receta->map(function (array $r) use ($stocks, $yaEntregado, $cantidadPlan) {
+            $matId      = $r['material_id'];
+            $stock      = $stocks->get($matId);
+            $disponible = $stock ? max(0.0, (float)($stock->cantidad - $stock->cantidad_reservada)) : 0.0;
+            $teoricoTotal = round($r['cantidad_por_unidad_base'] * $cantidadPlan, 4);
+            $entregado    = (float) ($yaEntregado->get($matId)?->total ?? 0);
+            $restante     = max(0.0, $teoricoTotal - $entregado);
+            $mat          = $r['material'];
+
+            return [
+                'material_id'                => $matId,
+                'nombre'                     => $mat?->nombre,
+                'codigo'                     => $mat?->codigo,
+                'unidad'                     => $r['unidad_material'] ?: ($mat?->unidadMedida?->simbolo ?? ''),
+                'cantidad_por_unidad_base'   => $r['cantidad_por_unidad_base'],
+                'fuente'                     => $r['fuente'],  // vivienda | tipologia | global
+                'teorico_total'              => $teoricoTotal,
+                'ya_entregado'               => $entregado,
+                'teorico_restante'           => $restante,
+                'cantidad_disponible_almacen'=> $disponible,
+                'tiene_stock'                => $disponible > 0,
+                'item_completo'              => $restante <= 0,
+            ];
+        })->values();
+
+        return response()->json(['status' => 'success', 'data' => $data]);
+    }
+
+    /**
      * Endpoint standalone para cargar ítems por beneficiario/vivienda.
      * Usado por EntregaSocialModal: GET /presupuesto-items-proyecto?proyecto_id=X&beneficiario_id=Y&por_entregar=1
      */
@@ -175,7 +255,7 @@ class PresupuestoItemsProyectoController extends Controller
 
         // Resolver vivienda desde beneficiario si no viene explícito
         if (!$viviendaId && $beneficiarioId) {
-            $viviendaId = \App\Models\Beneficiario::where('id', $beneficiarioId)
+            $viviendaId = \App\Models\Beneficiario::where('beneficiarios.id', $beneficiarioId)
                 ->join('viviendas', 'viviendas.beneficiario_id', '=', 'beneficiarios.id')
                 ->value('viviendas.id');
         }
@@ -183,6 +263,9 @@ class PresupuestoItemsProyectoController extends Controller
         $query = PresupuestoItemProyecto::with([
             'itemConstructivo:id,nombre,codigo,unidad_base',
             'itemConstructivo.categoria:id,nombre,color',
+            'itemConstructivo.receta',
+            'itemConstructivo.receta.material:id,nombre,codigo,unidad_medida_id',
+            'itemConstructivo.receta.material.unidadMedida:id,nombre,simbolo',
             'vivienda:id,codigo',
         ]);
 

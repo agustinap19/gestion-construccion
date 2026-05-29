@@ -13,10 +13,11 @@ import Skeleton from '../../../components/ui/Skeleton';
 import {
     Briefcase, Edit, ArrowLeft, Users, Building, MapPin, Calendar,
     Clock, Package, TrendingUp, BarChart2, Activity, ChevronDown, ChevronRight,
-    X, Check, AlertTriangle, Download, FileText, Table2, UserCheck,
+    X, Check, CheckCircle, AlertTriangle, Download, FileText, Table2, UserCheck,
     ClipboardList, Wrench, Flag, Plus, ExternalLink, Layers, Trash2, Upload,
     History, Eye, Search, User, RefreshCw
 } from '../../../components/icons/Icons';
+import { Loader2 } from 'lucide-react';
 
 /* ══════════════════════════════════════════════════
    Design tokens
@@ -1606,7 +1607,7 @@ function AsignarPersonalModal({ proyectoId, onClose, onGuardado }) {
     const timerRef = useRef(null);
 
     useEffect(() => {
-        if (!query.trim()) { setResultados([]); return; }
+        if (!query.trim() || seleccionado) { setResultados([]); return; }
         clearTimeout(timerRef.current);
         timerRef.current = setTimeout(async () => {
             setBuscando(true);
@@ -1614,7 +1615,7 @@ function AsignarPersonalModal({ proyectoId, onClose, onGuardado }) {
             catch { setResultados([]); }
             finally { setBuscando(false); }
         }, 300);
-    }, [query]);
+    }, [query, seleccionado]);
 
     const guardar = async () => {
         if (!seleccionado) { toast.error('Selecciona un empleado'); return; }
@@ -2363,7 +2364,8 @@ const DetalleProyecto = () => {
     const { proyecto, avance, gantt, almacen, beneficiarios_resumen, hitos_proximos, transiciones_permitidas, hitos_cobro = [] } = dash;
     const esSocial  = proyecto.categoria === 'social';
     const estadoM   = ESTADO_META[proyecto.estado] ?? ESTADO_META.formulacion;
-    const canEdit   = hasPermission('proyectos.editar');
+    const isEditableState = !['finalizado', 'cancelado', 'pausado'].includes(proyecto.estado);
+    const canEdit   = hasPermission('proyectos.editar') && isEditableState;
     const pctAvance = parseFloat(avance.global ?? 0);
     const avanceColor = pctAvance >= 80 ? '#34d399' : pctAvance >= 40 ? '#60a5fa' : '#fbbf24';
     const contraparte = esSocial ? proyecto.entidad_estatal?.nombre : (proyecto.cliente?.nombre_completo ?? proyecto.cliente?.nombre_visible);
@@ -2783,14 +2785,105 @@ const MatrizItemsProductosSection = ({ proyectoId, canEdit }) => {
 };
 
 /* ══════════════════════════════════════════════════
+   Modal de Detalle de Movimientos (Liquid Glass)
+═══════════════════════════════════════════════════ */
+const ModalDetalleMaterial = ({ isOpen, onClose, proyectoId, material, tipo }) => {
+    const [detalles, setDetalles] = useState(null);
+    const [loading, setLoading]   = useState(true);
+
+    useEffect(() => {
+        if (!isOpen || !material || !tipo) return;
+        setLoading(true);
+        presupuestoMaterialService.detalleMaterial(proyectoId, material.id, tipo)
+            .then(res => setDetalles(res.data))
+            .catch(() => toast.error('Error al cargar detalle'))
+            .finally(() => setLoading(false));
+    }, [isOpen, material, tipo, proyectoId]);
+
+    if (!isOpen) return null;
+
+    const titulos = {
+        compras: 'Compras',
+        transferencias: 'Transferencias al Central (Devoluciones)',
+        entregas: 'Entregas a Obra',
+        mermas: 'Mermas y Retrabajos'
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="relative w-full max-w-3xl overflow-hidden rounded-3xl animate-fade-in"
+                style={{
+                    background: 'linear-gradient(145deg, rgba(30,41,59,0.95), rgba(15,23,42,0.98))',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)'
+                }}>
+                <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)' }} />
+                
+                <div className="p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Package className="text-blue-400" size={20} />
+                                {material?.nombre}
+                            </h3>
+                            <p className="text-slate-400 text-sm mt-1">{titulos[tipo]}</p>
+                        </div>
+                        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                        {loading ? (
+                            <div className="p-12 text-center text-slate-400 animate-pulse">Cargando movimientos...</div>
+                        ) : detalles?.length === 0 ? (
+                            <div className="p-12 text-center text-slate-500">No hay movimientos registrados de este tipo.</div>
+                        ) : (
+                            <div className="max-h-[60vh] overflow-y-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-white/5 text-slate-300 text-xs uppercase sticky top-0 backdrop-blur-md">
+                                        <tr>
+                                            <th className="px-4 py-3 font-medium">Fecha</th>
+                                            <th className="px-4 py-3 font-medium">Código Mov.</th>
+                                            <th className="px-4 py-3 font-medium">Tipo</th>
+                                            <th className="px-4 py-3 font-medium text-right">Cantidad</th>
+                                            {tipo === 'compras' && <th className="px-4 py-3 font-medium text-right">P. Unit.</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {detalles?.map(d => (
+                                            <tr key={d.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-4 py-3 text-slate-400">{d.fecha ? new Date(d.fecha).toLocaleDateString() : '—'}</td>
+                                                <td className="px-4 py-3 font-mono text-xs text-blue-300">{d.movimiento_codigo || '—'}</td>
+                                                <td className="px-4 py-3 text-slate-300 capitalize">{d.tipo ? d.tipo.replace('_', ' ') : '—'}</td>
+                                                <td className="px-4 py-3 text-right font-medium text-white">{Number(d.cantidad).toFixed(2)}</td>
+                                                {tipo === 'compras' && <td className="px-4 py-3 text-right text-slate-400">Bs {Number(d.precio_unitario).toFixed(2)}</td>}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ══════════════════════════════════════════════════
    Presupuesto de Materiales (mini-vista en detalle)
 ═══════════════════════════════════════════════════ */
 const PresupuestoMaterialesSection = ({ proyectoId, canEdit }) => {
     const [items, setItems]         = useState([]);
-    const [totales, setTotales]     = useState({ total_materiales: 0, monto_total: 0 });
+    const [totales, setTotales]     = useState({ total_materiales: 0, monto_total: 0, materiales_con_desfase: 0 });
     const [loading, setLoading]     = useState(true);
     const [reconsolidando, setReconsolidando] = useState(false);
     const [busqueda, setBusqueda]   = useState('');
+    
+    // Modal state
+    const [modalInfo, setModalInfo] = useState({ isOpen: false, material: null, tipo: null });
 
     const cargar = () => {
         setLoading(true);
@@ -2808,9 +2901,9 @@ const PresupuestoMaterialesSection = ({ proyectoId, canEdit }) => {
     const handleReconsolidar = async () => {
         setReconsolidando(true);
         try {
-            await presupuestoMaterialService.reconsolidar(proyectoId);
+            const r = await presupuestoMaterialService.reconsolidar(proyectoId);
+            toast.success(`Reconciliación completa: ${r.data?.corregidos} corregidos.`);
             await cargar();
-            toast.success('Presupuesto reconsolidado.');
         } catch { toast.error('Error al reconsolidar.'); }
         finally { setReconsolidando(false); }
     };
@@ -2820,121 +2913,128 @@ const PresupuestoMaterialesSection = ({ proyectoId, canEdit }) => {
             || i.material?.codigo?.toLowerCase().includes(busqueda.toLowerCase()))
         : items;
 
-    const montoComprado  = items.reduce((s, i) => s + (i.monto_comprado || 0), 0);
-    const montoEntregado = items.reduce((s, i) => s + (i.monto_entregado || 0), 0);
-    const montoTotal     = totales.monto_total || 0;
+    const montoTotal = totales.monto_total || 0;
 
     return (
         <GlassCard className="p-5">
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                     <Package size={16} className="text-violet-400" />
-                    <h3 className="text-sm font-bold text-white">Presupuesto de Materiales</h3>
+                    <h3 className="text-sm font-bold text-white">Trazabilidad de Materiales</h3>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 font-medium">
                         {totales.total_materiales} ítems
                     </span>
+                    {totales.materiales_con_desfase > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 font-bold flex items-center gap-1">
+                            <AlertTriangle size={12} /> {totales.materiales_con_desfase} con desfase
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                     {canEdit && (
                         <button onClick={handleReconsolidar} disabled={reconsolidando}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-slate-400 hover:text-white transition-all disabled:opacity-50"
-                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-                            title="Recalcular desde ítems de presupuesto">
-                            <RefreshCw size={10} className={reconsolidando ? 'animate-spin' : ''} />
-                            {reconsolidando ? 'Calculando…' : 'Reconsolidar'}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-sky-400 hover:text-sky-300 transition-all disabled:opacity-50"
+                            style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.2)' }}
+                            title="Recalcular todo desde los movimientos de almacén reales">
+                            <RefreshCw size={12} className={reconsolidando ? 'animate-spin' : ''} />
+                            {reconsolidando ? 'Reconciliando…' : 'Reconsolidar Todo'}
                         </button>
                     )}
-                    <a href={presupuestoMaterialService.exportarPdf(proyectoId)} target="_blank" rel="noreferrer"
-                       className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10
-                                  text-slate-400 hover:text-white hover:bg-white/10 text-xs transition-all">
-                        <Download size={11} /> PDF
-                    </a>
+                    <BotonExportar
+                        url={`/proyectos/${proyectoId}/reportes/balance-consolidado`}
+                        filtros={{ search: busqueda }}
+                        formatos={['pdf', 'excel']}
+                        label="Balance Oficial"
+                    />
                 </div>
             </div>
-
-            {/* Resumen en 3 chips */}
-            {!loading && items.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                    <span className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)' }}>
-                        <span className="text-slate-400">Presup. </span>
-                        <span className="text-violet-300 font-semibold">Bs {Number(montoTotal).toLocaleString('es-BO', { minimumFractionDigits: 2 })}</span>
-                    </span>
-                    <span className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                        <span className="text-slate-400">Comprado </span>
-                        <span className="text-emerald-300 font-semibold">Bs {Number(montoComprado).toLocaleString('es-BO', { minimumFractionDigits: 2 })}</span>
-                    </span>
-                    <span className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                        <span className="text-slate-400">Entregado </span>
-                        <span className="text-amber-300 font-semibold">Bs {Number(montoEntregado).toLocaleString('es-BO', { minimumFractionDigits: 2 })}</span>
-                    </span>
-                </div>
-            )}
 
             {/* Buscador inline */}
             {items.length > 5 && (
                 <div className="relative mb-3">
                     <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
                         placeholder="Buscar material…"
-                        className="w-full pl-7 pr-3 py-1.5 rounded-lg text-xs text-white placeholder-white/30 focus:outline-none"
+                        className="w-full pl-8 pr-3 py-2 rounded-xl text-xs text-white placeholder-white/30 focus:outline-none transition-all focus:border-violet-500/50"
                         style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
-                    <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 </div>
             )}
 
             {loading ? (
-                <div className="text-slate-500 text-xs py-4 text-center">Cargando…</div>
+                <div className="text-slate-500 text-xs py-8 text-center animate-pulse">Cargando trazabilidad…</div>
             ) : items.length === 0 ? (
-                <div className="text-center py-6">
-                    <Package size={28} className="mx-auto text-slate-600 mb-2" />
-                    <p className="text-slate-500 text-xs">Sin materiales presupuestados</p>
-                    {canEdit && (
-                        <p className="text-slate-600 text-xs mt-1">Registre beneficiarios con tipología para generar automáticamente, o use "Reconsolidar".</p>
-                    )}
+                <div className="text-center py-8">
+                    <Package size={32} className="mx-auto text-slate-600 mb-3" />
+                    <p className="text-slate-500 text-sm">Sin materiales presupuestados</p>
                 </div>
             ) : (
-                <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto rounded-xl border border-white/5 scrollbar-thin">
                     <table className="w-full text-xs">
-                        <thead className="sticky top-0 z-10" style={{ background: 'rgba(15,23,42,0.85)' }}>
+                        <thead className="sticky top-0 z-10" style={{ background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(10px)' }}>
                             <tr className="border-b border-white/10">
-                                <th className="text-left text-slate-400 py-2 pr-3 font-medium">Material</th>
-                                <th className="text-right text-slate-400 py-2 px-2 font-medium">Planif.</th>
-                                <th className="text-right text-slate-400 py-2 px-2 font-medium">Comprado</th>
-                                <th className="text-right text-slate-400 py-2 px-2 font-medium">Entregado</th>
-                                <th className="text-right text-slate-400 py-2 pl-2 font-medium">Bs Total</th>
+                                <th className="text-left text-slate-400 py-3 px-3 font-semibold">Material</th>
+                                <th className="text-right text-slate-400 py-3 px-2 font-semibold">Planificado</th>
+                                <th className="text-right text-blue-400 py-3 px-2 font-semibold">Comprado</th>
+                                <th className="text-right text-sky-400 py-3 px-2 font-semibold">En Almacén</th>
+                                <th className="text-right text-purple-400 py-3 px-2 font-semibold">Devuelto</th>
+                                <th className="text-right text-emerald-400 py-3 px-2 font-semibold">Entregado</th>
+                                <th className="text-right text-orange-400 py-3 px-2 font-semibold">Merma/Retr.</th>
+                                <th className="text-center text-slate-400 py-3 px-2 font-semibold" title="Identidad Contable: Comprado = EnAlmacen + Devuelto + Entregado + Merma">Estado</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-white/5">
                             {itemsFiltrados.map(item => {
                                 const catColor = item.material?.categoria?.color || '#6366f1';
-                                const pctC = item.pct_comprado || 0;
-                                const pctE = item.pct_entregado || 0;
+                                const desfase = parseFloat(item.desfase) !== 0;
+                                const openModal = (tipo) => setModalInfo({ isOpen: true, material: item.material, tipo });
+                                
                                 return (
-                                    <tr key={item.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                                        <td className="py-2 pr-3">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: catColor }} />
-                                                <span className="text-white truncate max-w-[140px]">{item.material?.nombre}</span>
+                                    <tr key={item.id} className="hover:bg-white/[0.03] transition-colors group">
+                                        <td className="py-2 px-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: catColor, boxShadow: `0 0 8px ${catColor}` }} />
+                                                <span className="text-white font-medium truncate max-w-[150px]">{item.material?.nombre}</span>
                                             </div>
-                                            <div className="text-slate-600 text-[10px] pl-3">{item.material?.codigo} · {item.material?.categoria?.nombre}</div>
+                                            <div className="text-slate-500 text-[10px] pl-4">{item.material?.codigo} · {item.material?.unidadMedida?.simbolo}</div>
                                         </td>
-                                        <td className="py-2 px-2 text-right text-slate-300">
-                                            {Number(item.cantidad_total_planificada).toFixed(2)}
-                                            <span className="text-slate-600 ml-0.5">{item.material?.unidadMedida?.simbolo}</span>
-                                        </td>
-                                        <td className="py-2 px-2 text-right">
-                                            <span className={pctC >= 100 ? 'text-emerald-400' : pctC > 0 ? 'text-sky-400' : 'text-slate-600'}>
-                                                {Number(item.cantidad_comprada).toFixed(2)}
-                                            </span>
-                                            <span className="text-slate-700 ml-0.5 text-[10px]">{pctC > 0 ? `${pctC}%` : ''}</span>
+                                        <td className="py-2 px-2 text-right text-slate-300 font-medium">
+                                            {Number(item.planificado || item.cantidad_total_planificada).toFixed(2)}
                                         </td>
                                         <td className="py-2 px-2 text-right">
-                                            <span className={pctE >= 100 ? 'text-emerald-400' : pctE > 0 ? 'text-amber-400' : 'text-slate-600'}>
-                                                {Number(item.cantidad_entregada_obra).toFixed(2)}
-                                            </span>
-                                            <span className="text-slate-700 ml-0.5 text-[10px]">{pctE > 0 ? `${pctE}%` : ''}</span>
+                                            <button onClick={() => openModal('compras')} className="text-blue-300 font-bold hover:text-blue-200 hover:underline transition-all">
+                                                {Number(item.comprado || 0).toFixed(2)}
+                                            </button>
                                         </td>
-                                        <td className="py-2 pl-2 text-right text-violet-300 font-medium">
-                                            {Number(item.monto_total).toFixed(0)}
+                                        <td className="py-2 px-2 text-right">
+                                            <span className="text-sky-300 font-bold">
+                                                {Number(item.en_almacen || 0).toFixed(2)}
+                                            </span>
+                                        </td>
+                                        <td className="py-2 px-2 text-right">
+                                            <button onClick={() => openModal('transferencias')} className="text-purple-300 font-bold hover:text-purple-200 hover:underline transition-all">
+                                                {Number(item.devuelto_central || 0).toFixed(2)}
+                                            </button>
+                                        </td>
+                                        <td className="py-2 px-2 text-right">
+                                            <button onClick={() => openModal('entregas')} className="text-emerald-300 font-bold hover:text-emerald-200 hover:underline transition-all">
+                                                {Number(item.entregado_obra || 0).toFixed(2)}
+                                            </button>
+                                        </td>
+                                        <td className="py-2 px-2 text-right">
+                                            <button onClick={() => openModal('mermas')} className="text-orange-300 font-bold hover:text-orange-200 hover:underline transition-all">
+                                                {Number((parseFloat(item.merma) || 0) + (parseFloat(item.retrabajo) || 0)).toFixed(2)}
+                                            </button>
+                                        </td>
+                                        <td className="py-2 px-2 text-center">
+                                            {desfase ? (
+                                                <div className="flex items-center justify-center gap-1 text-red-400 font-bold" title={`Desfase de ${item.desfase}`}>
+                                                    <AlertTriangle size={14} />
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-center text-emerald-500" title="Identidad Contable OK">
+                                                    <Check size={14} />
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -2942,10 +3042,18 @@ const PresupuestoMaterialesSection = ({ proyectoId, canEdit }) => {
                         </tbody>
                     </table>
                     {busqueda && itemsFiltrados.length === 0 && (
-                        <p className="text-slate-600 text-xs mt-3 text-center">Sin resultados para "{busqueda}"</p>
+                        <p className="text-slate-600 text-xs py-4 text-center">Sin resultados para "{busqueda}"</p>
                     )}
                 </div>
             )}
+            
+            <ModalDetalleMaterial 
+                isOpen={modalInfo.isOpen}
+                onClose={() => setModalInfo({ isOpen: false, material: null, tipo: null })}
+                proyectoId={proyectoId}
+                material={modalInfo.material}
+                tipo={modalInfo.tipo}
+            />
         </GlassCard>
     );
 };

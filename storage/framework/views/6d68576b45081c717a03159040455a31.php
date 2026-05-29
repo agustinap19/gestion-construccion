@@ -3,15 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <style>
-    body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; color: #1e293b; margin: 0; padding: 18px; }
-    h1 { font-size: 15px; color: #0f172a; margin-bottom: 2px; }
+    body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10px; color: #333; margin: 0; padding: 0; }
+    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; padding-top: 10px; }
+    .header h1 { margin: 0; font-size: 16px; color: #1e3a8a; }
+    .header h2 { margin: 5px 0; font-size: 14px; color: #1e40af; }
+    .header p { margin: 2px 0; font-size: 10px; color: #64748b; }
     h2 { font-size: 12px; color: #0f172a; margin: 16px 0 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .subtitle { font-size: 9px; color: #64748b; margin-bottom: 14px; }
-    .kpi-row { display: flex; gap: 10px; margin-bottom: 14px; }
-    .kpi { padding: 6px 14px; background: #f8fafc; border-radius: 4px; text-align: center; border: 1px solid #e2e8f0; }
-    .kpi-val { font-size: 18px; font-weight: bold; color: #059669; }
-    .kpi-lbl { font-size: 8px; color: #94a3b8; text-transform: uppercase; }
-    .info-grid { display: flex; gap: 16px; margin-bottom: 14px; }
+    .kpi-row { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    .kpi-row td { text-align: center; border: 1px solid #e2e8f0; padding: 10px; background: #f8fafc; width: 25%; }
+    .kpi-val { font-size: 16px; font-weight: bold; color: #2563eb; display: block; margin-bottom: 2px; }
+    .kpi-lbl { font-size: 9px; color: #64748b; text-transform: uppercase; }
     .info-block { flex: 1; background: #f8fafc; border-radius: 4px; padding: 8px 12px; border: 1px solid #e2e8f0; }
     .info-row { margin-bottom: 3px; }
     .info-lbl { font-size: 8px; color: #94a3b8; text-transform: uppercase; }
@@ -44,32 +45,33 @@
 </head>
 <body>
 
-<h1>Reporte de Avance Individual — <?php echo e($vivienda->beneficiario ? $vivienda->beneficiario->nombre . ' ' . $vivienda->beneficiario->apellido_paterno : 'Sin Asignar'); ?></h1>
-<div class="subtitle">
-    Proyecto: <?php echo e($vivienda->proyecto?->nombre ?? '—'); ?> (<?php echo e($vivienda->proyecto?->codigo ?? '—'); ?>)
-    &mdash; Generado: <?php echo e(now()->format('d/m/Y H:i')); ?>
+    <div class="header">
+        <h1>CA & KANAGF S.R.L.</h1>
+        <h2>Reporte de Avance Individual</h2>
+        <p>Beneficiario: <?php echo e($vivienda->beneficiario ? $vivienda->beneficiario->nombre . ' ' . $vivienda->beneficiario->apellido_paterno : 'Sin Asignar'); ?> | Proyecto: <?php echo e($vivienda->proyecto?->codigo ?? '—'); ?> | Generado: <?php echo e(now()->format('d/m/Y H:i')); ?></p>
+    </div>
 
-</div>
-
-
-<div class="kpi-row">
-    <div class="kpi">
-        <div class="kpi-val"><?php echo e(number_format($vivienda->porcentaje_avance, 1)); ?>%</div>
-        <div class="kpi-lbl">Avance Físico</div>
-    </div>
-    <div class="kpi">
-        <div class="kpi-val"><?php echo e($vivienda->itemsChecklist->where('estado','completado')->count()); ?>/<?php echo e($vivienda->itemsChecklist->count()); ?></div>
-        <div class="kpi-lbl">Items Completados</div>
-    </div>
-    <div class="kpi">
-        <div class="kpi-val"><?php echo e($reportes->count()); ?></div>
-        <div class="kpi-lbl">Últimos Reportes</div>
-    </div>
-    <div class="kpi">
-        <div class="kpi-val"><?php echo e(ucfirst(str_replace('_', ' ', $vivienda->estado))); ?></div>
-        <div class="kpi-lbl">Estado</div>
-    </div>
-</div>
+    
+    <table class="kpi-row">
+        <tr>
+            <td>
+                <span class="kpi-val"><?php echo e(number_format($vivienda->porcentaje_avance, 1)); ?>%</span>
+                <span class="kpi-lbl">Avance Físico</span>
+            </td>
+            <td>
+                <span class="kpi-val"><?php echo e($vivienda->itemsChecklist->where('estado','completado')->count()); ?>/<?php echo e($vivienda->itemsChecklist->count()); ?></span>
+                <span class="kpi-lbl">Items Completados</span>
+            </td>
+            <td>
+                <span class="kpi-val"><?php echo e($reportes->count()); ?></span>
+                <span class="kpi-lbl">Últimos Reportes</span>
+            </td>
+            <td>
+                <span class="kpi-val"><?php echo e(ucfirst(str_replace('_', ' ', $vivienda->estado))); ?></span>
+                <span class="kpi-lbl">Estado</span>
+            </td>
+        </tr>
+    </table>
 
 
 <div class="info-grid">

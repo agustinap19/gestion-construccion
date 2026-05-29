@@ -10,11 +10,13 @@ use App\Models\PresupuestoItemProyecto;
 use App\Models\PresupuestoMaterialDistribucion;
 use App\Models\PresupuestoMaterialProyecto;
 use App\Models\RecetaItem;
+use App\Services\Almacenes\RecetaResolverService;
 use Illuminate\Support\Facades\DB;
 use Exception;
 
 class PresupuestoAutomaticoService
 {
+    public function __construct(private RecetaResolverService $recetaResolver) {}
     /**
      * Genera el presupuesto completo de items y el consolidado de materiales para un proyecto.
      * Para sociales: recibe array de [plantilla_id, vivienda_id, cantidad_planificada] por item.
@@ -290,34 +292,11 @@ class PresupuestoAutomaticoService
 
     private function getRecetaEfectiva(PresupuestoItemProyecto $pip): array
     {
-        // Si tiene override, mezcla: usa override donde existe, global donde no
-        if ($pip->tiene_override_receta && $pip->overrides->isNotEmpty()) {
-            $overrides = $pip->overrides->keyBy('material_id');
-            $recetaGlobal = RecetaItem::where('item_constructivo_id', $pip->item_constructivo_id)
-                ->get()->keyBy('material_id');
-
-            $efectiva = [];
-            // Aplicar globales no sobreescritos
-            foreach ($recetaGlobal as $matId => $r) {
-                $efectiva[$matId] = $overrides->has($matId)
-                    ? (float) $overrides[$matId]->cantidad_por_unidad_base
-                    : (float) $r->cantidad_por_unidad_base;
-            }
-            // Agregar overrides de materiales nuevos (no en receta global)
-            foreach ($overrides as $matId => $ov) {
-                if (!isset($efectiva[$matId])) {
-                    $efectiva[$matId] = (float) $ov->cantidad_por_unidad_base;
-                }
-            }
-            return $efectiva;
-        }
-
-        // Receta global del ítem constructivo
-        $receta = $pip->itemConstructivo?->receta
-            ?? RecetaItem::where('item_constructivo_id', $pip->item_constructivo_id)->get();
-
-        return $receta->pluck('cantidad_por_unidad_base', 'material_id')
-            ->map(fn($v) => (float) $v)
-            ->toArray();
+        // Delega al RecetaResolverService: vivienda > tipología > global
+        return $this->recetaResolver->resolverComoArray(
+            $pip->item_constructivo_id,
+            $pip->proyecto_id,
+            $pip->vivienda_id
+        );
     }
 }

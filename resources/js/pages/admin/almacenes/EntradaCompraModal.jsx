@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Trash2, ShoppingCart, Check, Package } from '../../../components/icons/Icons';
 import movimientoAlmacenService from '../../../services/movimientoAlmacenService';
 import { almacenService } from '../../../services/almacenService';
@@ -66,7 +67,7 @@ export default function EntradaCompraModal({ almacen, onClose, onGuardado }) {
 
     useEffect(() => {
         api.get('/materiales', { params: { per_page: 500, activo: 1 } })
-           .then(r => setMateriales(r.data?.data || r.data || []))
+           .then(r => setMateriales(r.data?.data?.data || r.data?.data || r.data || []))
            .catch(() => {});
     }, [almacen.id]);
 

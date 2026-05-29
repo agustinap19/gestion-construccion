@@ -17,6 +17,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import beneficiarioService from '../../../services/beneficiarioService';
 import AuditoriaTimeline from '../../../components/ui/AuditoriaTimeline';
+import BotonExportar from '../../../components/ui/BotonExportar';
 
 const DetalleBeneficiario = () => {
     const { id } = useParams();
@@ -345,7 +346,17 @@ const DetalleBeneficiario = () => {
                         </div>
                     </div>
 
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 items-center">
+                        <BotonExportar
+                            url={`/beneficiarios/${id}/reportes/fotografico`}
+                            formatos={['pdf']}
+                            label="Rep. Fotográfico"
+                        />
+                        <BotonExportar
+                            url={`/beneficiarios/${id}/reportes/planilla-entregas`}
+                            formatos={['pdf', 'excel']}
+                            label="Planilla Entregas"
+                        />
                         {hasPermission('beneficiarios.editar') && (
                             <Button variant="secondary" onClick={() => navigate(`/dashboard/beneficiarios/${id}/editar`)}>
                                 <Edit className="w-4 h-4 mr-2" /> Editar

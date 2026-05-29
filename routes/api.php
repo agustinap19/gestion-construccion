@@ -67,6 +67,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reportes/personal-competencias/pdf', [\App\Http\Controllers\Api\ReporteController::class, 'reporte4Pdf']);
         Route::get('/reportes/usuarios-permisos/pdf', [\App\Http\Controllers\Api\ReporteController::class, 'reporte5Pdf']);
 
+        // Reportes Profesionales y Auditoría (Sub-fase D)
+        Route::post('/biblioteca-constructiva/reportes/items', [\App\Http\Controllers\Api\Reportes\BibliotecaReporteController::class, 'generar']);
+        Route::post('/almacenes/{id}/reportes/kardex', [\App\Http\Controllers\Api\Reportes\KardexReporteController::class, 'generar']);
+        Route::post('/beneficiarios/{id}/reportes/fotografico', [\App\Http\Controllers\Api\Reportes\ReporteFotograficoController::class, 'generar']);
+        Route::post('/beneficiarios/{id}/reportes/planilla-entregas', [\App\Http\Controllers\Api\Reportes\PlanillaEntregasController::class, 'generar']);
+        Route::post('/proyectos/{id}/reportes/balance-consolidado', [\App\Http\Controllers\Api\Reportes\BalanceConsolidadoController::class, 'generar']);
+
+
         // Roles y Permisos
         Route::get('/permisos/matriz', [RolController::class, 'matrizPermisos']);
         Route::prefix('roles')->group(function () {
@@ -265,26 +273,26 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::prefix('reportes-tecnicos')->group(function () {
             Route::get('/unidad/{tipo}/{id}',               [ReporteTecnicoController::class, 'porUnidad']);
             Route::get('/proyecto/{proyectoId}/galeria',    [ReporteTecnicoController::class, 'galeriaProyecto']);
-            Route::get('/vivienda/{viviendaId}/exportar-avance', [ReporteTecnicoController::class, 'exportarAvance']);
-            Route::get('/vivienda/{viviendaId}/exportar-fotos',  [ReporteTecnicoController::class, 'exportarFotos']);
+            Route::match(['get', 'post'], '/vivienda/{viviendaId}/exportar-avance', [ReporteTecnicoController::class, 'exportarAvance']);
+            Route::match(['get', 'post'], '/vivienda/{viviendaId}/exportar-fotos',  [ReporteTecnicoController::class, 'exportarFotos']);
             Route::get('/{id}',                             [ReporteTecnicoController::class, 'show']);
             Route::post('/',                                [ReporteTecnicoController::class, 'store']);
         });
 
         Route::prefix('exportar')->group(function () {
-            Route::get('/materiales',                       [ExportacionController::class, 'materiales']);
-            Route::get('/proyectos',                        [ExportacionController::class, 'proyectos']);
-            Route::get('/proyectos/{id}/avance',            [ExportacionController::class, 'avanceProyecto']);
-            Route::get('/proyectos/{id}/beneficiarios',     [ExportacionController::class, 'beneficiarios']);
-            Route::post('/proyectos/{id}/actas-zip',        [ExportacionController::class, 'actasZip']);
-            Route::get('/beneficiarios/{id}/ficha',         [ExportacionController::class, 'fichaBeneficiario']);
-            Route::get('/viviendas/{id}/acta',              [ExportacionController::class, 'actaEntrega']);
-            Route::get('/personal',                         [ExportacionController::class, 'personal']);
-            Route::get('/usuarios',                         [ExportacionController::class, 'usuarios']);
-            Route::get('/roles/matriz',                     [ExportacionController::class, 'matrizRoles']);
-            Route::get('/almacenes/{almacenId}/kardex/{materialId}', [ExportacionController::class, 'kardexAlmacen']);
-            Route::get('/proyectos/{proyectoId}/presupuesto-materiales', [ExportacionController::class, 'presupuestoMateriales']);
-            Route::get('/movimientos-almacen', [ExportacionController::class, 'movimientosAlmacen']);
+            Route::match(['get', 'post'], '/materiales',                       [ExportacionController::class, 'materiales']);
+            Route::match(['get', 'post'], '/proyectos',                        [ExportacionController::class, 'proyectos']);
+            Route::match(['get', 'post'], '/proyectos/{id}/avance',            [ExportacionController::class, 'avanceProyecto']);
+            Route::match(['get', 'post'], '/proyectos/{id}/beneficiarios',     [ExportacionController::class, 'beneficiarios']);
+            Route::match(['get', 'post'], '/proyectos/{id}/actas-zip',         [ExportacionController::class, 'actasZip']);
+            Route::match(['get', 'post'], '/beneficiarios/{id}/ficha',         [ExportacionController::class, 'fichaBeneficiario']);
+            Route::match(['get', 'post'], '/viviendas/{id}/acta',              [ExportacionController::class, 'actaEntrega']);
+            Route::match(['get', 'post'], '/personal',                         [ExportacionController::class, 'personal']);
+            Route::match(['get', 'post'], '/usuarios',                         [ExportacionController::class, 'usuarios']);
+            Route::match(['get', 'post'], '/roles/matriz',                     [ExportacionController::class, 'matrizRoles']);
+            Route::match(['get', 'post'], '/almacenes/{almacenId}/kardex/{materialId}', [ExportacionController::class, 'kardexAlmacen']);
+            Route::match(['get', 'post'], '/proyectos/{proyectoId}/presupuesto-materiales', [ExportacionController::class, 'presupuestoMateriales']);
+            Route::match(['get', 'post'], '/movimientos-almacen',              [ExportacionController::class, 'movimientosAlmacen']);
         });
 
         // Almacenes y Materiales
@@ -322,6 +330,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/{almacenId}/salidas',       [AlmacenController::class, 'registrarSalida']);
             Route::post('/{almacenId}/ajustes',       [AlmacenController::class, 'ajustar']);
             Route::get('/{almacenId}/kardex/{materialId}', [AlmacenController::class, 'kardex']);
+            Route::patch('/{id}/cerrar',                  [AlmacenController::class, 'cerrar']);
+            Route::get('/{id}/materiales-con-stock',  [AlmacenController::class, 'materialesConStock']);
         });
         Route::post('/almacenes-transferencias', [AlmacenController::class, 'transferir']);
 
@@ -334,17 +344,23 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/salidas-privadas',                    [MovimientoAlmacenController::class, 'registrarSalidaPrivada']);
             Route::post('/transferencias',                      [MovimientoAlmacenController::class, 'registrarTransferencia']);
             Route::patch('/{movimientoAlmacen}/anular',         [MovimientoAlmacenController::class, 'anular']);
+            Route::patch('/{movimientoAlmacen}/confirmar',      [MovimientoAlmacenController::class, 'confirmarTransferencia']);
+            Route::post('/devolver-central/{almacenId}',        [MovimientoAlmacenController::class, 'devolverCentral']);
             Route::post('/validar-consumo',                     [MovimientoAlmacenController::class, 'validarConsumo']);
         });
 
-        // Presupuesto de materiales por proyecto (Sub-fase B)
+        // Presupuesto de materiales por proyecto (Sub-fase B / C.1 trazabilidad)
         Route::prefix('proyectos/{proyectoId}/presupuesto-materiales')->group(function () {
             Route::get('/',                                [PresupuestoMaterialController::class, 'indexPorProyecto']);
             Route::post('/',                               [PresupuestoMaterialController::class, 'store']);
             Route::delete('/{id}',                         [PresupuestoMaterialController::class, 'destroy']);
             Route::post('/importar',                       [PresupuestoMaterialController::class, 'importar']);
+            // C.1: Reconciliación y detalle exploratorio
+            Route::post('/reconciliar',                    [PresupuestoMaterialController::class, 'reconciliar']);
+            Route::get('/{materialId}/detalle',            [PresupuestoMaterialController::class, 'detalleMaterial']);
         });
         Route::get('/presupuesto-materiales/{presupuestoId}/sugerir-distribucion', [PresupuestoMaterialController::class, 'sugerirDistribucion']);
+
 
         Route::prefix('zonas-geograficas')->group(function () {
             Route::get('/', [ZonaGeograficaController::class, 'index']);
@@ -423,6 +439,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/presupuesto-items/{presupuestoItemId}/override', [PresupuestoItemsProyectoController::class, 'aplicarOverride']);
         // Standalone: usado por EntregaSocialModal (?proyecto_id, ?beneficiario_id, ?por_entregar)
         Route::get('/presupuesto-items-proyecto', [PresupuestoItemsProyectoController::class, 'porBeneficiario']);
+        // FIX 2+3: receta con stock real y teórico restante
+        Route::get('/presupuesto-items-proyecto/{pipId}/receta-con-stock/{almacenId}', [PresupuestoItemsProyectoController::class, 'recetaConStock']);
 
         // Configuración de porcentajes presupuestales (Rediseño Proyectos)
         Route::prefix('configuracion/porcentajes-presupuesto')->group(function () {

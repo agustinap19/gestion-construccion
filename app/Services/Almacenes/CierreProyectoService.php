@@ -20,51 +20,13 @@ class CierreProyectoService
     public function cerrarProyecto(Proyecto $proyecto, int $userId): array
     {
         return DB::transaction(function () use ($proyecto, $userId) {
-            $almacenCentral = Almacen::where('tipo', 'central')
-                ->where('estado', 'activo')
-                ->first();
-
-            if (!$almacenCentral) {
-                throw new \RuntimeException('No existe un almacén central activo para recibir el stock.');
-            }
-
             $almacenesObra = Almacen::where('proyecto_id', $proyecto->id)
                 ->whereIn('estado', ['activo', 'inactivo'])
                 ->get();
 
-            $transferenciasRealizadas = [];
-
             foreach ($almacenesObra as $almacen) {
-                if ($almacen->id === $almacenCentral->id) continue;
-
-                $stocks = StockMaterial::where('almacen_id', $almacen->id)
-                    ->where('cantidad', '>', 0)
-                    ->get();
-
-                if ($stocks->isNotEmpty()) {
-                    $materiales = $stocks->map(fn($s) => [
-                        'material_id' => $s->material_id,
-                        'cantidad'    => (float) $s->cantidad,
-                    ])->toArray();
-
-                    $movimiento = $this->entregaService->registrarTransferencia([
-                        'almacen_origen_id'  => $almacen->id,
-                        'almacen_destino_id' => $almacenCentral->id,
-                        'proyecto_id'        => $proyecto->id,
-                        'materiales'         => $materiales,
-                        'notas'              => "Cierre automático del proyecto {$proyecto->nombre}",
-                    ], $userId);
-
-                    // Marcar como completado (no en_transito)
-                    $movimiento->update(['estado' => 'completado']);
-
-                    $transferenciasRealizadas[] = [
-                        'almacen_id'       => $almacen->id,
-                        'almacen_nombre'   => $almacen->nombre,
-                        'movimiento_codigo'=> $movimiento->codigo,
-                        'materiales'       => count($materiales),
-                    ];
-                }
+                // Si el almacén es de tipo central, lo saltamos por seguridad aunque no debería tener proyecto_id
+                if ($almacen->tipo === 'central') continue;
 
                 $almacen->update([
                     'estado'       => 'cerrado',
@@ -73,9 +35,8 @@ class CierreProyectoService
             }
 
             return [
-                'proyecto_id'       => $proyecto->id,
-                'transferencias'    => $transferenciasRealizadas,
-                'almacenes_cerrados'=> $almacenesObra->pluck('nombre')->toArray(),
+                'proyecto_id'        => $proyecto->id,
+                'almacenes_cerrados' => $almacenesObra->pluck('nombre')->toArray(),
             ];
         });
     }

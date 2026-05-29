@@ -46,8 +46,19 @@ export const bibliotecaConstructivaService = {
     },
 
     // ── Importar Excel ───────────────────────────────────────────────────────
-    descargarPlantillaExcel: () => {
-        window.open(api.defaults.baseURL + '/biblioteca-constructiva/importar/plantilla-excel', '_blank');
+    descargarPlantillaExcel: async () => {
+        const response = await api.get('/biblioteca-constructiva/importar/plantilla-excel', {
+            responseType: 'blob'
+        });
+        const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const blobUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = 'plantilla_items_constructivos.xlsx';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(blobUrl);
     },
     importarExcel: async (archivo) => {
         const formData = new FormData();

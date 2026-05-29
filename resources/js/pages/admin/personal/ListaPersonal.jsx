@@ -160,7 +160,7 @@ const ListaPersonal = () => {
                     <div className="flex items-center gap-2">
                         <BotonExportar
                             url="/exportar/personal"
-                            params={{
+                            filtros={{
                                 ...(filtros.estado_laboral !== 'todos' && { estado_laboral: filtros.estado_laboral }),
                                 ...(filtros.tipo !== 'todos'           && { tipo: filtros.tipo }),
                             }}

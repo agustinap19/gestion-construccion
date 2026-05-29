@@ -9,6 +9,7 @@ import {
     Briefcase, Plus, Search, Eye, Edit, Trash, TrendingUp,
     Users, Building, MapPin, Activity, ChevronLeft, ChevronRight, X
 } from '../../../components/icons/Icons';
+import { Archive } from 'lucide-react';
 
 /* ── Design tokens ── */
 const ESTADO_META = {
@@ -67,7 +68,7 @@ const ListaProyectos = () => {
     const [cargando, setCargando] = useState(true);
     const [cargandoStats, setCargandoStats] = useState(true);
 
-    const [filtros, setFiltros] = useState({ busqueda: '', categoria: 'todos', estado: 'todos', prioridad: 'todos' });
+    const [filtros, setFiltros] = useState({ busqueda: '', categoria: 'todos', estado: 'todos', prioridad: 'todos', archivados: false });
     const [pagina, setPagina] = useState({ actual: 1, total: 1, totalReg: 0, porPagina: 20 });
 
     const [archivar, setArchivar] = useState(null);
@@ -89,6 +90,7 @@ const ListaProyectos = () => {
             if (filtros.categoria !== 'todos') filtrosApi.categoria = filtros.categoria;
             if (filtros.estado !== 'todos') filtrosApi.estado = filtros.estado;
             if (filtros.prioridad !== 'todos') filtrosApi.prioridad = filtros.prioridad;
+            if (filtros.archivados) filtrosApi.archivados = true;
 
             const res = await proyectoService.listar(filtrosApi, pagina.actual, pagina.porPagina);
             setProyectos(res?.data ?? []);
@@ -136,7 +138,7 @@ const ListaProyectos = () => {
                         <p className="text-xs text-slate-500">Gestión de proyectos de construcción</p>
                     </div>
                 </div>
-                {hasPermission('proyectos.crear') && (
+                {hasPermission('proyectos.crear') && !filtros.archivados && (
                     <button onClick={() => navigate('/dashboard/proyectos/crear')}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
                         style={{ background: 'linear-gradient(135deg,rgba(16,185,129,0.9),rgba(5,150,105,0.8))', boxShadow: '0 4px 16px rgba(16,185,129,0.3)' }}>
@@ -204,15 +206,29 @@ const ListaProyectos = () => {
                     <option value="critica">Crítica</option>
                 </select>
                 {(filtros.busqueda || filtros.categoria !== 'todos' || filtros.estado !== 'todos' || filtros.prioridad !== 'todos') && (
-                    <button onClick={() => setFiltros({ busqueda: '', categoria: 'todos', estado: 'todos', prioridad: 'todos' })}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-white transition-colors"
-                        style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <button onClick={() => setFiltros({ busqueda: '', categoria: 'todos', estado: 'todos', prioridad: 'todos', archivados: false })}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 text-xs font-semibold hover:bg-red-500/20 transition-all flex items-center gap-1.5">
                         <X size={12} /> Limpiar
                     </button>
                 )}
+                
+                <div className="flex-1"></div>
+
+                <button 
+                    onClick={() => setFiltro('archivados', !filtros.archivados)}
+                    className={`px-3 py-2 text-sm rounded-xl outline-none font-medium flex items-center gap-2 transition-all ${
+                        filtros.archivados 
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                            : 'bg-white/[0.05] text-slate-200 border border-white/[0.09] hover:bg-white/[0.1]'
+                    }`}
+                >
+                    <Archive size={16} />
+                    {filtros.archivados ? 'Ver Activos' : 'Archivados'}
+                </button>
+
                 <BotonExportar
                     url="/exportar/proyectos"
-                    params={{
+                    filtros={{
                         ...(filtros.estado !== 'todos' && { estado: filtros.estado }),
                         ...(filtros.categoria !== 'todos' && { categoria: filtros.categoria }),
                     }}
@@ -234,7 +250,7 @@ const ListaProyectos = () => {
                     <div className="py-16 flex flex-col items-center gap-3">
                         <Briefcase size={32} className="text-slate-600" />
                         <p className="text-slate-500 text-sm">No se encontraron proyectos</p>
-                        {hasPermission('proyectos.crear') && (
+                        {hasPermission('proyectos.crear') && !filtros.archivados && (
                             <button onClick={() => navigate('/dashboard/proyectos/crear')}
                                 className="mt-1 px-4 py-2 rounded-xl text-sm font-medium text-white"
                                 style={{ background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.3)' }}>
@@ -291,13 +307,13 @@ const ListaProyectos = () => {
                                                         title="Ver detalle" className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-white/[0.06] transition-all">
                                                         <Eye size={15} />
                                                     </button>
-                                                    {hasPermission('proyectos.editar') && (
+                                                    {hasPermission('proyectos.editar') && !filtros.archivados && !['finalizado', 'cancelado', 'pausado'].includes(p.estado) && (
                                                         <button onClick={() => navigate(`/dashboard/proyectos/${p.id}/editar`)}
                                                             title="Editar" className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-white/[0.06] transition-all">
                                                             <Edit size={15} />
                                                         </button>
                                                     )}
-                                                    {hasPermission('proyectos.eliminar') && (
+                                                    {hasPermission('proyectos.eliminar') && !filtros.archivados && ['finalizado', 'cancelado', 'pausado'].includes(p.estado) && (
                                                         <button onClick={() => { setArchivar(p); setRazonArchivar(''); }}
                                                             title="Archivar" className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-white/[0.06] transition-all">
                                                             <Trash size={15} />

@@ -57,11 +57,16 @@ export default function KardexModal({ almacen, stockItem, onClose }) {
                         <p className="text-slate-400 text-xs mt-0.5">{almacen.nombre} · {stockItem.material?.codigo}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <a href={exportUrl} target="_blank" rel="noreferrer"
-                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10
-                                      text-slate-300 hover:text-white hover:bg-white/10 text-xs transition-all">
-                            <Download className="w-3.5 h-3.5" /> PDF
-                        </a>
+                        <BotonExportar
+                            url={`/almacenes/${almacen.id}/reportes/kardex`}
+                            filtros={{ material_id: stockItem.material.id }}
+                            formatos={['pdf', 'excel']}
+                            variantes={[
+                                { id: 'oficial', label: 'Oficial' },
+                                { id: 'sicooes', label: 'SICOOES (Sin retrabajos)' }
+                            ]}
+                            label="Exportar"
+                        />
                         <button onClick={onClose} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-all">
                             <X className="w-5 h-5" />
                         </button>

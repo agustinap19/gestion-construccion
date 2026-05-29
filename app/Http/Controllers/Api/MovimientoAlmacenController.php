@@ -128,7 +128,7 @@ class MovimientoAlmacenController extends Controller
             'almacen_id'                    => 'required|exists:almacenes,id',
             'beneficiario_id'               => 'required|exists:beneficiarios,id',
             'presupuesto_item_proyecto_id'  => 'required|exists:presupuesto_items_proyecto,id',
-            'modalidad_entrega'             => 'required|in:total,parcial',
+            'modalidad_entrega'             => 'nullable|in:total,parcial',
             'justificacion_sobre_consumo'   => 'nullable|string',
             'aprobado_por_id'               => 'nullable|exists:users,id',
             'notas'                         => 'nullable|string',
@@ -194,6 +194,20 @@ class MovimientoAlmacenController extends Controller
         return response()->json($movimiento, 201);
     }
 
+    // ─── Devolución a Central ─────────────────────────────────────────────────────
+
+    public function devolverCentral(Request $request, int $almacenId): JsonResponse
+    {
+        if ($deny = $this->denyUnless($request, 'movimientos.transferir')) return $deny;
+
+        try {
+            $movimiento = $this->entregaService->devolverCentral($almacenId, auth()->id());
+            return response()->json($movimiento, 201);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
     // ─── Anulación ────────────────────────────────────────────────────────────────
 
     public function anular(Request $request, MovimientoAlmacen $movimientoAlmacen): JsonResponse
@@ -211,6 +225,23 @@ class MovimientoAlmacenController extends Controller
         );
 
         return response()->json($movimiento);
+    }
+
+    // ─── Confirmar recepción de transferencia ─────────────────────────────────────
+
+    public function confirmarTransferencia(Request $request, MovimientoAlmacen $movimientoAlmacen): JsonResponse
+    {
+        if ($deny = $this->denyUnless($request, 'movimientos.transferir')) return $deny;
+
+        try {
+            $movimiento = $this->entregaService->confirmarRecepcionTransferencia(
+                $movimientoAlmacen,
+                auth()->id()
+            );
+            return response()->json($movimiento);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
     }
 
     // ─── Validar sobre-consumo (previo al guardado) ───────────────────────────────

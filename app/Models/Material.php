@@ -54,6 +54,11 @@ class Material extends Model
         return $this->belongsTo(Proyecto::class, 'proyecto_id');
     }
 
+    public function stocks()
+    {
+        return $this->hasMany(StockMaterial::class, 'material_id');
+    }
+
     public function scopeMaestros($query)
     {
         return $query->where('tipo', 'maestro');

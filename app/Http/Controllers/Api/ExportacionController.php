@@ -31,7 +31,7 @@ class ExportacionController extends Controller
 
     public function proyectos(Request $request): Response|BinaryFileResponse
     {
-        $filtros = $request->only(['estado', 'categoria']);
+        $filtros = $request->input('filtros', $request->all());
         $fmt     = $request->input('formato', 'pdf');
 
         if ($fmt === 'excel') {
@@ -87,7 +87,7 @@ class ExportacionController extends Controller
 
     public function materiales(Request $request): Response|BinaryFileResponse
     {
-        $filtros = $request->only(['tipo', 'categoria', 'busqueda']);
+        $filtros = $request->input('filtros', $request->all());
         $fmt     = $request->input('formato', 'pdf');
 
         $query = \App\Models\Material::with(['categoria', 'unidadMedida', 'proyecto']);
@@ -109,16 +109,13 @@ class ExportacionController extends Controller
 
         $materiales = $query->orderBy('nombre')->get();
 
-        // Si tuvieras un export a Excel (no lo implementaremos para simplificar, pero dejo la estructura)
-        /*
         if ($fmt === 'excel') {
             return $this->svc->excel(
-                new MaterialesExport($filtros),
+                new \App\Exports\MaterialesExport($filtros),
                 'materiales', 'catalogo_materiales_' . now()->format('Ymd'),
                 $request->user(), $filtros
             );
         }
-        */
 
         return $this->svc->pdf('lista_materiales', [
             'materiales' => $materiales,
@@ -131,7 +128,7 @@ class ExportacionController extends Controller
 
     public function beneficiarios(Request $request, int $proyectoId): Response|BinaryFileResponse
     {
-        $filtros = $request->only(['estado_seleccion', 'comunidad']);
+        $filtros = $request->input('filtros', $request->all());
         $fmt     = $request->input('formato', 'pdf');
 
         if ($fmt === 'excel') {
@@ -147,6 +144,7 @@ class ExportacionController extends Controller
             ->where('proyecto_id', $proyectoId)
             ->when($filtros['estado_seleccion'] ?? null, fn($q, $v) => $q->where('estado_seleccion', $v))
             ->when($filtros['comunidad'] ?? null, fn($q, $v) => $q->where('comunidad', 'like', "%{$v}%"))
+            ->when($filtros['tipo_vivienda_id'] ?? null, fn($q, $v) => $q->where('tipo_vivienda_id', $v))
             ->orderBy('apellido_paterno')->get();
 
         $stats = [
@@ -219,7 +217,7 @@ class ExportacionController extends Controller
 
     public function personal(Request $request): Response|BinaryFileResponse
     {
-        $filtros = $request->only(['estado_laboral', 'tipo']);
+        $filtros = $request->input('filtros', $request->all());
         $fmt     = $request->input('formato', 'pdf');
 
         if ($fmt === 'excel') {
@@ -244,7 +242,7 @@ class ExportacionController extends Controller
 
     public function usuarios(Request $request): Response|BinaryFileResponse
     {
-        $filtros = $request->only(['estado', 'rol_id']);
+        $filtros = $request->input('filtros', $request->all());
         $fmt     = $request->input('formato', 'pdf');
 
         if ($fmt === 'excel') {
@@ -345,7 +343,7 @@ class ExportacionController extends Controller
             abort(403);
         }
 
-        $filtros = $request->only(['almacen_id', 'tipo', 'estado', 'busqueda', 'fecha_desde', 'fecha_hasta']);
+        $filtros = $request->input('filtros', $request->all());
 
         $q = MovimientoAlmacen::with([
             'almacenDestino:id,nombre,codigo',

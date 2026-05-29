@@ -3,15 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <style>
-    body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 10px; color: #1e293b; margin: 0; padding: 18px; }
-    h1 { font-size: 15px; color: #0f172a; margin-bottom: 2px; }
+    body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10px; color: #333; margin: 0; padding: 0; }
+    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; padding-top: 10px; }
+    .header h1 { margin: 0; font-size: 16px; color: #1e3a8a; }
+    .header h2 { margin: 5px 0; font-size: 14px; color: #1e40af; }
+    .header p { margin: 2px 0; font-size: 10px; color: #64748b; }
     h2 { font-size: 11px; color: #0f172a; margin: 14px 0 5px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .subtitle { font-size: 9px; color: #64748b; margin-bottom: 14px; }
-    .kpi-row { display: flex; gap: 10px; margin-bottom: 14px; }
-    .kpi { padding: 6px 14px; background: #f8fafc; border-radius: 4px; text-align: center; border: 1px solid #e2e8f0; }
-    .kpi-val { font-size: 18px; font-weight: bold; color: #0284c7; }
-    .kpi-lbl { font-size: 8px; color: #94a3b8; text-transform: uppercase; }
-    .foto-section { margin-bottom: 16px; break-inside: avoid; }
+    .kpi-row { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    .kpi-row td { text-align: center; border: 1px solid #e2e8f0; padding: 10px; background: #f8fafc; width: 25%; }
+    .kpi-val { font-size: 16px; font-weight: bold; color: #2563eb; display: block; margin-bottom: 2px; }
+    .kpi-lbl { font-size: 9px; color: #64748b; text-transform: uppercase; }
     .foto-header { font-size: 9px; color: #475569; margin-bottom: 6px; padding: 5px 8px; background: #f8fafc; border-radius: 3px; border-left: 3px solid #0284c7; }
     .foto-grid { display: flex; flex-wrap: wrap; gap: 8px; }
     .foto-item { width: 160px; break-inside: avoid; }
@@ -28,31 +29,33 @@
 </head>
 <body>
 
-<h1>Reporte Fotográfico — {{ $vivienda->beneficiario ? $vivienda->beneficiario->nombre . ' ' . $vivienda->beneficiario->apellido_paterno : 'Sin Asignar' }}</h1>
-<div class="subtitle">
-    Proyecto: {{ $vivienda->proyecto?->nombre ?? '—' }} ({{ $vivienda->proyecto?->codigo ?? '—' }})
-    &mdash; Generado: {{ now()->format('d/m/Y H:i') }}
-</div>
+    <div class="header">
+        <h1>CA & KANAGF S.R.L.</h1>
+        <h2>Reporte Fotográfico de Vivienda</h2>
+        <p>Beneficiario: {{ $vivienda->beneficiario ? $vivienda->beneficiario->nombre . ' ' . $vivienda->beneficiario->apellido_paterno : 'Sin Asignar' }} | Proyecto: {{ $vivienda->proyecto?->codigo ?? '—' }} | Generado: {{ now()->format('d/m/Y H:i') }}</p>
+    </div>
 
-{{-- KPIs --}}
-<div class="kpi-row">
-    <div class="kpi">
-        <div class="kpi-val">{{ $fotos->count() }}</div>
-        <div class="kpi-lbl">Total Fotos</div>
-    </div>
-    <div class="kpi">
-        <div class="kpi-val">{{ $fotos->unique(fn($f) => $f->reporte_id)->count() }}</div>
-        <div class="kpi-lbl">Reportes</div>
-    </div>
-    <div class="kpi">
-        <div class="kpi-val">{{ $fotos->unique(fn($f) => $f->reporte?->usuario_id)->count() }}</div>
-        <div class="kpi-lbl">Técnicos</div>
-    </div>
-    <div class="kpi">
-        <div class="kpi-val">{{ $fotos->filter(fn($f) => $f->latitud)->count() }}</div>
-        <div class="kpi-lbl">Geo-etiquetadas</div>
-    </div>
-</div>
+    {{-- KPIs --}}
+    <table class="kpi-row">
+        <tr>
+            <td>
+                <span class="kpi-val">{{ $fotos->count() }}</span>
+                <span class="kpi-lbl">Total Fotos</span>
+            </td>
+            <td>
+                <span class="kpi-val">{{ $fotos->unique(fn($f) => $f->reporte_id)->count() }}</span>
+                <span class="kpi-lbl">Reportes</span>
+            </td>
+            <td>
+                <span class="kpi-val">{{ $fotos->unique(fn($f) => $f->reporte?->usuario_id)->count() }}</span>
+                <span class="kpi-lbl">Técnicos</span>
+            </td>
+            <td>
+                <span class="kpi-val">{{ $fotos->filter(fn($f) => $f->latitud)->count() }}</span>
+                <span class="kpi-lbl">Geo-etiquetadas</span>
+            </td>
+        </tr>
+    </table>
 
 {{-- Info vivienda --}}
 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px 12px;margin-bottom:14px;font-size:9px">

@@ -40,6 +40,10 @@ class ProyectoService
     {
         $query = Proyecto::with(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'responsable']);
 
+        if (isset($filtros['archivados']) && $filtros['archivados'] === 'true') {
+            $query->onlyTrashed();
+        }
+
         if (!empty($filtros['busqueda'])) {
             $query->buscar($filtros['busqueda']);
         }
@@ -295,6 +299,29 @@ class ProyectoService
         $datosAnteriores = $proyecto->toArray();
         $proyecto->fill($datos);
 
+        // Recalcular finanzas si cambian montos o porcentajes
+        $contractual = (float) ($datos['monto_contractual'] ?? $datos['monto_contrato'] ?? $datos['presupuesto_referencial'] ?? $proyecto->monto_contractual_efectivo);
+        $porMO   = (float) ($datos['porcentaje_mano_obra'] ?? $proyecto->porcentaje_mano_obra ?? 0);
+        $porGG   = (float) ($datos['porcentaje_gastos_generales'] ?? $proyecto->porcentaje_gastos_generales ?? 0);
+        $porUtil = (float) ($datos['porcentaje_utilidad_esperada'] ?? $proyecto->porcentaje_utilidad_esperada ?? 0);
+
+        $proyecto->monto_contractual = $contractual;
+        $proyecto->porcentaje_mano_obra = $porMO;
+        $proyecto->porcentaje_gastos_generales = $porGG;
+        $proyecto->porcentaje_utilidad_esperada = $porUtil;
+
+        if (!$proyecto->usa_monto_fijo_mo) {
+            $proyecto->presupuesto_mano_obra = $contractual * $porMO / 100;
+        }
+        if (!$proyecto->usa_monto_fijo_gg) {
+            $proyecto->presupuesto_gastos_generales = $contractual * $porGG / 100;
+        }
+        if (!$proyecto->usa_monto_fijo_util) {
+            $proyecto->presupuesto_utilidad_esperada = $contractual * $porUtil / 100;
+        }
+
+        $proyecto->presupuesto_materiales = max(0.0, $contractual - $proyecto->presupuesto_mano_obra - $proyecto->presupuesto_gastos_generales - $proyecto->presupuesto_utilidad_esperada);
+
         $cambiosReales = [];
         $nuevosReales = [];
         foreach ($proyecto->getDirty() as $atributo => $valorNuevo) {
@@ -421,15 +448,9 @@ class ProyectoService
     {
         $proyecto = Proyecto::withCount(['fasesProyecto', 'beneficiarios'])->findOrFail($id);
 
-        if (in_array($proyecto->estado, ['en_ejecucion', 'finalizado'])) {
-            throw new ProyectoEnEstadoNoModificableException("No se puede eliminar un proyecto en estado '{$proyecto->estado}'.");
-        }
-
-        if ($proyecto->fases_proyecto_count > 0) {
-            throw new ProyectoConDependenciasException("El proyecto tiene {$proyecto->fases_proyecto_count} fases. Elimínalas primero.", 'fases', $proyecto->fases_proyecto_count);
-        }
-        if ($proyecto->beneficiarios_count > 0) {
-            throw new ProyectoConDependenciasException("El proyecto tiene {$proyecto->beneficiarios_count} beneficiarios. Elimínalos primero.", 'beneficiarios', $proyecto->beneficiarios_count);
+        // Sólo se pueden archivar si están finalizados, cancelados o pausados.
+        if (!in_array($proyecto->estado, ['finalizado', 'cancelado', 'pausado'])) {
+            throw new ProyectoEnEstadoNoModificableException("Solo se pueden archivar proyectos finalizados, cancelados o pausados. El proyecto está en estado '{$proyecto->estado}'.");
         }
 
         return DB::transaction(function () use ($proyecto, $razon) {
