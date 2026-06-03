@@ -37,10 +37,10 @@ import ListaRoles from '../pages/admin/roles/ListaRoles';
 import DetalleRol from '../pages/admin/roles/DetalleRol';
 import CrearRol from '../pages/admin/roles/CrearRol';
 import EditarRol from '../pages/admin/roles/EditarRol';
-import ListaUsuarios from '../pages/admin/usuarios/ListaUsuarios';
-import DetalleUsuario from '../pages/admin/usuarios/DetalleUsuario';
-import CrearUsuario from '../pages/admin/usuarios/CrearUsuario';
-import EditarUsuario from '../pages/admin/usuarios/EditarUsuario';
+import ListaUsuarios from '../pages/admin/Usuarios/ListaUsuarios';
+import DetalleUsuario from '../pages/admin/Usuarios/DetalleUsuario';
+import CrearUsuario from '../pages/admin/Usuarios/CrearUsuario';
+import EditarUsuario from '../pages/admin/Usuarios/EditarUsuario';
 
 // Competencias
 import CompetenciasPage from '../pages/admin/competencias/CompetenciasPage';

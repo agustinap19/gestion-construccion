@@ -2,7 +2,7 @@
 nixPkgs = [
   "(php82.withExtensions ({ enabled, all }: enabled ++ [ all.gd all.bcmath all.zip all.pdo_mysql ]))",
   "php82Packages.composer",
-  "nodejs_20"
+  "nodejs_22"
 ]
 
 [phases.install]
