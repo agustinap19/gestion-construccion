@@ -13,6 +13,7 @@ class ReporteAvance extends Model
     protected $table = 'reportes_avance';
 
     protected $fillable = [
+        'uuid_local',
         'proyecto_id',
         'vivienda_id',
         'presupuesto_item_proyecto_id',
@@ -23,6 +24,9 @@ class ReporteAvance extends Model
         'foto_path',
         'foto_thumbnail_path',
         'coordenadas_gps',
+        'latitud',
+        'longitud',
+        'fuera_de_rango',
         'fecha_reporte',
         'estado',
         'metadata',
@@ -31,6 +35,9 @@ class ReporteAvance extends Model
     protected $casts = [
         'porcentaje_avance'  => 'decimal:2',
         'porcentaje_anterior' => 'decimal:2',
+        'latitud'            => 'decimal:7',
+        'longitud'           => 'decimal:7',
+        'fuera_de_rango'     => 'boolean',
         'fecha_reporte'      => 'datetime',
         'metadata'           => 'array',
     ];

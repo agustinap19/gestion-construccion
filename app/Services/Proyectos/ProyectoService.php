@@ -3,6 +3,7 @@
 namespace App\Services\Proyectos;
 
 use App\Models\ConfiguracionPorcentajesPresupuesto;
+use App\Models\HitoCobro;
 use App\Models\Proyecto;
 use App\Models\TipoProyecto;
 use App\Models\User;
@@ -333,8 +334,21 @@ class ProyectoService
             return $proyecto;
         }
 
-        return DB::transaction(function () use ($proyecto, $cambiosReales, $nuevosReales) {
+        $montoAnterior = $datosAnteriores['monto_contractual'] ?? null;
+        $montoNuevo    = $proyecto->monto_contractual;
+        $montoChanged  = abs((float) $montoNuevo - (float) $montoAnterior) > 0.001;
+
+        return DB::transaction(function () use ($proyecto, $cambiosReales, $nuevosReales, $montoChanged) {
             $proyecto->save();
+
+            // Recalcular monto_calculado de hitos cuando cambia el monto contractual
+            if ($montoChanged) {
+                $contractual = (float) $proyecto->monto_contractual_efectivo;
+                HitoCobro::where('proyecto_id', $proyecto->id)->each(function (HitoCobro $hito) use ($contractual) {
+                    $hito->monto_calculado = $contractual * ((float) $hito->porcentaje_contrato / 100);
+                    $hito->save();
+                });
+            }
 
             $evento = 'proyecto.actualizado';
             if (isset($cambiosReales['presupuesto_referencial']) || isset($cambiosReales['monto_contrato'])) {

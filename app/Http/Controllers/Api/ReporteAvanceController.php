@@ -26,22 +26,37 @@ class ReporteAvanceController extends Controller
             return response()->json(['message' => 'No tiene permiso para registrar avance de obra.'], 403);
         }
 
+        // El frontend enviará un campo "items" que es un JSON string debido al FormData
+        $itemsData = json_decode($request->input('items', '[]'), true);
+        if (!is_array($itemsData) || count($itemsData) === 0) {
+            return response()->json(['message' => 'Debe enviar al menos un ítem para registrar avance.'], 422);
+        }
+        if (count($itemsData) > 3) {
+            return response()->json(['message' => 'No puede enviar más de 3 ítems a la vez.'], 422);
+        }
+
+        // Inyectar en el request para validación de Laravel
+        $request->merge(['items_decoded' => $itemsData]);
+
         $request->validate([
-            'presupuesto_item_proyecto_id' => 'required|integer|exists:presupuesto_items_proyecto,id',
-            'porcentaje_avance'            => 'required|numeric|min:0|max:100',
-            'foto'                         => 'required|image|mimes:jpeg,jpg,png,webp|max:10240',
-            'observacion'                  => 'nullable|string|max:2000',
-            'coordenadas_gps'              => 'nullable|string|max:100',
+            'items_decoded'                                => 'required|array|min:1|max:3',
+            'items_decoded.*.presupuesto_item_proyecto_id' => 'required|integer|exists:presupuesto_items_proyecto,id',
+            'items_decoded.*.porcentaje_avance'            => 'required|numeric|min:0|max:100',
+            'foto'                                         => 'required|image|mimes:jpeg,jpg,png,webp|max:10240',
+            'observacion'                                  => 'nullable|string|max:2000',
+            'coordenadas_gps'                              => 'required|string|max:100',
         ], [
-            'foto.required' => 'La foto es obligatoria para registrar el avance.',
-            'foto.image'    => 'El archivo debe ser una imagen (JPEG, PNG, WEBP).',
-            'foto.max'      => 'La foto no puede superar los 10 MB.',
+            'items_decoded.max' => 'Solo puede reportar hasta 3 ítems simultáneamente.',
+            'foto.required'     => 'La foto es obligatoria para registrar el avance.',
+            'foto.image'        => 'El archivo debe ser una imagen (JPEG, PNG, WEBP).',
+            'foto.max'          => 'La foto no puede superar los 10 MB.',
         ]);
 
         try {
-            $resultado = $this->service->registrar(
+            $resultado = $this->service->registrarMulti(
                 $viviendaId,
-                $request->only('presupuesto_item_proyecto_id', 'porcentaje_avance', 'observacion', 'coordenadas_gps'),
+                $itemsData,
+                $request->only('observacion', 'coordenadas_gps'),
                 $request->file('foto'),
                 $request->user()
             );

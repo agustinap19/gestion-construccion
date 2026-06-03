@@ -60,11 +60,12 @@ class ReporteAvanceTest extends TestCase
         $producto = null;
         if ($productoNombre) {
             $producto = ProductoContractual::create([
-                'proyecto_id' => $proyecto->id,
-                'nombre'      => $productoNombre,
-                'porcentaje'  => 25.0,
-                'estado'      => 'pendiente',
-                'orden'       => 1,
+                'proyecto_id'             => $proyecto->id,
+                'nombre'                  => $productoNombre,
+                'porcentaje'              => 25.0,
+                'estado'                  => 'pendiente',
+                'orden'                   => 1,
+                'fecha_planificada_cobro' => '2027-06-01',
             ]);
         }
 
@@ -78,12 +79,14 @@ class ReporteAvanceTest extends TestCase
                 'estado'                    => true,
             ]);
 
+            // Ponderación proporcional; max de decimal(6,4) es 99.9999
+            $ponderacion = $nItems === 1 ? 5.0 : round(96.0 / $nItems, 4);
             $pip = PresupuestoItemProyecto::create([
                 'proyecto_id'               => $proyecto->id,
                 'vivienda_id'               => $vivienda->id,
                 'item_constructivo_id'      => $item->id,
                 'cantidad_planificada'      => 10.0,
-                'ponderacion_avance'        => round(100 / $nItems, 4),
+                'ponderacion_avance'        => $ponderacion,
                 'orden'                     => $i,
                 'estado_ejecucion'          => 'pendiente',
                 'porcentaje_avance'         => 0,
@@ -177,8 +180,8 @@ class ReporteAvanceTest extends TestCase
             ])
             ->assertStatus(201);
 
-        // 1 de 4 items al 100%, ponderación 25%
-        // avance vivienda = (100×25 + 0×25 + 0×25 + 0×25) / 100 = 25%
+        // 1 de 4 items al 100%, ponderaciones iguales (24 cada uno con el helper)
+        // avance vivienda = (100×24 + 0×24 + 0×24 + 0×24) / (4×24) = 25%
         $avanceVivienda = $res->json('avance_vivienda');
         $this->assertEquals(25.0, $avanceVivienda, 'Avance vivienda debe ser 25% (suma ponderada)');
         $this->assertEquals(25.0, (float) $ctx['vivienda']->fresh()->porcentaje_avance);
@@ -319,13 +322,13 @@ class ReporteAvanceTest extends TestCase
         $pip  = $ctx['pips'][0];
         $user = $this->crearUsuarioConRol('gerente');
 
-        // El PATCH directo debe retornar 404 (ruta eliminada)
+        // El PATCH directo debe retornar 404 (ruta eliminada) o 405 (método no permitido)
         $res = $this->actingAs($user)
             ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
                 'porcentaje_avance' => 50,
             ]);
 
-        $res->assertStatus(404);
+        $this->assertContains($res->status(), [404, 405], 'No debe existir ruta PATCH directa al avance del item');
     }
 
     // ── Test 11: auditoría registra reporte con usuario, fecha y valores ──────

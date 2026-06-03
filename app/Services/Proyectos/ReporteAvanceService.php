@@ -67,6 +67,20 @@ class ReporteAvanceService
             );
         }
 
+        // Validación 100m
+        $beneficiario = $pip->vivienda?->beneficiario;
+        if ($beneficiario && $beneficiario->latitud_terreno && $beneficiario->longitud_terreno && !empty($datos['coordenadas_gps'])) {
+            $coords = explode(',', $datos['coordenadas_gps']);
+            if (count($coords) === 2) {
+                $lat = (float) trim($coords[0]);
+                $lng = (float) trim($coords[1]);
+                $distancia = $this->distanciaKm($lat, $lng, (float)$beneficiario->latitud_terreno, (float)$beneficiario->longitud_terreno);
+                if ($distancia > 0.100) {
+                    throw new \InvalidArgumentException('Las coordenadas de la foto están a más de 100 metros del terreno del beneficiario (' . round($distancia * 1000) . 'm).');
+                }
+            }
+        }
+
         // Subir foto
         [$fotoPath, $thumbPath] = $this->subirFoto($foto, $pip->proyecto_id, $viviendaId);
 
@@ -151,7 +165,148 @@ class ReporteAvanceService
         ];
     }
 
+    /**
+     * Registra múltiples reportes de avance simultáneamente compartiendo la misma evidencia.
+     */
+    public function registrarMulti(int $viviendaId, array $itemsData, array $metaDatos, UploadedFile $foto, User $tecnico): array
+    {
+        if (empty($itemsData)) throw new \InvalidArgumentException("No hay items para registrar.");
+
+        $primerPipId = $itemsData[0]['presupuesto_item_proyecto_id'];
+        $primerPip = PresupuestoItemProyecto::where('vivienda_id', $viviendaId)->findOrFail($primerPipId);
+        $proyectoId = $primerPip->proyecto_id;
+
+        // Subir foto una sola vez
+        [$fotoPath, $thumbPath] = $this->subirFoto($foto, $proyectoId, $viviendaId);
+
+        $reportesGenerados = [];
+        $itemsActualizados = [];
+        $productosListos = [];
+
+        DB::transaction(function () use (
+            $viviendaId, $itemsData, $metaDatos, $tecnico, $proyectoId,
+            $fotoPath, $thumbPath, &$reportesGenerados, &$itemsActualizados, &$productosListos
+        ) {
+            foreach ($itemsData as $datos) {
+                $pip = PresupuestoItemProyecto::where('vivienda_id', $viviendaId)
+                    ->findOrFail($datos['presupuesto_item_proyecto_id']);
+
+                $pctAnterior = (float) $pip->porcentaje_avance;
+                $pctNuevo    = (float) $datos['porcentaje_avance'];
+
+                if ($pctNuevo < $pctAnterior && empty($metaDatos['observacion'])) {
+                    throw new \InvalidArgumentException(
+                        'Para reducir el avance es obligatorio incluir una observación.'
+                    );
+                }
+
+                // Validación 100m
+                $beneficiario = $pip->vivienda?->beneficiario;
+                if ($beneficiario && $beneficiario->latitud_terreno && $beneficiario->longitud_terreno && !empty($metaDatos['coordenadas_gps'])) {
+                    $coords = explode(',', $metaDatos['coordenadas_gps']);
+                    if (count($coords) === 2) {
+                        $lat = (float) trim($coords[0]);
+                        $lng = (float) trim($coords[1]);
+                        $distancia = $this->distanciaKm($lat, $lng, (float)$beneficiario->latitud_terreno, (float)$beneficiario->longitud_terreno);
+                        if ($distancia > 0.100) {
+                            throw new \InvalidArgumentException('Las coordenadas de la foto están a más de 100 metros del terreno del beneficiario (' . round($distancia * 1000) . 'm).');
+                        }
+                    }
+                }
+
+                $estadoNuevo = match(true) {
+                    $pctNuevo >= 100 => 'terminado',
+                    $pctNuevo > 0    => 'en_proceso',
+                    default          => 'pendiente',
+                };
+
+                // 1. Crear reporte
+                $reporte = ReporteAvance::create([
+                    'proyecto_id'                  => $proyectoId,
+                    'vivienda_id'                  => $viviendaId,
+                    'presupuesto_item_proyecto_id' => $pip->id,
+                    'tecnico_id'                   => $tecnico->id,
+                    'porcentaje_avance'            => $pctNuevo,
+                    'porcentaje_anterior'          => $pctAnterior,
+                    'observacion'                  => $metaDatos['observacion'] ?? null,
+                    'foto_path'                    => $fotoPath,
+                    'foto_thumbnail_path'          => $thumbPath,
+                    'coordenadas_gps'              => $metaDatos['coordenadas_gps'] ?? null,
+                    'fecha_reporte'                => now(),
+                    'estado'                       => 'aprobado',
+                ]);
+
+                // 2. Actualizar PIP
+                $pip->porcentaje_avance = $pctNuevo;
+                $pip->estado_ejecucion  = $estadoNuevo;
+                $pip->save();
+
+                // 3. Auditoría
+                HistorialCambioItem::create([
+                    'proyecto_id'     => $proyectoId,
+                    'usuario_id'      => $tecnico->id,
+                    'tipo_cambio'     => 'avance_reporte',
+                    'pip_id'          => $pip->id,
+                    'vivienda_id'     => $viviendaId,
+                    'valores_antes'   => ['porcentaje_avance' => $pctAnterior],
+                    'valores_despues' => ['porcentaje_avance' => $pctNuevo, 'reporte_id' => $reporte->id],
+                    'descripcion'     => $metaDatos['observacion'] ?? null,
+                ]);
+
+                // 4. Verificar si el producto contractual está listo
+                $productoListoParaCobro = false;
+                if ($pip->producto_contractual_id && $pctNuevo >= 100) {
+                    $productoListoParaCobro = $this->verificarProductoListo(
+                        $pip->producto_contractual_id,
+                        $proyectoId
+                    );
+                    if ($productoListoParaCobro) {
+                        $productosListos[] = true;
+                    }
+                }
+
+                // 5. Notificaciones (individual por item)
+                $this->enviarNotificaciones($pip, $tecnico, $productoListoParaCobro);
+
+                $reporte->load(['tecnico:id,nombre,apellido_paterno', 'pip.itemConstructivo:id,codigo,nombre']);
+                $reportesGenerados[] = $this->formatearReporte($reporte);
+                $itemsActualizados[] = [
+                    'id'                => $pip->id,
+                    'porcentaje_avance' => (float) $pip->porcentaje_avance,
+                    'estado_ejecucion'  => $pip->estado_ejecucion,
+                ];
+            }
+
+            // 6. Recalcular avance vivienda y proyecto solo UNA VEZ al final
+            $this->recalcularVivienda($viviendaId);
+            $this->calculadora->recalcularAvanceProyecto($proyectoId);
+        });
+
+        $viviendaFresh  = Vivienda::find($viviendaId);
+        $proyectoFresh  = Proyecto::find($proyectoId);
+
+        return [
+            'reportes'                    => $reportesGenerados,
+            'items_actualizados'          => $itemsActualizados,
+            'avance_vivienda'             => (float) $viviendaFresh->porcentaje_avance,
+            'avance_proyecto'             => (float) $proyectoFresh->avance_fisico,
+            'producto_listo_para_cobro'   => count($productosListos) > 0,
+        ];
+    }
+
     // ── Privados ──────────────────────────────────────────────────────────────
+    
+    private function distanciaKm(float $lat1, float $lon1, float $lat2, float $lon2): float
+    {
+        $earthRadius = 6371; // km
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+            sin($dLon / 2) * sin($dLon / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        return $earthRadius * $c;
+    }
 
     private function subirFoto(UploadedFile $foto, int $proyectoId, int $viviendaId): array
     {

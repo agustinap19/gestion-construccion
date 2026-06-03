@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\MobileAuthController;
 use App\Http\Controllers\Api\RolController;
 use App\Http\Controllers\Api\PersonalController;
 use App\Http\Controllers\Api\ClienteController;
@@ -487,3 +488,50 @@ Route::middleware('auth:sanctum')->group(function () {
 
     }); // fin ForzarCambioPassword
 }); // fin auth:sanctum
+
+// ── Rutas Móviles Aisladas ────────────────────────────────────────────────────────
+Route::prefix('movil/v1')->name('movil.v1.')->group(function () {
+    // Sin auth — ping de conectividad
+    Route::get('/ping', [\App\Http\Controllers\Api\MobileSyncController::class, 'ping'])->name('ping');
+
+    // Auth pública (v1 legacy + nuevo prefijo auth/)
+    Route::post('/login', [MobileAuthController::class, 'login']);
+
+    Route::get('/test-pull', function () {
+        $p = \App\Models\Proyecto::find(4);
+        $viviendas = \App\Models\Vivienda::where('proyecto_id', 4)->get();
+        return response()->json([
+            'proyecto' => [
+                'id' => $p->id,
+                'avance_fisico' => $p->avance_fisico,
+                'mapped_avance_real' => (float) $p->avance_fisico,
+            ],
+            'viviendas' => $viviendas->map(fn($v) => [
+                'id' => $v->id,
+                'codigo' => $v->codigo,
+                'porcentaje_avance' => $v->porcentaje_avance,
+                'mapped_avance_fisico' => (float) $v->porcentaje_avance,
+            ])
+        ]);
+    });
+
+    Route::prefix('auth')->name('auth.')->group(function () {
+        Route::post('/login', [MobileAuthController::class, 'login'])->name('login');
+    });
+
+    // Auth protegida (requiere token de Sanctum)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/logout', [MobileAuthController::class, 'logout'])->name('logout');
+
+        // ── Nuevos endpoints canónicos ────────────────────────────────────
+        Route::prefix('sync')->name('sync.')->group(function () {
+            Route::get('/pull', [\App\Http\Controllers\Api\MobileSyncController::class, 'pull'])->name('pull');
+            Route::post('/push', [\App\Http\Controllers\Api\MobileSyncController::class, 'push'])->name('push');
+        });
+
+        // ── Endpoints legacy (redirigen a nueva implementación) ───────────
+        Route::get('/sync-down', [\App\Http\Controllers\Api\MobileSyncController::class, 'pull']);
+        Route::post('/sync-up', [\App\Http\Controllers\Api\MobileSyncController::class, 'push']);
+    });
+});
+

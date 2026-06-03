@@ -2,19 +2,11 @@
 
 namespace Tests\Feature\Proyectos;
 
-use App\Models\CategoriaMaterial;
 use App\Models\CategoriaConstructiva;
-use App\Models\DetalleMovimientoAlmacen;
-use App\Models\HistorialCambioItem;
 use App\Models\ItemConstructivo;
-use App\Models\Material;
-use App\Models\MovimientoAlmacen;
-use App\Models\OverrideItemProyecto;
-use App\Models\Permiso;
 use App\Models\PresupuestoItemProyecto;
 use App\Models\Proyecto;
 use App\Models\Rol;
-use App\Models\UnidadMedida;
 use App\Models\User;
 use App\Models\Vivienda;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -165,199 +157,64 @@ class ChecklistViviendaTest extends TestCase
         $this->assertEquals(25.0, $avanceTotal, 'Debe ser 25% (suma ponderada), no 50% (promedio simple)');
     }
 
-    // ── Test 3: marcar item al 100% → estado terminado ────────────────────────
+    // ── Test 3: el checklist es solo lectura (PATCH directo → 404/405) ─────────
 
-    public function test_marcar_item_al_100_cambia_estado_a_terminado(): void
+    public function test_checklist_es_solo_lectura_patch_directo_no_existe(): void
     {
         $ctx  = $this->crearContexto();
         $pip  = $ctx['pips'][0]['pip'];
         $user = $this->crearUsuarioConRol('gerente');
 
+        // El avance solo se puede modificar via reportes fotográficos
         $res = $this->actingAs($user)
             ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
                 'porcentaje_avance' => 100,
             ]);
 
-        $res->assertStatus(200);
-        $this->assertEquals('terminado', $pip->fresh()->estado_ejecucion);
-        $this->assertEquals(100.0, (float) $pip->fresh()->porcentaje_avance);
-    }
-
-    // ── Test 4: marcar entre 1 y 99 → estado en_proceso ──────────────────────
-
-    public function test_marcar_item_entre_1_y_99_cambia_estado_a_en_proceso(): void
-    {
-        $ctx  = $this->crearContexto();
-        $pip  = $ctx['pips'][0]['pip'];
-        $user = $this->crearUsuarioConRol('gerente');
-
-        $this->actingAs($user)
-            ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
-                'porcentaje_avance' => 50,
-            ])
-            ->assertStatus(200);
-
-        $this->assertEquals('en_proceso', $pip->fresh()->estado_ejecucion);
-    }
-
-    // ── Test 5: marcar a 0 → estado pendiente ────────────────────────────────
-
-    public function test_marcar_item_a_0_cambia_estado_a_pendiente(): void
-    {
-        $ctx = $this->crearContexto();
-        $pip = $ctx['pips'][0]['pip'];
-        $pip->update(['porcentaje_avance' => 50, 'estado_ejecucion' => 'en_proceso']);
-        $user = $this->crearUsuarioConRol('gerente');
-
-        $this->actingAs($user)
-            ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
-                'porcentaje_avance' => 0,
-            ])
-            ->assertStatus(200);
-
-        $this->assertEquals('pendiente', $pip->fresh()->estado_ejecucion);
-    }
-
-    // ── Test 6: recalcula avance de la vivienda ───────────────────────────────
-
-    public function test_marcar_avance_recalcula_avance_vivienda(): void
-    {
-        // 1 item con ponderación 20%, marcado al 100% → avance vivienda = 100%
-        $ctx  = $this->crearContexto();
-        $pip  = $ctx['pips'][0]['pip'];
-        $pip->update(['ponderacion_avance' => 20.0]);
-        $user = $this->crearUsuarioConRol('gerente');
-
-        $res = $this->actingAs($user)
-            ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
-                'porcentaje_avance' => 100,
-            ]);
-
-        $res->assertStatus(200);
-        // Con 1 solo item al 100%, avance vivienda debe ser 100%
-        $avanceViviendaRes = $res->json('avance_total');
-        $avanceViviendaBd  = (float) $ctx['vivienda']->fresh()->porcentaje_avance;
-        $this->assertEquals(100.0, $avanceViviendaRes);
-        $this->assertEquals(100.0, $avanceViviendaBd);
-    }
-
-    // ── Test 7: recalcula avance del proyecto ─────────────────────────────────
-
-    public function test_marcar_avance_recalcula_avance_proyecto(): void
-    {
-        $ctx  = $this->crearContexto();
-        $pip  = $ctx['pips'][0]['pip'];
-        $user = $this->crearUsuarioConRol('gerente');
-
-        $this->actingAs($user)
-            ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
-                'porcentaje_avance' => 100,
-            ])
-            ->assertStatus(200);
-
-        $avanceProyecto = (float) $ctx['proyecto']->fresh()->avance_fisico;
-        $this->assertGreaterThan(0, $avanceProyecto, 'El avance del proyecto debe ser mayor que 0 tras marcar un item');
-    }
-
-    // ── Test 8: advertencia con material insuficiente ─────────────────────────
-
-    public function test_advertencia_si_avance_100_con_material_insuficiente(): void
-    {
-        $ctx = $this->crearContexto();
-        $pip = $ctx['pips'][0]['pip'];
-        $user = $this->crearUsuarioConRol('gerente');
-
-        // Crear material real
-        $catMat = CategoriaMaterial::firstOrCreate(['nombre' => 'CatAdv'], ['color' => '#fff']);
-        $um     = UnidadMedida::firstOrCreate(['simbolo' => 'kg'], ['nombre' => 'Kilogramo', 'activa' => true]);
-        $mat    = Material::create([
-            'codigo'           => 'MAT-ADV-' . uniqid(),
-            'nombre'           => 'Material Advertencia',
-            'tipo'             => 'maestro',
-            'estado'           => true,
-            'categoria_id'     => $catMat->id,
-            'unidad_medida_id' => $um->id,
-        ]);
-
-        // Override de receta: 1 kg por m2, planificado = 10 m2 → esperado = 10 kg
-        OverrideItemProyecto::create([
-            'proyecto_id'              => $ctx['proyecto']->id,
-            'item_constructivo_id'     => $pip->item_constructivo_id,
-            'material_id'              => $mat->id,
-            'cantidad_por_unidad_base' => 1.0,
-            'nivel'                    => 'tipologia',
-            'justificacion'            => 'Override para test de advertencia',
-        ]);
-
-        // Movimiento de salida social con solo 5 kg entregados (50% < 80%)
-        $mov = MovimientoAlmacen::create([
-            'codigo'                       => 'MOV-ADV-' . uniqid(),
-            'tipo'                         => 'salida_social',
-            'estado'                       => 'completado',
-            'proyecto_id'                  => $ctx['proyecto']->id,
-            'presupuesto_item_proyecto_id' => $pip->id,
-        ]);
-        DetalleMovimientoAlmacen::create([
-            'movimiento_almacen_id' => $mov->id,
-            'material_id'           => $mat->id,
-            'cantidad'              => 5.0,
-            'precio_unitario'       => 10.0,
-        ]);
-
-        $res = $this->actingAs($user)
-            ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
-                'porcentaje_avance' => 100,
-            ]);
-
-        $res->assertStatus(200);
-        $res->assertJsonPath('item.estado_ejecucion', 'terminado');
-        $this->assertNotNull($res->json('advertencia'), 'Debe incluir advertencia por material insuficiente');
-        $this->assertStringContainsString('50', $res->json('advertencia'));
-    }
-
-    // ── Test 9: usuario sin permiso no puede marcar avance ────────────────────
-
-    public function test_usuario_sin_permiso_no_puede_marcar_avance(): void
-    {
-        $ctx  = $this->crearContexto();
-        $pip  = $ctx['pips'][0]['pip'];
-
-        // Un usuario sin ningún rol
-        $user = User::factory()->create(['debe_cambiar_password' => false]);
-
-        $this->actingAs($user)
-            ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
-                'porcentaje_avance' => 50,
-            ])
-            ->assertStatus(403);
-
-        // El PIP no debe haber cambiado
+        $this->assertContains($res->status(), [404, 405], 'El PATCH directo al avance debe estar deshabilitado');
+        // El item no debe haber cambiado
         $this->assertEquals(0.0, (float) $pip->fresh()->porcentaje_avance);
     }
 
-    // ── Test 10: auditoría registra cambio de avance ──────────────────────────
+    // ── Test 4: checklist retorna campo puede_marcar_avance por rol ──────────
 
-    public function test_auditoria_registra_cambio_de_avance(): void
+    public function test_checklist_retorna_puede_marcar_avance_segun_rol(): void
+    {
+        $ctx = $this->crearContexto();
+
+        // Gerente → puede marcar
+        $gerente = $this->crearUsuarioConRol('gerente');
+        $res = $this->actingAs($gerente)
+            ->getJson("/api/viviendas/{$ctx['vivienda']->id}/checklist");
+        $res->assertStatus(200);
+        $this->assertTrue($res->json('items.0.puede_marcar_avance'), 'El gerente debe poder marcar avance');
+
+        // Usuario sin rol → no puede marcar
+        $sinRol = User::factory()->create(['debe_cambiar_password' => false]);
+        $res2 = $this->actingAs($sinRol)
+            ->getJson("/api/viviendas/{$ctx['vivienda']->id}/checklist");
+        $res2->assertStatus(200);
+        $this->assertFalse($res2->json('items.0.puede_marcar_avance'), 'Un usuario sin rol no debe poder marcar avance');
+    }
+
+    // ── Test 5: checklist retorna cantidad de reportes por item ─────────────
+
+    public function test_historial_de_reportes_disponible_por_vivienda(): void
     {
         $ctx  = $this->crearContexto();
         $pip  = $ctx['pips'][0]['pip'];
         $user = $this->crearUsuarioConRol('gerente');
+        $vid  = $ctx['vivienda']->id;
 
-        $this->actingAs($user)
-            ->patchJson("/api/viviendas/{$ctx['vivienda']->id}/checklist/{$pip->id}/avance", [
-                'porcentaje_avance' => 75,
-                'observacion'       => 'Avance registrado en test',
-            ])
-            ->assertStatus(200);
-
-        $historial = HistorialCambioItem::where('pip_id', $pip->id)
-            ->where('tipo_cambio', 'avance')
-            ->first();
-
-        $this->assertNotNull($historial, 'Debe existir registro en auditoría');
-        $this->assertEquals($user->id, $historial->usuario_id);
-        $this->assertEquals(0.0, (float) $historial->valores_antes['porcentaje_avance'], 'Valor anterior debe ser 0');
-        $this->assertEquals(75.0, (float) $historial->valores_despues['porcentaje_avance'], 'Valor nuevo debe ser 75');
-        $this->assertEquals('Avance registrado en test', $historial->descripcion);
+        // No hay reportes aún
+        $res = $this->actingAs($user)
+            ->getJson("/api/viviendas/{$vid}/reportes-avance?item_id={$pip->id}");
+        $res->assertStatus(200);
+        $this->assertCount(0, $res->json('data'));
     }
+
+    // ── Test 6-10: eliminados — cubiertos por ReporteAvanceTest ─────────────
+    // Los tests de marcado de avance y cascada están en ReporteAvanceTest.php
+    // que usa el nuevo endpoint POST /viviendas/{id}/reportes-avance
+
 }

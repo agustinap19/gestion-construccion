@@ -479,6 +479,9 @@ const FinanzasSection = ({ proyecto, hitosCobro = [] }) => {
     const pctCobrado   = monto > 0 ? Math.min(100, cobrado   / monto * 100) : 0;
     const pctListo     = monto > 0 ? Math.min(100, listo     / monto * 100) : 0;
     const pctPendiente = Math.max(0, 100 - pctCobrado - pctListo);
+    const sumaMontos   = hitosCobro.reduce((s, h) => s + parseFloat(h.monto_calculado || 0), 0);
+    const sumaPct      = hitosCobro.reduce((s, h) => s + parseFloat(h.porcentaje_contrato || 0), 0);
+    const discrepancia = monto > 0 && hitosCobro.length > 0 && Math.abs(sumaMontos - monto) > 1;
 
     return (
         <GlassCard className="p-5">
@@ -517,13 +520,25 @@ const FinanzasSection = ({ proyecto, hitosCobro = [] }) => {
                 </div>
             )}
 
+            {/* Alerta de discrepancia */}
+            {discrepancia && (
+                <div className="mb-3 flex items-start gap-2 px-3 py-2 rounded-xl text-[11px] text-amber-400"
+                    style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                    <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                    <span>
+                        Los productos suman <strong>{bs(sumaMontos)}</strong> ({sumaPct.toFixed(1)}%) pero el contrato es <strong>{bs(monto)}</strong>.
+                        Los montos necesitan recalcularse — ejecuta <code className="font-mono bg-white/10 px-1 rounded">php artisan cobros:recalcular</code>.
+                    </span>
+                </div>
+            )}
+
             {/* Lista de hitos */}
             {hitosCobro.length > 0 ? (
                 <div className="space-y-2">
                     {hitosCobro.map((h, i) => {
                         const meta   = HITO_ESTADO_META[h.estado] ?? HITO_ESTADO_META.planificado;
                         const montoH = parseFloat(h.monto_calculado || 0);
-                        const pctH   = monto > 0 ? (montoH / monto * 100).toFixed(1) : h.porcentaje_contrato?.toFixed(1);
+                        const pctH   = parseFloat(h.porcentaje_contrato || 0).toFixed(1);
                         return (
                             <div key={h.id ?? i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
                                 style={{ background: meta.bg, border: `1px solid ${meta.color}25` }}>
@@ -552,6 +567,15 @@ const FinanzasSection = ({ proyecto, hitosCobro = [] }) => {
                             </div>
                         );
                     })}
+
+                    {/* Total */}
+                    <div className="flex items-center justify-between pt-2 px-3 border-t border-white/[0.06]">
+                        <span className="text-[11px] text-slate-500 font-semibold">{sumaPct.toFixed(1)}%</span>
+                        <span className={`text-[11px] font-bold ${discrepancia ? 'text-amber-400' : 'text-slate-300'}`}>
+                            Total: {bs(sumaMontos)}
+                            {discrepancia && ' ⚠'}
+                        </span>
+                    </div>
                 </div>
             ) : (
                 <p className="text-xs text-slate-500 text-center py-4">Sin hitos de cobro registrados</p>

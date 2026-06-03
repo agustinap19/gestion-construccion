@@ -247,23 +247,14 @@ function ModalDetalle({ b, onClose, onEditar, onDarDeBaja, canEdit }) {
                                     ['Estado Civil', b.estado_civil || '—'],
                                     ['Género', b.genero || '—'],
                                     ['Nacimiento', b.fecha_nacimiento || '—'],
-                                    ['Familiares', b.cantidad_familiares || '—'],
-                                    ['Dependientes', b.personas_dependientes ?? '—'],
                                     ['Tipología', b.tipo_vivienda?.nombre || '—'],
                                     ['Dirección actual', b.direccion_actual || '—'],
-                                    ['Dirección terreno', b.direccion_terreno || '—'],
                                 ].map(([k, v]) => (
                                     <div key={k} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
                                         <p className="text-slate-500 text-xs mb-0.5">{k}</p>
                                         <p className="text-white text-sm">{v}</p>
                                     </div>
                                 ))}
-                                {b.observaciones && (
-                                    <div className="col-span-2 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                                        <p className="text-slate-500 text-xs mb-0.5">Observaciones</p>
-                                        <p className="text-white text-sm whitespace-pre-wrap">{b.observaciones}</p>
-                                    </div>
-                                )}
                             </div>
                         )}
                         {tab === 'vivienda' && (
@@ -389,16 +380,12 @@ const CAMPOS_FORM = [
     { key: 'apellido_materno', label: 'Apellido materno',  required: false, col: 1, maxLength: 30, onlyLetters: true, capitalize: true },
     { key: 'apellido_conyuge', label: 'Apellido cónyuge',  required: false, col: 2, maxLength: 30, onlyLetters: true, capitalize: true },
     { key: 'ci',               label: 'C.I.',               required: true,  col: 1, maxLength: 15, onlyNumbers: true },
-    { key: 'ci_complemento',   label: 'Complemento CI',    required: false, col: 1, maxLength: 5 },
+    { key: 'ci_complemento',   label: 'Complemento CI',    required: false, col: 1, maxLength: 2 },
     { key: 'fecha_nacimiento', label: 'Fecha nacimiento',  required: false, col: 1, type: 'date' },
     { key: 'estado_civil',     label: 'Estado civil',      required: false, col: 1, type: 'select',
       options: [['','Sin especificar'],['soltero','Soltero/a'],['casado','Casado/a'],['divorciado','Divorciado/a'],['viudo','Viudo/a'],['union_libre','Unión libre'],['otro','Otro']] },
     { key: 'telefono_principal', label: 'Teléfono',        required: false, col: 1, maxLength: 8, onlyNumbers: true },
     { key: 'comunidad',        label: 'Comunidad',         required: false, col: 1 },
-    { key: 'direccion_terreno', label: 'Dirección del terreno', required: false, col: 2, maxLength: 50 },
-    { key: 'cantidad_familiares',   label: 'Nº familiares',  required: false, col: 1, type: 'number', min: 1, max: 10 },
-    { key: 'personas_dependientes', label: 'Dependientes',  required: false, col: 1, type: 'number', min: 0, max: 10 },
-    { key: 'observaciones',    label: 'Observaciones',     required: false, col: 2, type: 'textarea', maxLength: 50 },
 ];
 
 function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose, onGuardado }) {
@@ -407,10 +394,9 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
         nombre: '', apellido_paterno: '', apellido_materno: '', apellido_conyuge: '',
         ci: '', ci_complemento: '', fecha_nacimiento: '', estado_civil: '',
         telefono_principal: '',
-        comunidad: '', direccion_terreno: '',
+        comunidad: '',
         latitud_terreno: '', longitud_terreno: '',
-        cantidad_familiares: '', personas_dependientes: '',
-        tipo_vivienda_id: '', observaciones: '', proyecto_id: proyectoId,
+        tipo_vivienda_id: '', proyecto_id: proyectoId,
     });
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
@@ -431,8 +417,6 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
             const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 18);
             if (birth > cutoff) return 'Debe ser mayor de 18 años';
         }
-        if (k === 'cantidad_familiares' && v && parseInt(v) > 10) return 'Máximo 10';
-        if (k === 'personas_dependientes' && v && parseInt(v) > 10) return 'Máximo 10';
         return null;
     };
 
@@ -490,10 +474,6 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
             cutoff.setFullYear(cutoff.getFullYear() - 18);
             if (birth > cutoff) newErrors.fecha_nacimiento = 'Debe ser mayor de 18 años';
         }
-        if (form.cantidad_familiares && parseInt(form.cantidad_familiares) > 10)
-            newErrors.cantidad_familiares = 'Máximo 10';
-        if (form.personas_dependientes && parseInt(form.personas_dependientes) > 10)
-            newErrors.personas_dependientes = 'Máximo 10';
 
         if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
 
@@ -623,7 +603,29 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
                             {/* Coordenadas */}
                             <div className="col-span-2">
                                 <div className="flex items-center justify-between mb-1.5">
-                                    <label className="text-slate-400 text-xs">Coordenadas del terreno</label>
+                                    <div className="flex items-center gap-3">
+                                        <label className="text-slate-400 text-xs">Coordenadas del terreno</label>
+                                        <button type="button" 
+                                            onClick={() => {
+                                                if (!navigator.geolocation) {
+                                                    toast.error('Tu navegador no soporta geolocalización');
+                                                    return;
+                                                }
+                                                const id = toast.loading('Capturando GPS...');
+                                                navigator.geolocation.getCurrentPosition(
+                                                    pos => {
+                                                        set('latitud_terreno', pos.coords.latitude.toFixed(6));
+                                                        set('longitud_terreno', pos.coords.longitude.toFixed(6));
+                                                        toast.success('Coordenadas capturadas', {id});
+                                                    },
+                                                    err => toast.error('Error al capturar GPS. Verifica los permisos.', {id}),
+                                                    { enableHighAccuracy: true, timeout: 10000 }
+                                                );
+                                            }}
+                                            className="px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 transition flex items-center gap-1 border border-blue-500/30">
+                                            <MapPin size={12} /> Capturar GPS
+                                        </button>
+                                    </div>
                                     <button type="button" onClick={() => setModoGms(!modoGms)}
                                         className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
                                         {modoGms ? 'Usar decimal' : 'Usar GMS sexagesimal'}
@@ -674,9 +676,14 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
                                     </div>
                                 )}
                                 {form.latitud_terreno && form.longitud_terreno && (
-                                    <p className="text-slate-500 text-xs mt-1">
-                                        GMS: {decimalAGms(form.latitud_terreno)} {Number(form.latitud_terreno) >= 0 ? 'N' : 'S'}, {decimalAGms(form.longitud_terreno)} {Number(form.longitud_terreno) >= 0 ? 'E' : 'W'}
-                                    </p>
+                                    <>
+                                        <p className="text-slate-500 text-xs mt-1 mb-2">
+                                            GMS: {decimalAGms(form.latitud_terreno)} {Number(form.latitud_terreno) >= 0 ? 'N' : 'S'}, {decimalAGms(form.longitud_terreno)} {Number(form.longitud_terreno) >= 0 ? 'E' : 'W'}
+                                        </p>
+                                        <div className="mt-2" style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', overflow: 'hidden' }}>
+                                            <MapaCoords lat={parseFloat(form.latitud_terreno)} lng={parseFloat(form.longitud_terreno)} nombre="Ubicación registrada" />
+                                        </div>
+                                    </>
                                 )}
                             </div>
 
