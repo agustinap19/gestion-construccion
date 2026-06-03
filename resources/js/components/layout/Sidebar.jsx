@@ -288,6 +288,11 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
                             className="w-full block"
                         />
                     </div>
+                    {!isActuallyCollapsed && (
+                        <p className="mt-2 text-center text-[10px] text-slate-400/50 dark:text-slate-600/60 select-none tracking-wide">
+                            Gestion-Constructora v1.0
+                        </p>
+                    )}
                 </div>
             </aside>
         </>

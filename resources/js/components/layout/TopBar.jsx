@@ -96,7 +96,7 @@ const TopBar = ({ onOpenMobileMenu, onOpenNotificaciones, onOpenSearch }) => {
 
     return (
         <header className="sticky top-0 z-30 h-14 bg-white/85 dark:bg-[#080c15]/85 backdrop-blur-2xl border-b border-slate-200/70 dark:border-white/[0.05] w-full flex items-center justify-between px-4 sm:px-6 transition-all shadow-sm dark:shadow-[0_1px_0_oklch(100%_0_0/0.04)]">
-            
+
             {/* Izquierda: Menú móvil & Breadcrumbs */}
             <div className="flex items-center gap-4">
                 <button
