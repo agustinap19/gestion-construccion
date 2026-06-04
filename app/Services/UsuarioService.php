@@ -205,7 +205,11 @@ class UsuarioService
             }
 
             // Enviar correo con credenciales
-            Mail::to($usuario->email)->send(new UsuarioCreadoMail($usuario, $passwordTemporal));
+            try {
+                Mail::to($usuario->email)->send(new UsuarioCreadoMail($usuario, $passwordTemporal));
+            } catch (\Exception $e) {
+                \Log::warning('Email no enviado: ' . $e->getMessage());
+            }
 
             return $usuario->load('rol');
         });
@@ -384,7 +388,11 @@ class UsuarioService
             ->where('tokenable_type', User::class)
             ->delete();
 
-        Mail::to($usuario->email)->send(new UsuarioCreadoMail($usuario, $passwordTemporal));
+        try {
+            Mail::to($usuario->email)->send(new UsuarioCreadoMail($usuario, $passwordTemporal));
+        } catch (\Exception $e) {
+            \Log::warning('Email no enviado: ' . $e->getMessage());
+        }
 
         return $usuario->load('rol');
     }

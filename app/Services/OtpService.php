@@ -35,7 +35,11 @@ class OtpService
         ]);
 
         $nombreDispositivo = $this->parsearNombreDispositivo($userAgent);
-        Mail::to($usuario->email)->send(new CodigoOtpMail($codigoPlano, $nombreDispositivo, $ip));
+        try {
+            Mail::to($usuario->email)->send(new CodigoOtpMail($codigoPlano, $nombreDispositivo, $ip));
+        } catch (\Exception $e) {
+            \Log::warning('Email no enviado: ' . $e->getMessage());
+        }
 
         return $tokenTemporal;
     }
