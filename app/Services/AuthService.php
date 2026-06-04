@@ -103,7 +103,21 @@ class AuthService
             ];
         }
 
-        // Dispositivo nuevo -> enviar OTP
+        // 2FA temporalmente deshabilitado — restaurar el bloque comentado para reactivar
+        $this->auditoria->registrarIntento($email, true, null, $request);
+        $token = $user->createToken('auth_token', ['*'], now()->addHours(8))->plainTextToken;
+        $user->load('rol');
+
+        return [
+            'tipo_respuesta'        => 'login_exitoso',
+            'token'                 => $token,
+            'usuario'               => $user,
+            'permisos'              => $user->getPermisos(),
+            'debe_cambiar_password' => false,
+        ];
+
+        /*
+        // Dispositivo nuevo -> enviar OTP (reactivar eliminando este bloque comentado y el bloque de arriba)
         $tokenTemporal = $this->otpService->generarYEnviar(
             $user,
             $fingerprint,
@@ -121,6 +135,7 @@ class AuthService
             'token_temporal' => $tokenTemporal,
             'email_destino'  => $emailMascarado,
         ];
+        */
     }
 
     public function verificarOtp(string $tokenTemporal, string $codigo, bool $confiarDispositivo, string $fingerprint, Request $request): array
