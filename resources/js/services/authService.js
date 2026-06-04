@@ -56,6 +56,26 @@ const authService = {
         return response.data;
     },
 
+    continuarSinCodigo: async (tokenTemporal, confiarDispositivo, fingerprint) => {
+        const response = await api.post('/2fa/continuar-sin-codigo', {
+            token_temporal: tokenTemporal,
+            confiar_dispositivo: confiarDispositivo,
+            fingerprint,
+        });
+
+        if (response.data.status === 'success') {
+            const data = response.data.data;
+            if (data.tipo_respuesta === 'login_exitoso') {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.usuario));
+                localStorage.setItem('permisos', JSON.stringify(data.permisos));
+            }
+            return data;
+        }
+
+        return response.data;
+    },
+
     cambiarPasswordPrimerLogin: async (passwordActual, nuevaPassword) => {
         const response = await api.post('/primer-login/cambiar-password', {
             password_actual: passwordActual,

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CodigoOtp;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -103,27 +104,8 @@ class AuthService
             ];
         }
 
-        // 2FA temporalmente deshabilitado — restaurar el bloque comentado para reactivar
-        $this->auditoria->registrarIntento($email, true, null, $request);
-        $token = $user->createToken('auth_token', ['*'], now()->addHours(8))->plainTextToken;
-        $user->load('rol');
-
-        return [
-            'tipo_respuesta'        => 'login_exitoso',
-            'token'                 => $token,
-            'usuario'               => $user,
-            'permisos'              => $user->getPermisos(),
-            'debe_cambiar_password' => false,
-        ];
-
-        /*
-        // Dispositivo nuevo -> enviar OTP (reactivar eliminando este bloque comentado y el bloque de arriba)
-        $tokenTemporal = $this->otpService->generarYEnviar(
-            $user,
-            $fingerprint,
-            $request->userAgent() ?? '',
-            $request->ip()
-        );
+        // Dispositivo nuevo -> generar token temporal (sin enviar código por email)
+        $tokenTemporal = $this->otpService->generarTokenTemporal($user, $fingerprint);
 
         $this->auditoria->registrarIntento($email, true, 'pendiente_otp', $request);
 
@@ -135,7 +117,6 @@ class AuthService
             'token_temporal' => $tokenTemporal,
             'email_destino'  => $emailMascarado,
         ];
-        */
     }
 
     public function verificarOtp(string $tokenTemporal, string $codigo, bool $confiarDispositivo, string $fingerprint, Request $request): array
@@ -145,6 +126,44 @@ class AuthService
         $user = User::findOrFail($otp->usuario_id);
 
         if ($confiarDispositivo) {
+            $this->dispositivoService->registrarDispositivo(
+                $user->id,
+                $fingerprint,
+                $request->userAgent() ?? '',
+                $request->ip()
+            );
+        }
+
+        $user->update(['ultimo_acceso' => now()]);
+        $this->auditoria->registrarIntento($user->email, true, '2fa_completado', $request);
+
+        $token = $user->createToken('auth_token', ['*'], now()->addHours(8))->plainTextToken;
+        $user->load('rol');
+
+        return [
+            'tipo_respuesta'        => 'login_exitoso',
+            'token'                 => $token,
+            'usuario'               => $user,
+            'permisos'              => $user->getPermisos(),
+            'debe_cambiar_password' => $user->debe_cambiar_password,
+        ];
+    }
+
+    public function continuarSinCodigo(string $tokenTemporal, bool $confiarDispositivo, string $fingerprint, Request $request): array
+    {
+        $otp = CodigoOtp::where('token_temporal', $tokenTemporal)
+            ->where('usado', false)
+            ->where('expira_en', '>', now())
+            ->first();
+
+        if (!$otp) {
+            throw new \Exception('Sesión inválida o expirada. Por favor inicia sesión nuevamente.');
+        }
+
+        $user = User::findOrFail($otp->usuario_id);
+        $otp->update(['usado' => true]);
+
+        if ($confiarDispositivo && $fingerprint) {
             $this->dispositivoService->registrarDispositivo(
                 $user->id,
                 $fingerprint,

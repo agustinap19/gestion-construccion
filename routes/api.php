@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\RecalculoFinancieroController;
 // ── Auth pública ─────────────────────────────────────────────────────────────
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/2fa/verificar-otp', [AuthController::class, 'verificarOtp']);
+Route::post('/2fa/continuar-sin-codigo', [AuthController::class, 'continuarSinCodigo']);
 Route::post('/2fa/reenviar-otp', [AuthController::class, 'reenviarOtp']);
 
 Route::prefix('recuperacion')->group(function () {

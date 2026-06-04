@@ -64,6 +64,36 @@ class AuthController extends Controller
         }
     }
 
+    public function continuarSinCodigo(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token_temporal'     => ['required', 'string'],
+            'confiar_dispositivo' => ['boolean'],
+            'fingerprint'        => ['nullable', 'string', 'max:128'],
+        ]);
+
+        try {
+            $data = $this->authService->continuarSinCodigo(
+                $request->token_temporal,
+                (bool) ($request->confiar_dispositivo ?? false),
+                $request->fingerprint ?? '',
+                $request
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Acceso concedido.',
+                'data'    => $data,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+                'data'    => null,
+            ], 400);
+        }
+    }
+
     public function reenviarOtp(Request $request): JsonResponse
     {
         $request->validate([

@@ -44,6 +44,29 @@ class OtpService
         return $tokenTemporal;
     }
 
+    public function generarTokenTemporal(User $usuario, string $fingerprint): string
+    {
+        CodigoOtp::where('usuario_id', $usuario->id)
+            ->where('fingerprint_dispositivo', $fingerprint)
+            ->where('usado', false)
+            ->update(['usado' => true]);
+
+        $tokenTemporal = Str::uuid()->toString();
+
+        CodigoOtp::create([
+            'usuario_id'              => $usuario->id,
+            'codigo'                  => Hash::make(Str::random(6)),
+            'tipo'                    => 'nuevo_dispositivo',
+            'token_temporal'          => $tokenTemporal,
+            'fingerprint_dispositivo' => $fingerprint,
+            'expira_en'               => now()->addMinutes(10),
+            'usado'                   => false,
+            'intentos_fallidos'       => 0,
+        ]);
+
+        return $tokenTemporal;
+    }
+
     public function validar(string $tokenTemporal, string $codigoIngresado): CodigoOtp
     {
         $otp = CodigoOtp::where('token_temporal', $tokenTemporal)->first();
