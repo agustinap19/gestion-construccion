@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { obtenerFingerprint } from '../../services/fingerprintService';
@@ -23,24 +23,69 @@ const EyeIcon = ({ visible }) => (
     </svg>
 );
 
-// ── Modal dispositivo nuevo ───────────────────────────────────────────────────
-const ModalOtp = ({ tokenTemporal, fingerprint, onExito, onCancelar }) => {
+// ── Modal OTP ─────────────────────────────────────────────────────────────────
+const ModalOtp = ({ tokenTemporal, emailDestino, fingerprint, onExito, onCancelar }) => {
+    const [codigo, setCodigo] = useState(['', '', '', '', '', '']);
     const [confiarDispositivo, setConfiarDispositivo] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [tiempoRestante, setTiempoRestante] = useState(600);
+    const [cooldownReenvio, setCooldownReenvio] = useState(0);
+    const refs = useRef([]);
     const { loginDirecto } = useAuth();
 
-    const continuar = async () => {
+    useEffect(() => {
+        if (tiempoRestante <= 0) return;
+        const t = setInterval(() => setTiempoRestante(s => s - 1), 1000);
+        return () => clearInterval(t);
+    }, [tiempoRestante]);
+
+    useEffect(() => {
+        if (cooldownReenvio <= 0) return;
+        const t = setInterval(() => setCooldownReenvio(s => s - 1), 1000);
+        return () => clearInterval(t);
+    }, [cooldownReenvio]);
+
+    const formatTiempo = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+    const handleDigit = (i, val) => {
+        const digit = val.replace(/[^0-9]/g, '').slice(-1);
+        const next = [...codigo];
+        next[i] = digit;
+        setCodigo(next);
+        setError('');
+        if (digit && i < 5) refs.current[i + 1]?.focus();
+    };
+
+    const handleKeyDown = (i, e) => {
+        if (e.key === 'Backspace' && !codigo[i] && i > 0) refs.current[i - 1]?.focus();
+    };
+
+    const handlePaste = (e) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+        if (text.length === 6) {
+            setCodigo(text.split(''));
+            refs.current[5]?.focus();
+        }
+    };
+
+    const codigoCompleto = codigo.join('');
+
+    const verificar = async () => {
+        if (codigoCompleto.length < 6) return;
         setLoading(true);
         setError('');
         try {
-            const data = await authService.continuarSinCodigo(tokenTemporal, confiarDispositivo, fingerprint);
+            const data = await authService.verificarOtp(tokenTemporal, codigoCompleto, confiarDispositivo, fingerprint);
             if (data.tipo_respuesta === 'login_exitoso') {
                 loginDirecto(data);
                 onExito(data);
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Error al iniciar sesión. Intenta nuevamente.');
+            setError(err.response?.data?.message || 'Código incorrecto.');
+            setCodigo(['', '', '', '', '', '']);
+            refs.current[0]?.focus();
         } finally {
             setLoading(false);
         }
@@ -54,16 +99,45 @@ const ModalOtp = ({ tokenTemporal, fingerprint, onExito, onCancelar }) => {
                 <div className="text-center mb-6">
                     <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
                         <svg className="w-7 h-7 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
                     </div>
-                    <h3 className="text-xl font-bold text-white">Nuevo dispositivo detectado</h3>
-                    <p className="text-slate-400 text-sm mt-1">¿Deseas recordar este equipo?</p>
+                    <h3 className="text-xl font-bold text-white">Verificación de dos pasos</h3>
+                    <p className="text-slate-400 text-sm mt-1">
+                        Enviamos un código a <span className="text-purple-300">{emailDestino}</span>
+                    </p>
                 </div>
 
-                {error && (
-                    <p className="text-center text-sm text-red-400 mb-4">{error}</p>
-                )}
+                <div className="text-center mb-5">
+                    {tiempoRestante > 0 ? (
+                        <span className={`text-sm font-mono font-medium ${tiempoRestante < 60 ? 'text-red-400' : 'text-slate-400'}`}>
+                            Expira en {formatTiempo(tiempoRestante)}
+                        </span>
+                    ) : (
+                        <span className="text-sm text-red-400 font-medium">El código expiró</span>
+                    )}
+                </div>
+
+                <div className="flex justify-center gap-2 mb-5" onPaste={handlePaste}>
+                    {codigo.map((d, i) => (
+                        <input
+                            key={i}
+                            ref={el => refs.current[i] = el}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={d}
+                            onChange={e => handleDigit(i, e.target.value)}
+                            onKeyDown={e => handleKeyDown(i, e)}
+                            disabled={loading || tiempoRestante === 0}
+                            className={`w-11 h-14 text-center text-xl font-bold rounded-xl border bg-transparent text-white focus:outline-none transition-all duration-200
+                                ${error ? 'border-red-500' : d ? 'border-purple-500 shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'border-white/10 focus:border-purple-400'}
+                                disabled:opacity-50`}
+                        />
+                    ))}
+                </div>
+
+                {error && <p className="text-center text-sm text-red-400 mb-4">{error}</p>}
 
                 <label className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-white/5 cursor-pointer hover:border-purple-500/30 transition-colors mb-5">
                     <input
@@ -74,21 +148,28 @@ const ModalOtp = ({ tokenTemporal, fingerprint, onExito, onCancelar }) => {
                     />
                     <div>
                         <span className="text-sm text-slate-200 font-medium">Confiar en este dispositivo</span>
-                        <p className="text-xs text-slate-500 mt-0.5">No volver a preguntar en este equipo por 30 días</p>
+                        <p className="text-xs text-slate-500 mt-0.5">No pedir código por 30 días en este equipo</p>
                     </div>
                 </label>
 
                 <button
-                    onClick={continuar}
-                    disabled={loading}
+                    onClick={verificar}
+                    disabled={codigoCompleto.length < 6 || loading || tiempoRestante === 0}
                     className="w-full h-11 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(139,92,246,0.4)] disabled:opacity-50 disabled:hover:translate-y-0 flex items-center justify-center gap-2 mb-3"
                 >
-                    {loading ? <><Spinner className="w-4 h-4" /> Ingresando...</> : 'Continuar'}
+                    {loading ? <><Spinner className="w-4 h-4" /> Verificando...</> : 'Verificar código'}
                 </button>
 
-                <div className="flex justify-center">
+                <div className="flex justify-between items-center">
                     <button onClick={onCancelar} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
                         Cancelar
+                    </button>
+                    <button
+                        disabled={cooldownReenvio > 0}
+                        className="text-xs text-purple-400 hover:text-purple-300 disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
+                        onClick={() => { onCancelar(); toast('Ingresa nuevamente para recibir un nuevo código.', { icon: 'ℹ️' }); }}
+                    >
+                        {cooldownReenvio > 0 ? `Reenviar en ${cooldownReenvio}s` : 'Solicitar nuevo código'}
                     </button>
                 </div>
             </div>
@@ -367,6 +448,7 @@ const Login = () => {
             {otpData && (
                 <ModalOtp
                     tokenTemporal={otpData.tokenTemporal}
+                    emailDestino={otpData.emailDestino}
                     fingerprint={otpData.fingerprint}
                     onExito={handleOtpExito}
                     onCancelar={() => setOtpData(null)}

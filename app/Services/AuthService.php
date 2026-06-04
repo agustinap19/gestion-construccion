@@ -104,8 +104,8 @@ class AuthService
             ];
         }
 
-        // Dispositivo nuevo -> generar token temporal (sin enviar código por email)
-        $tokenTemporal = $this->otpService->generarTokenTemporal($user, $fingerprint);
+        // Dispositivo nuevo -> enviar OTP por email
+        $tokenTemporal = $this->otpService->generarYEnviar($user, $fingerprint, $request->userAgent() ?? '', $request->ip());
 
         $this->auditoria->registrarIntento($email, true, 'pendiente_otp', $request);
 
