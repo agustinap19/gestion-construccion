@@ -43,7 +43,7 @@ const LABELS_CAMPO = {
     personas_dependientes: 'Personas dependientes', estado_seleccion: 'Estado de selección',
     debe_cambiar_password: 'Debe cambiar contraseña',
     intentos_fallidos: 'Intentos fallidos',
-    rostro_registrado: 'Rostro registrado',
+    totp_activo: 'TOTP activado',
 };
 
 function nombreUsuario(user) {

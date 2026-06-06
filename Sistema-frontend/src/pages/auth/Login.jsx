@@ -29,24 +29,8 @@ const ModalOtp = ({ tokenTemporal, emailDestino, fingerprint, onExito, onCancela
     const [confiarDispositivo, setConfiarDispositivo] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [tiempoRestante, setTiempoRestante] = useState(600);
-    const [cooldownReenvio, setCooldownReenvio] = useState(0);
     const refs = useRef([]);
     const { loginDirecto } = useAuth();
-
-    useEffect(() => {
-        if (tiempoRestante <= 0) return;
-        const t = setInterval(() => setTiempoRestante(s => s - 1), 1000);
-        return () => clearInterval(t);
-    }, [tiempoRestante]);
-
-    useEffect(() => {
-        if (cooldownReenvio <= 0) return;
-        const t = setInterval(() => setCooldownReenvio(s => s - 1), 1000);
-        return () => clearInterval(t);
-    }, [cooldownReenvio]);
-
-    const formatTiempo = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
     const handleDigit = (i, val) => {
         const digit = val.replace(/[^0-9]/g, '').slice(-1);
@@ -102,20 +86,10 @@ const ModalOtp = ({ tokenTemporal, emailDestino, fingerprint, onExito, onCancela
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
                     </div>
-                    <h3 className="text-xl font-bold text-white">Verificación de dos pasos</h3>
+                    <h3 className="text-xl font-bold text-white">Verificación en dos pasos</h3>
                     <p className="text-slate-400 text-sm mt-1">
-                        Enviamos un código a <span className="text-purple-300">{emailDestino}</span>
+                        Ingresa el código de 6 dígitos de tu app <span className="text-purple-300">Google Authenticator</span>
                     </p>
-                </div>
-
-                <div className="text-center mb-5">
-                    {tiempoRestante > 0 ? (
-                        <span className={`text-sm font-mono font-medium ${tiempoRestante < 60 ? 'text-red-400' : 'text-slate-400'}`}>
-                            Expira en {formatTiempo(tiempoRestante)}
-                        </span>
-                    ) : (
-                        <span className="text-sm text-red-400 font-medium">El código expiró</span>
-                    )}
                 </div>
 
                 <div className="flex justify-center gap-2 mb-5" onPaste={handlePaste}>
@@ -129,7 +103,7 @@ const ModalOtp = ({ tokenTemporal, emailDestino, fingerprint, onExito, onCancela
                             value={d}
                             onChange={e => handleDigit(i, e.target.value)}
                             onKeyDown={e => handleKeyDown(i, e)}
-                            disabled={loading || tiempoRestante === 0}
+                            disabled={loading}
                             className={`w-11 h-14 text-center text-xl font-bold rounded-xl border bg-transparent text-white focus:outline-none transition-all duration-200
                                 ${error ? 'border-red-500' : d ? 'border-purple-500 shadow-[0_0_10px_rgba(139,92,246,0.3)]' : 'border-white/10 focus:border-purple-400'}
                                 disabled:opacity-50`}
@@ -154,7 +128,7 @@ const ModalOtp = ({ tokenTemporal, emailDestino, fingerprint, onExito, onCancela
 
                 <button
                     onClick={verificar}
-                    disabled={codigoCompleto.length < 6 || loading || tiempoRestante === 0}
+                    disabled={codigoCompleto.length < 6 || loading}
                     className="w-full h-11 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(139,92,246,0.4)] disabled:opacity-50 disabled:hover:translate-y-0 flex items-center justify-center gap-2 mb-3"
                 >
                     {loading ? <><Spinner className="w-4 h-4" /> Verificando...</> : 'Verificar código'}
@@ -164,13 +138,7 @@ const ModalOtp = ({ tokenTemporal, emailDestino, fingerprint, onExito, onCancela
                     <button onClick={onCancelar} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
                         Cancelar
                     </button>
-                    <button
-                        disabled={cooldownReenvio > 0}
-                        className="text-xs text-purple-400 hover:text-purple-300 disabled:text-slate-600 disabled:cursor-not-allowed transition-colors"
-                        onClick={() => { onCancelar(); toast('Ingresa nuevamente para recibir un nuevo código.', { icon: 'ℹ️' }); }}
-                    >
-                        {cooldownReenvio > 0 ? `Reenviar en ${cooldownReenvio}s` : 'Solicitar nuevo código'}
-                    </button>
+                    <span className="text-xs text-slate-600">El código rota cada 30 seg</span>
                 </div>
             </div>
         </div>

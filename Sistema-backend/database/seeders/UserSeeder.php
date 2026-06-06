@@ -40,6 +40,9 @@ class UserSeeder extends Seeder
                 'rol_id'                => $roles['super_admin'],
                 'es_admin_central'      => true,
                 'debe_cambiar_password' => false,
+                'totp_secret'           => 'JBSWY3DPEHPK3PXP',
+                'totp_activo'           => true,
+                'totp_activado_en'      => now(),
             ],
             [
                 'nombre'                => 'Eduardo',
@@ -108,29 +111,63 @@ class UserSeeder extends Seeder
                 'rol_id'                => $roles['encargado_almacen'],
                 'debe_cambiar_password' => false,
             ],
+            [
+                'nombre'                => 'Admin',
+                'apellido_paterno'      => 'Prueba',
+                'apellido_materno'      => 'CA',
+                'ci'                    => '1000001',
+                'email'                 => 'admin@prueba.com',
+                'password'              => Hash::make('Admin123!'),
+                'rol_id'                => $roles['super_admin'],
+                'es_admin_central'      => false,
+                'debe_cambiar_password' => false,
+                'totp_secret'           => 'JBSWY3DPEHPK3PXP',
+                'totp_activo'           => true,
+                'totp_activado_en'      => now(),
+            ],
+            [
+                'nombre'                => 'User',
+                'apellido_paterno'      => 'Prueba',
+                'apellido_materno'      => 'CA',
+                'ci'                    => '1000002',
+                'email'                 => 'user@prueba.com',
+                'password'              => Hash::make('User123!'),
+                'rol_id'                => $roles['tecnico_campo'],
+                'es_admin_central'      => false,
+                'debe_cambiar_password' => false,
+                'totp_secret'           => 'KNRW24TMMJQXEZLJ',
+                'totp_activo'           => true,
+                'totp_activado_en'      => now(),
+            ],
         ];
 
         foreach ($usuarios as $userData) {
             $debeCambiar = $userData['debe_cambiar_password'];
-            DB::table('users')->insert([
-                'nombre'                => $userData['nombre'],
-                'apellido_paterno'      => $userData['apellido_paterno'],
-                'apellido_materno'      => $userData['apellido_materno'] ?? null,
-                'ci'                    => $userData['ci'],
-                'ci_complemento'        => null,
-                'email'                 => $userData['email'],
-                'password'              => $password,
-                'telefono'              => $userData['telefono'] ?? ('7' . $faker->randomNumber(7, true)),
-                'fecha_nacimiento'      => $userData['fecha_nacimiento'] ?? $faker->dateTimeBetween('-50 years', '-25 years')->format('Y-m-d'),
-                'direccion'             => $userData['direccion'] ?? $faker->randomElement($direcciones),
-                'rol_id'                => $userData['rol_id'],
-                'estado'                => 'activo',
-                'debe_cambiar_password' => $debeCambiar,
-                'password_cambiado_en'  => $debeCambiar ? null : now(),
-                'es_admin_central'      => $userData['es_admin_central'] ?? false,
-                'created_at'            => now(),
-                'updated_at'            => now(),
-            ]);
+            DB::table('users')->updateOrInsert(
+                ['email' => $userData['email']],
+                [
+                    'nombre'                => $userData['nombre'],
+                    'apellido_paterno'      => $userData['apellido_paterno'],
+                    'apellido_materno'      => $userData['apellido_materno'] ?? null,
+                    'ci'                    => $userData['ci'],
+                    'ci_complemento'        => null,
+                    'email'                 => $userData['email'],
+                    'password'              => $userData['password'] ?? $password,
+                    'telefono'              => $userData['telefono'] ?? ('7' . $faker->randomNumber(7, true)),
+                    'fecha_nacimiento'      => $userData['fecha_nacimiento'] ?? $faker->dateTimeBetween('-50 years', '-25 years')->format('Y-m-d'),
+                    'direccion'             => $userData['direccion'] ?? $faker->randomElement($direcciones),
+                    'rol_id'                => $userData['rol_id'],
+                    'estado'                => 'activo',
+                    'debe_cambiar_password' => $debeCambiar,
+                    'password_cambiado_en'  => $debeCambiar ? null : now(),
+                    'es_admin_central'      => $userData['es_admin_central'] ?? false,
+                    'totp_secret'           => $userData['totp_secret'] ?? null,
+                    'totp_activo'           => $userData['totp_activo'] ?? false,
+                    'totp_activado_en'      => $userData['totp_activado_en'] ?? null,
+                    'created_at'            => now(),
+                    'updated_at'            => now(),
+                ]
+            );
         }
     }
 }

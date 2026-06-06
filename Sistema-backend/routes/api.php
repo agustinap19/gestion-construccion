@@ -28,12 +28,12 @@ use App\Http\Controllers\Api\ItemsProyectoController;
 use App\Http\Controllers\Api\MovimientoAlmacenController;
 use App\Http\Controllers\Api\ConfiguracionPorcentajesController;
 use App\Http\Controllers\Api\RecalculoFinancieroController;
+use App\Http\Controllers\Api\TotpController;
 
 // ── Auth pública ─────────────────────────────────────────────────────────────
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/2fa/verificar-otp', [AuthController::class, 'verificarOtp']);
 Route::post('/2fa/continuar-sin-codigo', [AuthController::class, 'continuarSinCodigo']);
-Route::post('/2fa/reenviar-otp', [AuthController::class, 'reenviarOtp']);
 
 Route::prefix('recuperacion')->group(function () {
     Route::post('/solicitar', [RecuperacionPasswordController::class, 'solicitar'])->middleware('throttle:6,1');
@@ -46,6 +46,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
+    // TOTP setup
+    Route::prefix('totp')->group(function () {
+        Route::get('/setup', [TotpController::class, 'setup']);
+        Route::post('/confirmar', [TotpController::class, 'confirmar']);
+        Route::get('/estado', [TotpController::class, 'estado']);
+    });
 
     // Cambio de contraseña obligatorio (sin ForzarCambioPassword para no crear ciclo)
     Route::prefix('primer-login')->group(function () {

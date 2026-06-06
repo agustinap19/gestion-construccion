@@ -37,18 +37,15 @@ class User extends Authenticatable
         'intentos_fallidos',
         'bloqueado_hasta',
         'es_admin_central',
-        // Facial (columnas en DB, no usadas en código — sprint de biometría)
-        'rostro_base64',
-        'descriptor_facial',
-        'rostro_registrado',
-        'rostro_registrado_en',
+        'totp_secret',
+        'totp_activo',
+        'totp_activado_en',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
-        'rostro_base64',
-        'descriptor_facial',
+        'totp_secret',
     ];
 
     protected function casts(): array
@@ -63,8 +60,8 @@ class User extends Authenticatable
             'intentos_fallidos' => 'integer',
             'debe_cambiar_password' => 'boolean',
             'es_admin_central' => 'boolean',
-            'rostro_registrado' => 'boolean',
-            'rostro_registrado_en' => 'datetime',
+            'totp_activo' => 'boolean',
+            'totp_activado_en' => 'datetime',
         ];
     }
 

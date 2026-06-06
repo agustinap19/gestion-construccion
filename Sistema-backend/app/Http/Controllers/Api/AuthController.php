@@ -6,17 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\VerificarOtpRequest;
 use App\Services\AuthService;
-use App\Services\OtpService;
-use App\Models\CodigoOtp;
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AuthController extends Controller
 {
     public function __construct(
-        protected AuthService $authService,
-        protected OtpService $otpService
+        protected AuthService $authService
     ) {}
 
     public function login(LoginRequest $request): JsonResponse
@@ -67,9 +63,9 @@ class AuthController extends Controller
     public function continuarSinCodigo(Request $request): JsonResponse
     {
         $request->validate([
-            'token_temporal'     => ['required', 'string'],
+            'token_temporal'      => ['required', 'string'],
             'confiar_dispositivo' => ['boolean'],
-            'fingerprint'        => ['nullable', 'string', 'max:128'],
+            'fingerprint'         => ['nullable', 'string', 'max:128'],
         ]);
 
         try {
@@ -92,47 +88,6 @@ class AuthController extends Controller
                 'data'    => null,
             ], 400);
         }
-    }
-
-    public function reenviarOtp(Request $request): JsonResponse
-    {
-        $request->validate([
-            'token_temporal' => ['required', 'string'],
-            'fingerprint'    => ['nullable', 'string', 'max:128'],
-        ]);
-
-        $otp = CodigoOtp::where('token_temporal', $request->token_temporal)
-            ->where('usado', false)
-            ->where('expira_en', '>', now())
-            ->first();
-
-        if (!$otp) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Sesión de verificación inválida o expirada.',
-            ], 400);
-        }
-
-        $user = User::findOrFail($otp->usuario_id);
-
-        $nuevoToken = $this->otpService->generarYEnviar(
-            $user,
-            $otp->fingerprint_dispositivo ?? ($request->fingerprint ?? ''),
-            $request->userAgent() ?? '',
-            $request->ip()
-        );
-
-        $partes = explode('@', $user->email);
-        $emailMascarado = substr($partes[0], 0, 2) . '***@' . $partes[1];
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Código reenviado.',
-            'data'    => [
-                'token_temporal' => $nuevoToken,
-                'email_destino'  => $emailMascarado,
-            ],
-        ], 200);
     }
 
     public function logout(Request $request): JsonResponse

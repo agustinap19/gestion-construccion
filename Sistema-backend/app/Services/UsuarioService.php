@@ -56,7 +56,7 @@ class UsuarioService
         }
 
         if (isset($filtros['tiene_2fa'])) {
-            $query->where('rostro_registrado', filter_var($filtros['tiene_2fa'], FILTER_VALIDATE_BOOLEAN));
+            $query->where('totp_activo', filter_var($filtros['tiene_2fa'], FILTER_VALIDATE_BOOLEAN));
         }
 
         if (isset($filtros['con_password_temporal']) && $filtros['con_password_temporal']) {
@@ -173,7 +173,6 @@ class UsuarioService
                 'estado' => $datos['estado'] ?? 'activo',
                 'password' => Hash::make($passwordTemporal),
                 'debe_cambiar_password' => true,
-                'rostro_registrado' => false,
             ]);
 
             // Crear personal vinculado si se solicita

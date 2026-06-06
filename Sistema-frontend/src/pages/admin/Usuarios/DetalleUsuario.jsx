@@ -356,8 +356,8 @@ const DetalleUsuario = () => {
                         <PanelTitle icon={<Key size={16} />} title="Seguridad de la Cuenta" color="#a78bfa" />
                         <div className="space-y-3">
                             <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                <span className="text-sm text-slate-400">2FA Facial</span>
-                                {u.rostro_registrado ? <Badge variant="success">Configurado</Badge> : <Badge variant="danger">Sin configurar</Badge>}
+                                <span className="text-sm text-slate-400">Google Authenticator (TOTP)</span>
+                                {u.totp_activo ? <Badge variant="success">Configurado</Badge> : <Badge variant="danger">Sin configurar</Badge>}
                             </div>
                             <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                 <span className="text-sm text-slate-400">Cuenta bloqueada</span>

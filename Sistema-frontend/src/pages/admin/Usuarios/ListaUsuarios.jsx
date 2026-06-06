@@ -365,7 +365,7 @@ const ListaUsuarios = () => {
                                     </td>
                                     <td className="p-3 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">{formatRelativo(u.ultimo_acceso)}</td>
                                     <td className="p-3">
-                                        {u.rostro_registrado
+                                        {u.totp_activo
                                             ? <Check size={16} className="text-emerald-500" />
                                             : <X size={16} className="text-slate-600" />}
                                     </td>

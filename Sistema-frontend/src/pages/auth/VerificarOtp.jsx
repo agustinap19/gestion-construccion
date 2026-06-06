@@ -79,11 +79,7 @@ const VerificarOtp = () => {
 
         try {
             await authService.verificarOtp(token_temporal, codigo);
-            // Si es exitoso, redirigimos a verificar rostro
-            navigate('/verificar-rostro', { 
-                state: { token_temporal },
-                replace: true 
-            });
+            navigate('/dashboard', { replace: true });
         } catch (err) {
             if (err.response?.data?.message) {
                 setError(err.response.data.message);
@@ -110,16 +106,10 @@ const VerificarOtp = () => {
                         <svg className="mr-1.5 h-3 w-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
-                        Paso 1 de 2
+                        Verificación en dos pasos
                     </span>
-                    <h2 className="text-3xl font-bold text-white tracking-tight">Código de verificación</h2>
-                </div>
-
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-8">
-                    <p className="text-sm text-amber-200/90 text-center leading-relaxed">
-                        Hemos enviado un código de seguridad de 6 dígitos a<br />
-                        <span className="font-semibold text-amber-400">{email_destino}</span>
-                    </p>
+                    <h2 className="text-3xl font-bold text-white tracking-tight">Código de autenticación</h2>
+                    <p className="text-slate-400 text-sm mt-2">Ingresa el código de 6 dígitos de tu app Google Authenticator</p>
                 </div>
 
                 {error && (
@@ -155,21 +145,9 @@ const VerificarOtp = () => {
                         ))}
                     </div>
 
-                    <div className="flex justify-center items-center text-sm">
-                        {timeLeft > 0 ? (
-                            <span className="text-slate-400 bg-slate-900/50 px-3 py-1.5 rounded-full border border-white/5">
-                                El código expira en <span className="text-emerald-400 font-mono font-bold ml-1">{formatTime(timeLeft)}</span>
-                            </span>
-                        ) : (
-                            <span className="text-red-400 bg-red-500/10 px-3 py-1.5 rounded-full border border-red-500/20 font-medium">
-                                El código ha expirado
-                            </span>
-                        )}
-                    </div>
-
                     <button
                         type="submit"
-                        disabled={!isComplete || isLoading || timeLeft <= 0}
+                        disabled={!isComplete || isLoading}
                         className="group relative w-full flex justify-center items-center h-12 py-2 px-4 border border-transparent rounded-xl text-sm font-bold text-black bg-emerald-500 hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 focus:ring-offset-slate-900 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(16,185,129,0.4)] disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-none disabled:cursor-not-allowed"
                     >
                         {isLoading ? (
@@ -190,10 +168,7 @@ const VerificarOtp = () => {
 
                 {/* Footer */}
                 <div className="mt-8 pt-6 border-t border-white/10 flex flex-col items-center space-y-4">
-                    <button className="text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors cursor-not-allowed" disabled>
-                        ¿No recibiste el código? Reenviar
-                    </button>
-                    
+                    <p className="text-xs text-slate-500 text-center">El código rota cada 30 segundos en tu app</p>
                     <Link to="/login" className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex items-center justify-center group">
                         <svg className="w-3 h-3 mr-1 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
