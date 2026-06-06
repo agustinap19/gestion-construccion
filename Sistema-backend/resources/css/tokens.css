@@ -1,0 +1,117 @@
+:root {
+  /* Superficies */
+  --surface-0: oklch(99% 0 0);
+  --surface-1: oklch(97% 0.002 240);
+  --surface-2: oklch(94% 0.003 240);
+  --surface-3: oklch(91% 0.004 240);
+
+  /* Texto */
+  --fg: oklch(12% 0 0);
+  --fg-muted: oklch(42% 0.01 260);
+  --fg-subtle: oklch(62% 0.01 260);
+
+  /* Bordes */
+  --border: oklch(87% 0.005 260);
+  --border-strong: oklch(72% 0.01 260);
+
+  /* Acento verde corporativo */
+  --accent: oklch(62% 0.2 145);
+  --accent-hover: oklch(58% 0.2 145);
+  --accent-subtle: oklch(96% 0.05 145);
+  --accent-fg: oklch(98% 0 0);
+  --accent-glow: oklch(62% 0.2 145 / 0.35);
+
+  /* Tech morado corporativo */
+  --tech: oklch(55% 0.2 290);
+  --tech-hover: oklch(50% 0.2 290);
+  --tech-subtle: oklch(96% 0.04 290);
+  --tech-fg: oklch(98% 0 0);
+  --tech-glow: oklch(55% 0.2 290 / 0.3);
+
+  /* Estados */
+  --danger: oklch(58% 0.22 25);
+  --warning: oklch(72% 0.18 85);
+  --success: oklch(62% 0.2 145);
+  --info: oklch(58% 0.18 240);
+
+  /* Glass — light */
+  --glass-bg: oklch(99% 0.002 240 / 0.82);
+  --glass-bg-strong: oklch(99% 0 0 / 0.92);
+  --glass-border: oklch(100% 0 0 / 0.6);
+  --glass-border-subtle: oklch(85% 0.005 240 / 0.5);
+  --glass-blur: 24px;
+  --glass-saturate: 1.5;
+
+  /* Sidebar — light */
+  --sidebar-bg: oklch(99% 0.002 240 / 0.88);
+  --sidebar-border: oklch(88% 0.005 240 / 1);
+  --sidebar-item-active-bg: oklch(96% 0.05 145 / 0.8);
+  --sidebar-item-active-text: oklch(45% 0.2 145);
+  --sidebar-item-hover-bg: oklch(95% 0.003 240 / 0.7);
+
+  /* Gradientes */
+  --grad-accent: linear-gradient(135deg, oklch(65% 0.2 145), oklch(55% 0.2 165));
+  --grad-tech: linear-gradient(135deg, oklch(60% 0.2 290), oklch(50% 0.22 270));
+  --grad-surface: linear-gradient(135deg, oklch(99% 0 0), oklch(96% 0.004 240));
+
+  /* Radios */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  /* Sombras */
+  --shadow-sm: 0 1px 3px oklch(0% 0 0 / 0.06), 0 1px 2px oklch(0% 0 0 / 0.04);
+  --shadow-md: 0 4px 16px oklch(0% 0 0 / 0.08), 0 2px 6px oklch(0% 0 0 / 0.05);
+  --shadow-lg: 0 8px 32px oklch(0% 0 0 / 0.1), 0 4px 12px oklch(0% 0 0 / 0.06);
+  --shadow-glass: 0 8px 32px oklch(0% 0 0 / 0.08), inset 0 1px 0 oklch(100% 0 0 / 0.6);
+  --shadow-glow-accent: 0 0 20px oklch(62% 0.2 145 / 0.25);
+
+  /* Animaciones */
+  --dur-fast: 120ms;
+  --dur-normal: 200ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dark {
+  --surface-0: oklch(11% 0.015 265);
+  --surface-1: oklch(14% 0.015 265);
+  --surface-2: oklch(18% 0.015 265);
+  --surface-3: oklch(22% 0.015 265);
+  --fg: oklch(96% 0.005 260);
+  --fg-muted: oklch(68% 0.01 260);
+  --fg-subtle: oklch(48% 0.01 260);
+  --border: oklch(26% 0.015 265);
+  --border-strong: oklch(38% 0.015 265);
+
+  --glass-bg: oklch(14% 0.02 265 / 0.78);
+  --glass-bg-strong: oklch(16% 0.02 265 / 0.92);
+  --glass-border: oklch(100% 0 0 / 0.07);
+  --glass-border-subtle: oklch(100% 0 0 / 0.04);
+  --shadow-glass: 0 8px 32px oklch(0% 0 0 / 0.4), inset 0 1px 0 oklch(100% 0 0 / 0.06);
+
+  --sidebar-bg: oklch(10% 0.02 265 / 0.92);
+  --sidebar-border: oklch(100% 0 0 / 0.06);
+  --sidebar-item-active-bg: oklch(62% 0.2 145 / 0.12);
+  --sidebar-item-active-text: oklch(72% 0.18 145);
+  --sidebar-item-hover-bg: oklch(100% 0 0 / 0.04);
+
+  --shadow-sm: 0 1px 3px oklch(0% 0 0 / 0.3), 0 1px 2px oklch(0% 0 0 / 0.2);
+  --shadow-md: 0 4px 16px oklch(0% 0 0 / 0.35), 0 2px 6px oklch(0% 0 0 / 0.2);
+  --shadow-lg: 0 8px 32px oklch(0% 0 0 / 0.45), 0 4px 12px oklch(0% 0 0 / 0.25);
+  --shadow-glow-accent: 0 0 24px oklch(62% 0.2 145 / 0.3);
+}
+
+.theme-transitioning * {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

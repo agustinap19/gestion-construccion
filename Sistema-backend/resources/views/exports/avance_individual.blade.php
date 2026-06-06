@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+    body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10px; color: #333; margin: 0; padding: 0; }
+    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; padding-top: 10px; }
+    .header h1 { margin: 0; font-size: 16px; color: #1e3a8a; }
+    .header h2 { margin: 5px 0; font-size: 14px; color: #1e40af; }
+    .header p { margin: 2px 0; font-size: 10px; color: #64748b; }
+    h2 { font-size: 12px; color: #0f172a; margin: 16px 0 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
+    .kpi-row { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    .kpi-row td { text-align: center; border: 1px solid #e2e8f0; padding: 10px; background: #f8fafc; width: 25%; }
+    .kpi-val { font-size: 16px; font-weight: bold; color: #2563eb; display: block; margin-bottom: 2px; }
+    .kpi-lbl { font-size: 9px; color: #64748b; text-transform: uppercase; }
+    .info-block { flex: 1; background: #f8fafc; border-radius: 4px; padding: 8px 12px; border: 1px solid #e2e8f0; }
+    .info-row { margin-bottom: 3px; }
+    .info-lbl { font-size: 8px; color: #94a3b8; text-transform: uppercase; }
+    .info-val { font-size: 10px; color: #1e293b; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f1f5f9; padding: 5px 7px; text-align: left; font-size: 8px; text-transform: uppercase; color: #475569; }
+    td { padding: 4px 7px; border-bottom: 1px solid #f1f5f9; font-size: 9px; vertical-align: middle; }
+    .prog-wrap { background: #e2e8f0; border-radius: 3px; height: 7px; width: 80px; display: inline-block; vertical-align: middle; }
+    .prog-fill { border-radius: 3px; height: 7px; }
+    .prog-green  { background: #059669; }
+    .prog-yellow { background: #d97706; }
+    .prog-gray   { background: #94a3b8; }
+    .badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 8px; font-weight: bold; }
+    .badge-completado { background: #d1fae5; color: #065f46; }
+    .badge-en_proceso { background: #fef3c7; color: #92400e; }
+    .badge-pendiente  { background: #f1f5f9; color: #475569; }
+    .badge-baja   { background: #d1fae5; color: #065f46; }
+    .badge-media  { background: #fef3c7; color: #92400e; }
+    .badge-alta   { background: #fed7aa; color: #9a3412; }
+    .badge-critica { background: #fee2e2; color: #991b1b; }
+    .reporte-card { border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
+    .reporte-header { font-size: 9px; color: #64748b; margin-bottom: 4px; }
+    .reporte-desc { font-size: 9px; color: #1e293b; margin-bottom: 4px; }
+    .foto-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .foto-img { width: 60px; height: 60px; object-fit: cover; border-radius: 3px; }
+    .footer { margin-top: 20px; font-size: 8px; color: #94a3b8; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 6px; }
+    .alerta { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 3px; padding: 3px 7px; font-size: 8px; color: #9a3412; display: inline-block; margin-bottom: 4px; }
+    .no-data { font-size: 9px; color: #94a3b8; font-style: italic; }
+</style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>CA & KANAGF S.R.L.</h1>
+        <h2>Reporte de Avance Individual</h2>
+        <p>Beneficiario: {{ $vivienda->beneficiario ? $vivienda->beneficiario->nombre . ' ' . $vivienda->beneficiario->apellido_paterno : 'Sin Asignar' }} | Proyecto: {{ $vivienda->proyecto?->codigo ?? '—' }} | Generado: {{ now()->format('d/m/Y H:i') }}</p>
+    </div>
+
+    {{-- KPIs --}}
+    <table class="kpi-row">
+        <tr>
+            <td>
+                <span class="kpi-val">{{ number_format($vivienda->porcentaje_avance, 1) }}%</span>
+                <span class="kpi-lbl">Avance Físico</span>
+            </td>
+            <td>
+                <span class="kpi-val">{{ $vivienda->itemsChecklist->where('estado','completado')->count() }}/{{ $vivienda->itemsChecklist->count() }}</span>
+                <span class="kpi-lbl">Items Completados</span>
+            </td>
+            <td>
+                <span class="kpi-val">{{ $reportes->count() }}</span>
+                <span class="kpi-lbl">Últimos Reportes</span>
+            </td>
+            <td>
+                <span class="kpi-val">{{ ucfirst(str_replace('_', ' ', $vivienda->estado)) }}</span>
+                <span class="kpi-lbl">Estado</span>
+            </td>
+        </tr>
+    </table>
+
+{{-- Info general --}}
+<div class="info-grid">
+    <div class="info-block">
+        <div class="info-row"><span class="info-lbl">Tipología</span><br><span class="info-val">{{ $vivienda->tipoVivienda?->nombre ?? '—' }}</span></div>
+        <div class="info-row"><span class="info-lbl">Código Vivienda</span><br><span class="info-val">{{ $vivienda->codigo }}</span></div>
+    </div>
+    <div class="info-block">
+        <div class="info-row"><span class="info-lbl">CI Beneficiario</span><br><span class="info-val">{{ $vivienda->beneficiario?->ci ?? '—' }}</span></div>
+        <div class="info-row"><span class="info-lbl">Comunidad</span><br><span class="info-val">{{ $vivienda->beneficiario?->comunidad ?? '—' }}</span></div>
+    </div>
+</div>
+
+{{-- Checklist --}}
+<h2>Checklist de Avance</h2>
+@if($vivienda->itemsChecklist->isEmpty())
+    <p class="no-data">No hay items de checklist registrados para esta vivienda.</p>
+@else
+<table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Item</th>
+            <th>Ponderación</th>
+            <th style="width:120px">Avance</th>
+            <th>Estado</th>
+            <th>Completado</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach($vivienda->itemsChecklist as $item)
+        @php
+            $pct = (float)($item->porcentaje_avance ?? 0);
+            $colorClass = $pct >= 100 ? 'prog-green' : ($pct > 0 ? 'prog-yellow' : 'prog-gray');
+        @endphp
+        <tr>
+            <td>{{ $item->orden }}</td>
+            <td>{{ $item->nombre }}</td>
+            <td>{{ number_format($item->ponderacion, 1) }}%</td>
+            <td>
+                <div class="prog-wrap">
+                    <div class="prog-fill {{ $colorClass }}" style="width: {{ min(100,$pct) }}%"></div>
+                </div>
+                <span style="font-size:8px;color:#64748b;margin-left:4px">{{ number_format($pct,1) }}%</span>
+            </td>
+            <td><span class="badge badge-{{ $item->estado }}">{{ ucfirst(str_replace('_',' ',$item->estado)) }}</span></td>
+            <td>{{ $item->fecha_completado ? $item->fecha_completado->format('d/m/Y') : '—' }}</td>
+        </tr>
+        @endforeach
+    </tbody>
+</table>
+@endif
+
+{{-- Últimos reportes --}}
+<h2>Últimos {{ $reportes->count() }} Reportes Técnicos</h2>
+@if($reportes->isEmpty())
+    <p class="no-data">No hay reportes registrados.</p>
+@else
+    @foreach($reportes as $rep)
+    <div class="reporte-card">
+        <div class="reporte-header">
+            <strong>{{ $rep->fecha_reporte ? \Carbon\Carbon::parse($rep->fecha_reporte)->format('d/m/Y') : '—' }}</strong>
+            &mdash; Técnico: {{ $rep->usuario?->nombre ?? '—' }} {{ $rep->usuario?->apellido_paterno ?? '' }}
+            &mdash; Estado: <span class="badge badge-{{ $rep->estado === 'aprobado' ? 'completado' : 'en_proceso' }}">{{ ucfirst($rep->estado) }}</span>
+            @if($rep->alerta_distancia)
+                <span class="alerta">⚠ Fuera de rango ({{ number_format($rep->distancia_vivienda_metros,0) }} m)</span>
+            @endif
+        </div>
+
+        @if($rep->descripcion)
+            <div class="reporte-desc">{{ $rep->descripcion }}</div>
+        @endif
+
+        @if($rep->observaciones)
+            <div class="reporte-desc" style="color:#64748b"><em>Obs: {{ $rep->observaciones }}</em></div>
+        @endif
+
+        @if($rep->incidencias->isNotEmpty())
+        <div style="margin-top:4px">
+            @foreach($rep->incidencias as $inc)
+                <span class="badge badge-{{ $inc->gravedad }}">{{ ucfirst($inc->tipo) }}: {{ Str::limit($inc->descripcion, 60) }}</span>
+            @endforeach
+        </div>
+        @endif
+
+        @if($rep->fotos->isNotEmpty())
+        <table style="width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px;">
+            <tr>
+            @foreach($rep->fotos->take(6) as $index => $foto)
+                @php
+                    $parsedThumb = parse_url($foto->url_thumbnail ?? $foto->url_original, PHP_URL_PATH);
+                    $relPath = preg_replace('#^/?storage/#', '', $parsedThumb);
+                    $path = public_path('storage/' . ltrim($relPath, '/'));
+                @endphp
+                @if($index > 0 && $index % 3 == 0)
+                    </tr><tr>
+                @endif
+                <td style="width: 33.33%; padding: 4px; vertical-align: top;">
+                    @if(file_exists($path))
+                        <img src="{{ $path }}" alt="Foto" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0;">
+                    @else
+                        <div style="width: 100%; height: 100px; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; display: table;">
+                            <div style="display: table-cell; vertical-align: middle; text-align: center; font-size: 8px; color: #94a3b8;">N/A</div>
+                        </div>
+                    @endif
+                </td>
+            @endforeach
+            @php
+                $count = min(6, $rep->fotos->count());
+                $resto = $count % 3;
+                if($resto > 0) {
+                    for($i = 0; $i < (3 - $resto); $i++) {
+                        echo '<td style="width: 33.33%; padding: 4px;"></td>';
+                    }
+                }
+            @endphp
+            </tr>
+        </table>
+        @endif
+    </div>
+    @endforeach
+@endif
+
+<div class="footer">CA &amp; KANAGF S.R.L. &mdash; Sistema ERP &mdash; {{ now()->format('d/m/Y H:i') }}</div>
+</body>
+</html>
