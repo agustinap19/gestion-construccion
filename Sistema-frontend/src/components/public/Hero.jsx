@@ -36,13 +36,6 @@ const Particles = () => {
                     }}
                 />
             ))}
-            <style jsx>{`
-                @keyframes float {
-                    0%, 100% { transform: translateY(0) translateX(0); }
-                    33% { transform: translateY(-20px) translateX(10px); }
-                    66% { transform: translateY(15px) translateX(-15px); }
-                }
-            `}</style>
         </div>
     );
 };
