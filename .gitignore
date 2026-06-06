@@ -1,24 +1,40 @@
-*.log
-.DS_Store
+# ── Entornos ──────────────────────────────────────────
 .env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
+Sistema-backend/.env
+Sistema-frontend/.env
+
+# ── Dependencias ──────────────────────────────────────
+Sistema-backend/vendor/
+Sistema-frontend/node_modules/
+
+# ── Build outputs ─────────────────────────────────────
+Sistema-frontend/dist/
+Sistema-backend/public/hot
+Sistema-backend/public/build/
+Sistema-backend/public/storage
+
+# ── Laravel cache ─────────────────────────────────────
+Sistema-backend/bootstrap/cache/*.php
+Sistema-backend/storage/logs/*.log
+Sistema-backend/storage/framework/cache/
+Sistema-backend/storage/framework/sessions/
+Sistema-backend/storage/framework/views/
+
+# ── Archivos de planificación de Claude Code ──────────
+*.md.bak
+Sistema-backend/.claude/
+Sistema-backend/.agents/
+.agents/
+**/*.plan.md
+
+# ── OS ────────────────────────────────────────────────
+.DS_Store
 Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+
+# ── Logs ──────────────────────────────────────────────
+*.log
+npm-debug.log*
