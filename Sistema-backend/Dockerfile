@@ -31,6 +31,8 @@ RUN chown -R www-data:www-data /var/www/html/storage \
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
+RUN mkdir -p /var/log/supervisor
+
 EXPOSE 8000
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
