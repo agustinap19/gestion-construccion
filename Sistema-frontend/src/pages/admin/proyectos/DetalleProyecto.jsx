@@ -192,13 +192,10 @@ const SaludFinancieraCard = ({ proyecto, canEdit = false, onRefresh }) => {
     const iniciarEdicion = () => {
         setForm({
             porcentaje_mano_obra:          String(parseFloat(proyecto.porcentaje_mano_obra        ?? 0)),
-            porcentaje_gastos_generales:   String(parseFloat(proyecto.porcentaje_gastos_generales ?? 0)),
             porcentaje_utilidad_esperada:  String(parseFloat(proyecto.porcentaje_utilidad_esperada ?? 0)),
             usa_monto_fijo_mo:             proyecto.usa_monto_fijo_mo   ?? false,
-            usa_monto_fijo_gg:             proyecto.usa_monto_fijo_gg   ?? false,
             usa_monto_fijo_util:           proyecto.usa_monto_fijo_util  ?? false,
             presupuesto_mano_obra:         String(parseFloat(proyecto.presupuesto_mano_obra         ?? 0)),
-            presupuesto_gastos_generales:  String(parseFloat(proyecto.presupuesto_gastos_generales  ?? 0)),
             presupuesto_utilidad_esperada: String(parseFloat(proyecto.presupuesto_utilidad_esperada ?? 0)),
             justificacion_rentabilidad_baja: proyecto.justificacion_rentabilidad_baja ?? '',
         });
@@ -206,30 +203,28 @@ const SaludFinancieraCard = ({ proyecto, canEdit = false, onRefresh }) => {
     };
 
     // Live calculation in edit mode
+    // Materiales: fixed from server (sum of recetas × beneficiaries + sobreentregas)
+    // GG: auto-calculated residual = contractual - materiales - MO - Utilidad
     const calcLive = useMemo(() => {
         const porMO   = parseFloat(form.porcentaje_mano_obra        || 0);
-        const porGG   = parseFloat(form.porcentaje_gastos_generales || 0);
         const porUtil = parseFloat(form.porcentaje_utilidad_esperada || 0);
         const pMO     = form.usa_monto_fijo_mo   ? parseFloat(form.presupuesto_mano_obra         || 0) : monto * porMO   / 100;
-        const pGG     = form.usa_monto_fijo_gg   ? parseFloat(form.presupuesto_gastos_generales  || 0) : monto * porGG   / 100;
         const pUtil   = form.usa_monto_fijo_util  ? parseFloat(form.presupuesto_utilidad_esperada || 0) : monto * porUtil / 100;
-        const pMat    = Math.max(0, monto - pMO - pGG - pUtil);
-        const rentPct = monto > 0 ? ((monto - pMat - pMO - pGG) / monto * 100) : 0;
-        return { pMO, pGG, pUtil, pMat, rentPct };
-    }, [form, monto]);
+        const pMat    = parseFloat(proyecto.presupuesto_materiales ?? 0);
+        const pGG     = monto - pMat - pMO - pUtil;
+        const utilPct = monto > 0 ? (pUtil / monto * 100) : 0;
+        return { pMO, pGG, pUtil, pMat, rentPct: utilPct };
+    }, [form, monto, proyecto.presupuesto_materiales]);
 
     const handleGuardar = async () => {
         try {
             setGuardando(true);
             const payload = {
                 porcentaje_mano_obra:          parseFloat(form.porcentaje_mano_obra        || 0),
-                porcentaje_gastos_generales:   parseFloat(form.porcentaje_gastos_generales || 0),
                 porcentaje_utilidad_esperada:  parseFloat(form.porcentaje_utilidad_esperada || 0),
                 usa_monto_fijo_mo:             form.usa_monto_fijo_mo,
-                usa_monto_fijo_gg:             form.usa_monto_fijo_gg,
                 usa_monto_fijo_util:           form.usa_monto_fijo_util,
                 presupuesto_mano_obra:         parseFloat(form.presupuesto_mano_obra         || 0),
-                presupuesto_gastos_generales:  parseFloat(form.presupuesto_gastos_generales  || 0),
                 presupuesto_utilidad_esperada: parseFloat(form.presupuesto_utilidad_esperada || 0),
                 justificacion_rentabilidad_baja: form.justificacion_rentabilidad_baja || null,
             };
@@ -326,32 +321,17 @@ const SaludFinancieraCard = ({ proyecto, canEdit = false, onRefresh }) => {
                     )}
                 </div>
 
-                {/* Gastos Generales */}
-                <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-semibold text-yellow-300">Gastos Generales</span>
-                        <label className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer">
-                            <input type="checkbox" checked={form.usa_monto_fijo_gg} onChange={e => setF('usa_monto_fijo_gg', e.target.checked)} className="accent-yellow-500 w-3 h-3" />
-                            Monto fijo
-                        </label>
+                {/* Gastos Generales — auto-calculado (residual) */}
+                <div className="mb-3 p-2.5 rounded-xl" style={{ background: calcLive.pGG < 0 ? 'rgba(248,113,113,0.08)' : 'rgba(251,191,36,0.06)', border: `1px solid ${calcLive.pGG < 0 ? 'rgba(248,113,113,0.25)' : 'rgba(251,191,36,0.15)'}` }}>
+                    <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[11px] font-semibold text-yellow-300">Gastos Generales <span className="text-[10px] text-slate-500 font-normal">(auto)</span></span>
+                        {calcLive.pGG < 0 && <span className="text-[10px] text-red-400 font-bold">NEGATIVO</span>}
                     </div>
-                    {form.usa_monto_fijo_gg ? (
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-slate-500">Bs.</span>
-                            <input type="number" min="0" step="100" value={form.presupuesto_gastos_generales}
-                                onChange={e => setF('presupuesto_gastos_generales', e.target.value)}
-                                className="flex-1 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1 focus:ring-yellow-500/40" />
-                            <span className="text-[10px] text-slate-500 w-16 text-right">{pct(calcLive.pGG).toFixed(1)}% del total</span>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-2">
-                            <input type="number" min="0" max="100" step="0.5" value={form.porcentaje_gastos_generales}
-                                onChange={e => setF('porcentaje_gastos_generales', e.target.value)}
-                                className="w-20 px-2 py-1.5 rounded-lg text-xs text-white outline-none bg-white/[0.06] border border-white/[0.1] focus:ring-1 focus:ring-yellow-500/40" />
-                            <span className="text-[10px] text-slate-500">%</span>
-                            <span className="text-[10px] text-slate-500 ml-auto">{bs(calcLive.pGG)}</span>
-                        </div>
-                    )}
+                    <div className="flex items-center justify-between text-[11px]">
+                        <span className={calcLive.pGG < 0 ? 'text-red-400 font-semibold' : 'text-yellow-200'}>{bs(calcLive.pGG)}</span>
+                        <span className="text-slate-500">{pct(calcLive.pGG).toFixed(1)}% del total · residual</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">GG = Contractual − Materiales − MO − Utilidad. Se reduce si hay sobreentregas.</p>
                 </div>
 
                 {/* Utilidad */}
@@ -407,10 +387,11 @@ const SaludFinancieraCard = ({ proyecto, canEdit = false, onRefresh }) => {
     }
 
     // ── Read mode ──
+    const alertaGG = proyecto.alerta_gg_bajo || presupGG < 0;
     const barras = [
-        { label: 'Materiales',                    monto: presupMat,  color: '#60a5fa' },
-        { label: `MO (${pctMO.toFixed(1)}%)`,     monto: presupMO,   color: '#a78bfa' },
-        { label: `GG (${pctGG.toFixed(1)}%)`,     monto: presupGG,   color: '#fbbf24' },
+        { label: 'Materiales',                        monto: presupMat,  color: '#60a5fa' },
+        { label: `MO (${pctMO.toFixed(1)}%)`,         monto: presupMO,   color: '#a78bfa' },
+        { label: `GG auto (${pctGG.toFixed(1)}%)${alertaGG ? ' ⚠' : ''}`, monto: presupGG, color: alertaGG ? '#f87171' : '#fbbf24' },
         { label: `Utilidad (${pctUtil.toFixed(1)}%)`, monto: presupUtil, color: sm.color },
     ];
 
@@ -448,8 +429,19 @@ const SaludFinancieraCard = ({ proyecto, canEdit = false, onRefresh }) => {
                     </div>
                 ))}
             </div>
+            {alertaGG && (
+                <div className="mt-3 p-2.5 rounded-xl flex items-start gap-2" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)' }}>
+                    <AlertTriangle size={12} className="text-red-400 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-red-300 leading-relaxed">
+                        {presupGG < 0
+                            ? `GG negativo (${bs(presupGG)}): las sobreentregas superaron el margen disponible. Revisar costos de materiales.`
+                            : `GG bajo el umbral mínimo (${bs(presupGG)} · ${pctGG.toFixed(1)}%). Las sobreentregas están absorbiendo el colchón de gastos generales.`
+                        }
+                    </p>
+                </div>
+            )}
             {proyecto.justificacion_rentabilidad_baja && (
-                <div className="mt-3 p-2.5 rounded-xl flex items-start gap-2" style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)' }}>
+                <div className="mt-2 p-2.5 rounded-xl flex items-start gap-2" style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)' }}>
                     <AlertTriangle size={12} className="text-red-400 shrink-0 mt-0.5" />
                     <p className="text-[11px] text-red-300 leading-relaxed">{proyecto.justificacion_rentabilidad_baja}</p>
                 </div>
@@ -977,122 +969,319 @@ const ReporteTecnicoModal = ({ unidad, tipo, proyectoId, onCerrar, onGuardado })
 };
 
 /* ══════════════════════════════════════════════════
-   Gantt Chart
+   Gantt Chart — Calendario con días / semanas
 ═══════════════════════════════════════════════════ */
 const GanttChart = ({ gantt, canEdit, onEditItem, onExport }) => {
-    const { items = [], pos_hoy, fecha_inicio_proyecto, fecha_fin_proyecto, dias_totales } = gantt;
+    const { items = [], fecha_inicio_proyecto, fecha_fin_proyecto, dias_totales } = gantt;
+
+    const ROW_H  = 44;
+    const LEFT_W = 195;
+
+    /* ── date helpers ─────────────────────────────── */
+    const parseDate = d => {
+        if (!d) return null;
+        const s = (typeof d === 'string' ? d : String(d)).split('T')[0].split(' ')[0];
+        const [y, m, dd] = s.split('-').map(Number);
+        return new Date(y, m - 1, dd);
+    };
+    const gAdd = (date, n) => {
+        const d = new Date(date.getTime());
+        d.setDate(d.getDate() + Math.round(n));
+        return d;
+    };
+    const diffD = (a, b) => Math.round((b.getTime() - a.getTime()) / 86_400_000);
+    const toISO = d =>
+        `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const fmtD  = d => `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+
+    /* ── Bolivia holidays (cualquier año) ───────────
+       Calcula Semana Santa con algoritmo de Gauss   */
+    const getHolidays = year => {
+        const a=year%19, b=Math.floor(year/100), c=year%100;
+        const d=Math.floor(b/4), e=b%4, f=Math.floor((b+8)/25);
+        const g=Math.floor((b-f+1)/3);
+        const h=(19*a+b-d-g+15)%30;
+        const i=Math.floor(c/4), k=c%4;
+        const l=(32+2*e+2*i-h-k)%7;
+        const m2=Math.floor((a+11*h+22*l)/451);
+        const mes=Math.floor((h+l-7*m2+114)/31);
+        const dia=((h+l-7*m2+114)%31)+1;
+        const easter    = new Date(year, mes-1, dia);
+        const NAMES     = {
+            [`${year}-01-01`]: 'Año Nuevo',
+            [`${year}-01-22`]: 'Estado Plurinacional',
+            [toISO(gAdd(easter,-48))]: 'Lunes de Carnaval',
+            [toISO(gAdd(easter,-47))]: 'Martes de Carnaval',
+            [toISO(gAdd(easter,-2))]:  'Viernes Santo',
+            [`${year}-05-01`]: 'Día del Trabajo',
+            [toISO(gAdd(easter, 60))]: 'Corpus Christi',
+            [`${year}-06-21`]: 'Año Nuevo Andino',
+            [`${year}-08-06`]: 'Día de la Patria',
+            [`${year}-11-02`]: 'Día de Difuntos',
+            [`${year}-12-25`]: 'Navidad',
+        };
+        return NAMES;
+    };
+
+    const projStart = parseDate(fecha_inicio_proyecto);
+    const projEnd   = parseDate(fecha_fin_proyecto);
+
+    if (!projStart || !projEnd || items.length === 0) {
+        return (
+            <GlassCard className="p-5">
+                <SectionTitle icon={Clock} title="Cronograma" />
+                <div className="py-8 text-center text-sm text-slate-600">
+                    No hay {gantt.tipo === 'social' ? 'productos contractuales' : 'fases'} configuradas
+                </div>
+            </GlassCard>
+        );
+    }
+
+    const totalD = dias_totales || diffD(projStart, projEnd) || 1;
+
+    /* ── Collect holidays for all years in range ─── */
+    const allHolidays = {};
+    for (let y = projStart.getFullYear(); y <= projEnd.getFullYear(); y++) {
+        Object.assign(allHolidays, getHolidays(y));
+    }
+    const isHoliday  = d => allHolidays[toISO(d)] || null;
+    const isWeekend  = d => d.getDay() === 0 || d.getDay() === 6;
+
+    /* ── Build columns (siempre días individuales) ── */
+    const CELL_W = totalD > 180 ? 13 : totalD > 120 ? 15 : totalD > 60 ? 17 : 20;
+
+    const cols = [];
+    let cur = new Date(projStart.getTime());
+    while (cur <= projEnd) {
+        cols.push({ start: new Date(cur) });
+        cur = gAdd(cur, 1);
+    }
+
+    /* ── Month header groups ─────────────────────── */
+    const MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const months = [];
+    let curMes = null;
+    cols.forEach((col, i) => {
+        const key = `${col.start.getFullYear()}-${col.start.getMonth()}`;
+        if (!curMes || curMes.key !== key) {
+            curMes = { key, label: `${MES[col.start.getMonth()]} ${col.start.getFullYear()}`, start: i, count: 1 };
+            months.push(curMes);
+        } else { curMes.count++; }
+    });
+
+    /* ── Map item → column range (cada col = 1 día) ── */
+    const itemCols = item => {
+        const startOff = Math.round((item.left / 100) * totalD);
+        const durD     = Math.round((item.width / 100) * totalD);
+        const s = Math.max(0, startOff);
+        const e = Math.min(cols.length - 1, startOff + durD - 1);
+        return { s, e: Math.max(s, e) };
+    };
+
+    /* ── Today column ────────────────────────────── */
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    let todayIdx = -1;
+    if (today >= projStart && today <= projEnd) {
+        todayIdx = diffD(projStart, today);
+    }
+
+    const totalW = cols.length * CELL_W;
+    const btnCls = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-all';
+    const btnSt  = { background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)' };
+
+    // Estado de "hoy" respecto al proyecto
+    const diasHastaInicio = today < projStart ? diffD(today, projStart) : 0;
+    const diasDesdeInicio = today > projEnd   ? diffD(projEnd, today)   : 0;
+    const hoyChip = todayIdx >= 0
+        ? { text: `Hoy · día ${todayIdx + 1}`, cls: 'text-amber-400 bg-amber-400/10 border-amber-400/25' }
+        : diasHastaInicio > 0
+        ? { text: `Hoy (inicio en ${diasHastaInicio}d)`, cls: 'text-slate-400 bg-white/[0.04] border-white/10' }
+        : { text: `Hoy (terminó hace ${diasDesdeInicio}d)`, cls: 'text-slate-500 bg-white/[0.03] border-white/[0.06]' };
 
     return (
         <GlassCard>
-            <div className="px-5 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <SectionTitle icon={Clock} title="Cronograma" />
-                <div className="flex gap-2">
+            {/* ── Header ─────────────────────────────── */}
+            <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-4 flex-wrap"
+                style={{ borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center gap-3 flex-wrap">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                        style={{ background:'rgba(52,211,153,0.1)', border:'1px solid rgba(52,211,153,0.2)' }}>
+                        <Clock size={14} className="text-emerald-400" />
+                    </div>
+                    <h2 className="text-sm font-bold text-slate-200">Cronograma</h2>
+                    <span className="text-[11px] text-slate-500">{totalD} días · {fmtD(projStart)} → {fmtD(projEnd)}</span>
+                    {/* Chip de hoy */}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${hoyChip.cls}`}>
+                        {hoyChip.text}
+                    </span>
+                </div>
+
+                <div className="flex items-center gap-4 flex-wrap">
+                    {/* Leyenda */}
+                    <div className="flex items-center gap-3 text-[10px] text-slate-500">
+                        <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-sm bg-amber-400/50 inline-block"/>Hoy
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-sm bg-red-400/40 inline-block"/>Feriado
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-sm bg-white/[0.06] inline-block"/>Fin semana
+                        </span>
+                    </div>
                     {onExport && (
-                        <>
-                            <button onClick={() => onExport('pdf')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-all" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                <FileText size={13} /> PDF
-                            </button>
-                            <button onClick={() => onExport('excel')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white transition-all" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                <Table2 size={13} /> Excel
-                            </button>
-                        </>
+                        <div className="flex gap-1.5">
+                            <button onClick={() => onExport('pdf')}   className={btnCls} style={btnSt}><FileText size={12}/> PDF</button>
+                            <button onClick={() => onExport('excel')} className={btnCls} style={btnSt}><Table2  size={12}/> Excel</button>
+                        </div>
                     )}
                 </div>
             </div>
-            <div className="p-5">
-                {/* Eje de fechas */}
-                {fecha_inicio_proyecto && fecha_fin_proyecto && (
-                    <div className="flex justify-between text-[10px] text-slate-600 mb-1.5 px-0.5">
-                        <span>{fecha_inicio_proyecto}</span>
-                        <span className="text-slate-500 font-medium">
-                            {dias_totales != null ? `${dias_totales} días totales` : ''}
-                        </span>
-                        <span>{fecha_fin_proyecto}</span>
-                    </div>
-                )}
 
-                {/* Container de barras */}
-                <div className="relative" style={{ minHeight: items.length * 40 + 32 }}>
-                    {/* Background track */}
-                    <div className="absolute inset-x-0 top-0 bottom-8 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }} />
+            {/* Scrollbar personalizado oscuro */}
+            <style>{`
+                .gantt-scroll::-webkit-scrollbar{height:5px}
+                .gantt-scroll::-webkit-scrollbar-track{background:transparent}
+                .gantt-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:10px}
+                .gantt-scroll::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.22)}
+            `}</style>
 
-                    {/* Línea de hoy */}
-                    {pos_hoy != null && (
-                        <div className="absolute top-0 bottom-8 w-px z-10"
-                            style={{ left: `${pos_hoy}%`, background: 'rgba(251,191,36,0.6)' }}>
-                            <div className="absolute -top-1 -left-[3px] w-1.5 h-1.5 rounded-full bg-amber-400" />
-                            <div className="absolute -bottom-5 text-[9px] text-amber-400 font-bold whitespace-nowrap" style={{ transform: 'translateX(-50%)' }}>HOY</div>
+            {/* ── Body scrollable ──────────────────────── */}
+            <div className="gantt-scroll overflow-x-auto"
+                style={{ scrollbarWidth:'thin', scrollbarColor:'rgba(255,255,255,0.12) transparent' }}>
+                <div style={{ minWidth: LEFT_W + totalW + 24 }}>
+
+                    {/* Meses */}
+                    <div className="flex border-b border-white/[0.05]"
+                        style={{ paddingLeft: LEFT_W, background:'rgba(255,255,255,0.012)' }}>
+                        {/* Hoy (fuera de rango): etiqueta en panel izquierdo */}
+                        <div style={{ width: LEFT_W, minWidth: LEFT_W, marginLeft: -LEFT_W }}
+                            className="absolute flex items-center">
                         </div>
-                    )}
-
-                    {/* Barras */}
-                    {items.map((item, idx) => {
-                        const meta = item.tipo === 'fase'
-                            ? FASE_ESTADO_META[item.estado] ?? FASE_ESTADO_META.pendiente
-                            : { color: '#22d3ee' };
-                        const color = item.vencida ? '#f87171' : meta.color;
-                        const topPx = idx * 40 + 8;
-
-                        return (
-                            <div key={item.id} className="absolute h-7"
-                                style={{ left: `${item.left}%`, width: `${item.width}%`, top: topPx }}>
-                                {/* Barra base */}
-                                <div className="absolute inset-0 rounded-lg overflow-hidden"
-                                    style={{ background: color + '20', border: `1px solid ${color}40` }}>
-                                    {/* Fill de avance */}
-                                    <div className="absolute left-0 top-0 bottom-0 rounded-l-lg"
-                                        style={{ width: `${item.porcentaje_avance ?? item.porcentaje ?? 0}%`, background: color + '50', transition: 'width 0.6s ease' }} />
-                                </div>
-                                {/* Label y botón editar */}
-                                <div className="absolute inset-0 flex items-center px-2 gap-1 overflow-hidden">
-                                    <span className="text-[10px] font-semibold truncate flex-1" style={{ color }}>{item.nombre}</span>
-                                    {item.tipo === 'fase' && (
-                                        <span className="text-[9px] text-slate-500 shrink-0">{(item.porcentaje_avance ?? 0).toFixed(0)}%</span>
-                                    )}
-                                    {canEdit && item.editable && (
-                                        <button onClick={() => onEditItem(item)}
-                                            className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 transition-all"
-                                            title="Editar fase">
-                                            <Edit size={10} style={{ color }} />
-                                        </button>
-                                    )}
-                                </div>
-                                {/* Marker de fecha cobro (productos sociales) */}
-                                {item.pos_marker != null && (
-                                    <div className="absolute top-0 bottom-0 w-px z-10"
-                                        style={{ left: `${((item.pos_marker - item.left) / item.width) * 100}%`, background: color, opacity: 0.8 }} />
-                                )}
+                        {months.map(mg => (
+                            <div key={mg.key} style={{ width: mg.count * CELL_W, minWidth: mg.count * CELL_W }}
+                                className="text-[10px] font-bold text-slate-400 px-2 py-1.5 border-r border-white/[0.04] shrink-0 whitespace-nowrap overflow-hidden">
+                                {mg.label}
                             </div>
-                        );
-                    })}
-                </div>
+                        ))}
+                    </div>
 
-                {/* Leyenda */}
-                {items.length > 0 && (
-                    <div className="mt-8 flex flex-wrap gap-3">
-                        {items.map((item) => {
-                            const meta = item.tipo === 'fase'
-                                ? FASE_ESTADO_META[item.estado] ?? FASE_ESTADO_META.pendiente
-                                : { color: '#22d3ee' };
-                            const color = item.vencida ? '#f87171' : meta.color;
+                    {/* Días: letra + número */}
+                    <div className="flex border-b-2 border-white/[0.07]" style={{ paddingLeft: LEFT_W }}>
+                        {cols.map((col, i) => {
+                            const hol     = isHoliday(col.start);
+                            const wknd    = isWeekend(col.start);
+                            const isToday = i === todayIdx;
+                            const dayNum  = col.start.getDate();
+                            const letra   = ['D','L','M','M','J','V','S'][col.start.getDay()];
+                            const colorCls = hol     ? 'text-red-400'   :
+                                             isToday ? 'text-amber-400' :
+                                             wknd    ? 'text-slate-700'  : 'text-slate-500';
+                            const bgCls    = hol     ? 'bg-red-400/[0.1]'    :
+                                             isToday ? 'bg-amber-400/[0.13]' :
+                                             wknd    ? 'bg-white/[0.02]'     : '';
                             return (
-                                <button key={item.id}
-                                    onClick={() => canEdit && item.editable && onEditItem(item)}
-                                    className={`flex items-center gap-1.5 text-[10px] text-slate-400 ${canEdit && item.editable ? 'hover:text-white cursor-pointer' : ''} transition-colors`}>
-                                    <span className="w-2 h-2 rounded-sm" style={{ background: color }} />
-                                    {item.nombre}
-                                    {item.vencida && <AlertTriangle size={9} className="text-red-400" />}
-                                </button>
+                                <div key={i}
+                                    style={{ width: CELL_W, minWidth: CELL_W }}
+                                    title={hol ? `🎉 ${hol}` : col.start.toLocaleDateString('es-BO')}
+                                    className={`flex flex-col items-center justify-center gap-px py-1 border-r border-white/[0.035] shrink-0 relative cursor-default ${bgCls} ${hol || isToday ? 'font-bold' : ''}`}>
+                                    <span style={{ fontSize: 7.5, lineHeight: 1 }} className={colorCls}>{letra}</span>
+                                    <span style={{ fontSize: 7.5, lineHeight: 1 }} className={colorCls}>{dayNum}</span>
+                                    {hol && <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0.5 h-0.5 rounded-full bg-red-400"/>}
+                                </div>
                             );
                         })}
                     </div>
-                )}
 
-                {items.length === 0 && (
-                    <div className="py-8 text-center text-sm text-slate-600">
-                        No hay {gantt.tipo === 'social' ? 'productos contractuales' : 'fases'} configuradas
+                    {/* Filas de tareas */}
+                    <div className="divide-y divide-white/[0.04]">
+                        {items.map(item => {
+                            const meta  = item.tipo === 'fase'
+                                ? FASE_ESTADO_META[item.estado] ?? FASE_ESTADO_META.pendiente
+                                : { color: '#22d3ee' };
+                            const color = item.vencida ? '#f87171' : meta.color;
+                            const pct   = parseFloat(item.porcentaje_avance ?? item.porcentaje ?? 0);
+                            const { s, e } = itemCols(item);
+                            const barLeft  = s * CELL_W + 2;
+                            const barWidth = Math.max(CELL_W - 4, (e - s + 1) * CELL_W - 4);
+
+                            return (
+                                <div key={item.id} className="flex hover:bg-white/[0.015] transition-colors"
+                                    style={{ height: ROW_H }}>
+
+                                    {/* Panel nombre */}
+                                    <div style={{ width: LEFT_W, minWidth: LEFT_W }}
+                                        className="flex items-center gap-2 px-3 shrink-0 border-r border-white/[0.06]">
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }}/>
+                                        <button
+                                            className={`text-[11px] text-slate-300 truncate text-left flex-1 transition-colors ${canEdit && item.editable ? 'hover:text-emerald-400 cursor-pointer' : 'cursor-default'}`}
+                                            onClick={() => canEdit && item.editable && onEditItem?.(item)}>
+                                            {item.nombre}
+                                        </button>
+                                        <span className="text-[10px] font-mono shrink-0 ml-1" style={{ color }}>
+                                            {pct.toFixed(0)}%
+                                        </span>
+                                        {item.vencida && <AlertTriangle size={10} className="text-red-400 shrink-0"/>}
+                                    </div>
+
+                                    {/* Zona calendario: celdas de fondo + barra overlay continua */}
+                                    <div className="relative flex shrink-0" style={{ height: ROW_H, width: totalW }}>
+
+                                        {/* Celdas: solo fondo + línea hoy */}
+                                        {cols.map((col, i) => {
+                                            const hol     = isHoliday(col.start);
+                                            const wknd    = isWeekend(col.start);
+                                            const isToday = i === todayIdx;
+                                            return (
+                                                <div key={i} style={{ width: CELL_W, minWidth: CELL_W, height: ROW_H }}
+                                                    className={`relative border-r border-white/[0.03] shrink-0 ${
+                                                        hol     ? 'bg-red-400/[0.05]' :
+                                                        isToday ? 'bg-amber-400/[0.04]' :
+                                                        wknd    ? 'bg-white/[0.015]' : ''
+                                                    }`}>
+                                                    {isToday && (
+                                                        <div className="absolute inset-y-0 z-20 pointer-events-none"
+                                                            style={{
+                                                                left: CELL_W / 2 - 0.5,
+                                                                width: 1.5,
+                                                                background: 'rgba(251,191,36,0.85)',
+                                                                boxShadow: '0 0 6px rgba(251,191,36,0.5)',
+                                                            }}>
+                                                            <div className="absolute -top-0.5 -left-[3px] w-2 h-2 rounded-full bg-amber-400"/>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Barra de tarea: un único div absoluto sobre las celdas */}
+                                        <div className="absolute pointer-events-none overflow-hidden"
+                                            style={{
+                                                top: 9, bottom: 9,
+                                                left: barLeft,
+                                                width: barWidth,
+                                                background: color + '20',
+                                                border: `1.5px solid ${color}55`,
+                                                borderRadius: 6,
+                                            }}>
+                                            {/* Fill de progreso */}
+                                            <div style={{ width: `${pct}%`, height: '100%', background: color + '45' }}/>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
-                )}
+
+                    {/* Footer */}
+                    <div className="flex px-3 py-2 text-[10px] text-slate-600 border-t border-white/[0.04]"
+                        style={{ paddingLeft: LEFT_W + 8 }}>
+                        <span>{toISO(projStart)}</span>
+                        <span className="mx-auto text-slate-700">{totalD} días calendarios</span>
+                        <span>{toISO(projEnd)}</span>
+                    </div>
+                </div>
             </div>
         </GlassCard>
     );
@@ -1101,47 +1290,83 @@ const GanttChart = ({ gantt, canEdit, onEditItem, onExport }) => {
 /* ══════════════════════════════════════════════════
    Almacén card
 ═══════════════════════════════════════════════════ */
-const AlmacenCard = ({ almacen, proyectoId, navigate }) => (
-    <GlassCard onClick={() => navigate(`/dashboard/proyectos/${proyectoId}/almacen`)}
-        className="group p-5 hover:scale-[1.01]" style={{ transition: 'all 0.2s' }}>
-        <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)' }}>
-                    <Package size={18} className="text-amber-400" />
-                </div>
-                <div>
-                    <h3 className="text-sm font-bold text-white">Almacén del Proyecto</h3>
-                    {almacen.existe && <p className="text-[10px] text-slate-500 font-mono">{almacen.codigo}</p>}
-                </div>
-            </div>
-            <ExternalLink size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors mt-1" />
-        </div>
-        {almacen.existe ? (
-            <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                        <p className="text-xl font-bold text-amber-400">0</p>
-                        <p className="text-[10px] text-slate-600">Ítems registrados</p>
+const AlmacenCard = ({ almacen, proyectoId, navigate }) => {
+    const estadoMeta = almacen.estado === 'activo'
+        ? { bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.2)', color: '#22c55e' }
+        : { bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.2)', color: '#64748b' };
+
+    const itemsRegistrados = almacen.items_registrados ?? 0;
+    const movimientosMes   = almacen.movimientos_mes ?? 0;
+    const itemsCriticos    = almacen.items_criticos ?? 0;
+
+    return (
+        <GlassCard onClick={() => navigate(`/dashboard/proyectos/${proyectoId}/almacen`)}
+            className="group p-5 hover:scale-[1.01]" style={{ transition: 'all 0.2s' }}>
+            <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                        <Package size={18} className="text-amber-400" />
                     </div>
-                    <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                        <p className="text-xl font-bold text-slate-400">{almacen.movimientos_mes ?? 0}</p>
-                        <p className="text-[10px] text-slate-600">Movimientos/mes</p>
+                    <div>
+                        <h3 className="text-sm font-bold text-white">Almacén del Proyecto</h3>
+                        {almacen.existe && <p className="text-[10px] text-slate-500 font-mono">{almacen.codigo}</p>}
                     </div>
                 </div>
-                <p className="text-[11px] text-slate-500">{almacen.nombre}</p>
-                <div className="flex items-center gap-2 text-[10px] text-amber-400 font-medium">
-                    <span>Ir al almacén del proyecto</span>
-                    <ChevronRight size={11} />
+                <div className="flex items-center gap-2 mt-0.5">
+                    {almacen.existe && (
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
+                            style={{ background: estadoMeta.bg, border: `1px solid ${estadoMeta.border}`, color: estadoMeta.color }}>
+                            {almacen.estado}
+                        </span>
+                    )}
+                    <ExternalLink size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
                 </div>
             </div>
-        ) : (
-            <div className="text-center py-4">
-                <p className="text-sm text-slate-500 mb-1">Sin almacén asignado</p>
-                <p className="text-[10px] text-slate-600">Se genera automáticamente al crear el proyecto</p>
-            </div>
-        )}
-    </GlassCard>
-);
+
+            {almacen.existe ? (
+                <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                            <p className="text-xl font-bold text-amber-400">{itemsRegistrados}</p>
+                            <p className="text-[10px] text-slate-500">Ítems en stock</p>
+                        </div>
+                        <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                            <p className="text-xl font-bold text-slate-300">{movimientosMes}</p>
+                            <p className="text-[10px] text-slate-500">Movimientos/mes</p>
+                        </div>
+                    </div>
+
+                    {itemsCriticos > 0 && (
+                        <div className="flex items-center gap-2 rounded-lg px-3 py-2"
+                            style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)' }}>
+                            <AlertTriangle size={12} className="text-red-400 shrink-0" />
+                            <span className="text-[11px] text-red-400">
+                                {itemsCriticos} {itemsCriticos === 1 ? 'ítem' : 'ítems'} con stock crítico
+                            </span>
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] text-slate-500 truncate">{almacen.nombre}</p>
+                        {almacen.ubicacion && (
+                            <p className="text-[10px] text-slate-600 truncate shrink-0">{almacen.ubicacion}</p>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[10px] text-amber-400 font-medium">
+                        <span>Ir al almacén del proyecto</span>
+                        <ChevronRight size={11} />
+                    </div>
+                </div>
+            ) : (
+                <div className="text-center py-4">
+                    <p className="text-sm text-slate-500 mb-1">Sin almacén asignado</p>
+                    <p className="text-[10px] text-slate-600">Se genera automáticamente al crear el proyecto</p>
+                </div>
+            )}
+        </GlassCard>
+    );
+};
 
 /* ══════════════════════════════════════════════════
    Beneficiarios card (social)
@@ -2366,7 +2591,6 @@ const DetalleProyecto = () => {
     const [cargando, setCargando] = useState(true);
     const [modalEstado, setModalEstado] = useState(false);
     const [modalFase, setModalFase] = useState(null);
-
     const cargar = useCallback(async () => {
         try {
             setCargando(true);
@@ -2447,12 +2671,19 @@ const DetalleProyecto = () => {
                             {proyecto.zona && (
                                 <span className="flex items-center gap-1"><MapPin size={11} /> {proyecto.zona.nombre}</span>
                             )}
-                            {proyecto.fecha_inicio_planificada && (
-                                <span className="flex items-center gap-1">
-                                    <Calendar size={11} />
-                                    {proyecto.fecha_inicio_planificada} → {proyecto.fecha_fin_planificada ?? '?'}
-                                </span>
-                            )}
+                            {proyecto.fecha_inicio_planificada && (() => {
+                                const fmt = iso => {
+                                    const s = (iso || '').split('T')[0];
+                                    const [y, m, d] = s.split('-');
+                                    return `${d}/${m}/${y}`;
+                                };
+                                return (
+                                    <span className="flex items-center gap-1">
+                                        <Calendar size={11} />
+                                        {fmt(proyecto.fecha_inicio_planificada)} → {proyecto.fecha_fin_planificada ? fmt(proyecto.fecha_fin_planificada) : '?'}
+                                    </span>
+                                );
+                            })()}
                         </div>
 
                         {/* Responsable */}

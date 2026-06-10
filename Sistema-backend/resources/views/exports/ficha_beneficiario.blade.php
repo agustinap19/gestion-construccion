@@ -1,14 +1,14 @@
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8">
-@include('exports._base_styles')
+@extends('exports.layout_membrete')
+
+@section('styles')
 <style>
     .firma-box { border-top: 1px solid #1e293b; width: 220px; text-align: center; padding-top: 4px; font-size: 9.5px; color: #475569; margin-top: 48px; }
     .foto-box { width: 80px; height: 100px; border: 1px solid #e2e8f0; display: inline-block; overflow: hidden; }
     .foto-box img { width: 100%; height: 100%; object-fit: cover; }
 </style>
-</head>
-<body>
+@endsection
+
+@section('content')
 <div class="page-header">
     <div class="page-header-left">
         <div class="empresa-nombre">CA &amp; KANAGF S.R.L.</div>
@@ -92,9 +92,6 @@
     </div>
 </div>
 
-<div class="footer">
-    <div class="footer-left">CA &amp; KANAGF S.R.L. — {{ $proyecto->codigo }} — {{ now()->format('d/m/Y H:i') }}</div>
-    <div class="footer-right">Generado por: {{ $usuario }}</div>
-</div>
-</body>
-</html>
+
+    
+@endsection

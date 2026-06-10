@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\MovimientoAlmacenController;
 use App\Http\Controllers\Api\ConfiguracionPorcentajesController;
 use App\Http\Controllers\Api\RecalculoFinancieroController;
 use App\Http\Controllers\Api\TotpController;
+use App\Http\Controllers\Api\ProveedorController;
 
 // ── Auth pública ─────────────────────────────────────────────────────────────
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -194,6 +195,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/{id}', [BeneficiarioController::class, 'update']);
             Route::patch('/{id}/estado', [BeneficiarioController::class, 'cambiarEstado']);
             Route::patch('/{id}/tipo-vivienda', [BeneficiarioController::class, 'asignarTipoVivienda']);
+            Route::get('/{id}/sync-tipologia/preview', [BeneficiarioController::class, 'syncPreview']);
+            Route::post('/{id}/sync-tipologia/aplicar', [BeneficiarioController::class, 'syncAplicar']);
+            Route::get('/{id}/historial-tipologia', [BeneficiarioController::class, 'syncHistorial']);
+            Route::get('/{id}/historial-tipologia/pdf', [BeneficiarioController::class, 'syncHistorialPdf']);
             Route::delete('/{id}', [BeneficiarioController::class, 'destroy']);
             Route::post('/{id}/restaurar', [BeneficiarioController::class, 'restaurar']);
         });
@@ -338,6 +343,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Almacenes (Sub-fase B)
         Route::prefix('almacenes')->group(function () {
             Route::get('/estadisticas',               [AlmacenController::class, 'estadisticas']);
+            Route::get('/dashboard',                  [AlmacenController::class, 'dashboard']);
             Route::get('/',                           [AlmacenController::class, 'index']);
             Route::post('/',                          [AlmacenController::class, 'store']);
             Route::get('/{id}',                       [AlmacenController::class, 'show']);
@@ -350,8 +356,22 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::patch('/{id}/cerrar',                  [AlmacenController::class, 'cerrar']);
             Route::get('/{id}/materiales-con-stock',  [AlmacenController::class, 'materialesConStock']);
             Route::get('/{almacenId}/items/{pipId}/materiales-receta', [AlmacenController::class, 'materialesReceta']);
+            Route::get('/{almacenId}/beneficiarios/{beneficiarioId}/material/{materialId}/items', [AlmacenController::class, 'itemsPorMaterialBeneficiario']);
         });
         Route::post('/almacenes-transferencias', [AlmacenController::class, 'transferir']);
+
+        // ── Proveedores ───────────────────────────────────────────────────────
+        Route::prefix('proveedores')->group(function () {
+            Route::get('/estadisticas',    [ProveedorController::class, 'estadisticas']);
+            Route::get('/categorias',      [ProveedorController::class, 'categorias']);
+            Route::post('/categorias',     [ProveedorController::class, 'crearCategoria']);
+            Route::get('/zonas',           [ProveedorController::class, 'zonas']);
+            Route::get('/',                [ProveedorController::class, 'index']);
+            Route::post('/',               [ProveedorController::class, 'store']);
+            Route::get('/{id}',            [ProveedorController::class, 'show']);
+            Route::put('/{id}',            [ProveedorController::class, 'update']);
+            Route::patch('/{id}/estado',   [ProveedorController::class, 'cambiarEstado']);
+        });
 
         // Movimientos de almacén — Sub-fase C
         Route::prefix('movimientos-almacen')->group(function () {
@@ -493,6 +513,7 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/{id}/items/{itemId}', [PlantillaChecklistController::class, 'destroyItem']);
             Route::post('/{id}/aplicar-a-proyecto/{proyectoId}', [PlantillaChecklistController::class, 'aplicarAProyecto']);
         });
+
 
     }); // fin ForzarCambioPassword
 }); // fin auth:sanctum

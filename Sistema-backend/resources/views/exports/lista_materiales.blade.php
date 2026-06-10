@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
+@extends('exports.layout_membrete')
+
+@section('styles')
     <title>Catálogo de Materiales</title>
     <style>
         body { font-family: sans-serif; font-size: 10px; color: #333; }
@@ -19,8 +18,9 @@
         .badge-warning { background-color: #fef3c7; color: #92400e; }
         .badge-info { background-color: #dbeafe; color: #1e40af; }
     </style>
-</head>
-<body>
+@endsection
+
+@section('content')
     <div class="header">
         <div class="title">CATÁLOGO MAESTRO DE MATERIALES</div>
         <div class="subtitle">Generado el {{ now()->format('d/m/Y H:i') }}</div>
@@ -70,5 +70,4 @@
             @endforelse
         </tbody>
     </table>
-</body>
-</html>
+@endsection

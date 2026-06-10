@@ -46,14 +46,17 @@ class PresupuestoItemProyecto extends Model
         'cantidad_planificada', 'producto_contractual_id', 'hito_cobro_id', 'fase_id',
         'orden', 'ponderacion_avance', 'estado_ejecucion',
         'porcentaje_avance', 'tiene_override_receta', 'metadata',
+        'fecha_primera_entrega_material', 'alerta_sin_reporte',
     ];
 
     protected $casts = [
         'cantidad_planificada'  => 'decimal:4',
         'ponderacion_avance'    => 'decimal:4',
         'porcentaje_avance'     => 'decimal:2',
-        'tiene_override_receta' => 'boolean',
-        'metadata'              => 'array',
+        'tiene_override_receta'          => 'boolean',
+        'metadata'                       => 'array',
+        'fecha_primera_entrega_material' => 'datetime',
+        'alerta_sin_reporte'             => 'boolean',
     ];
 
     public function proyecto()

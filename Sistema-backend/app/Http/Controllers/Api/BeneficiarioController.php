@@ -12,19 +12,23 @@ use App\Http\Requests\Beneficiarios\AsignarTipoViviendaRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Services\Almacenes\IntegracionBeneficiarioService;
+use App\Services\Beneficiarios\SincronizarTipologiaService;
 use Barryvdh\DomPDF\Facade\Pdf;
 
 class BeneficiarioController extends Controller
 {
     protected $beneficiarioService;
     protected $integracionService;
+    protected $sincronizarService;
 
     public function __construct(
         BeneficiarioService $beneficiarioService,
-        IntegracionBeneficiarioService $integracionService
+        IntegracionBeneficiarioService $integracionService,
+        SincronizarTipologiaService $sincronizarService
     ) {
         $this->beneficiarioService = $beneficiarioService;
         $this->integracionService  = $integracionService;
+        $this->sincronizarService  = $sincronizarService;
         
         // Asumiendo que hay un middleware de permisos
         // $this->middleware('permission:beneficiarios.ver')->only(['index', 'show', 'estadisticasProyecto', 'mapaProyecto']);
@@ -100,12 +104,73 @@ class BeneficiarioController extends Controller
 
     public function asignarTipoVivienda(AsignarTipoViviendaRequest $request, int $id)
     {
-        $beneficiario = $this->beneficiarioService->asignarTipoVivienda(
-            $id,
-            $request->tipo_vivienda_id,
-            $request->user()->id
-        );
-        return response()->json($beneficiario);
+        try {
+            $resultado = $this->beneficiarioService->asignarTipoVivienda(
+                $id,
+                $request->tipo_vivienda_id,
+                $request->user()->id
+            );
+            return response()->json($resultado);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    // ─── Sincronización de tipología ─────────────────────────────────────────
+
+    public function syncPreview(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['nuevo_tipo_id' => 'required|exists:tipos_vivienda,id']);
+        $beneficiario = \App\Models\Beneficiario::with(['vivienda', 'tipoVivienda'])->findOrFail($id);
+
+        try {
+            $preview = $this->sincronizarService->generarPreview($beneficiario, $request->nuevo_tipo_id);
+            return response()->json(['preview' => $preview]);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function syncAplicar(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['nuevo_tipo_id' => 'required|exists:tipos_vivienda,id']);
+        $beneficiario = \App\Models\Beneficiario::with(['vivienda', 'tipoVivienda'])->findOrFail($id);
+
+        try {
+            $resultado = $this->sincronizarService->aplicar(
+                $beneficiario,
+                $request->nuevo_tipo_id,
+                $request->user()->id,
+                'manual'
+            );
+            // Actualizar tipo_vivienda_id si aún no está actualizado
+            if ($beneficiario->tipo_vivienda_id !== $request->nuevo_tipo_id) {
+                $beneficiario->tipo_vivienda_id = $request->nuevo_tipo_id;
+                $beneficiario->save();
+            }
+            return response()->json($resultado, 200);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function syncHistorial(Request $request, int $id): JsonResponse
+    {
+        $beneficiario = \App\Models\Beneficiario::findOrFail($id);
+        $historial    = $this->sincronizarService->obtenerHistorial($beneficiario);
+        return response()->json(['historial' => $historial]);
+    }
+
+    public function syncHistorialPdf(int $id)
+    {
+        $beneficiario = \App\Models\Beneficiario::with(['tipoVivienda', 'vivienda'])->findOrFail($id);
+        $historial    = $this->sincronizarService->obtenerHistorial($beneficiario)->toArray();
+
+        $html = view('exports.historial_sync_tipologia', compact('beneficiario', 'historial'))->render();
+        $pdf  = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
+
+        $nombre = preg_replace('/[^A-Za-z0-9_\-]/', '_', $beneficiario->codigo_beneficiario ?? "ben_{$id}");
+        return $pdf->download("historial_tipologia_{$nombre}.pdf");
     }
 
     public function destroy(Request $request, int $id)

@@ -1,9 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8">
-@include('exports._base_styles')
-</head>
-<body>
+@extends('exports.layout_membrete')
+
+@section('content')
 <div class="page-header">
     <div class="page-header-left">
         <div class="empresa-nombre">CA &amp; KANAGF S.R.L.</div>
@@ -78,9 +75,6 @@
     </tbody>
 </table>
 
-<div class="footer">
-    <div class="footer-left">CA &amp; KANAGF S.R.L. — Sistema ERP Construcción</div>
-    <div class="footer-right">Total: {{ $proyectos->count() }} proyectos</div>
-</div>
-</body>
-</html>
+
+    
+@endsection

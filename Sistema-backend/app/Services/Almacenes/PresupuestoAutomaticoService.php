@@ -10,14 +10,19 @@ use App\Models\PlantillaConstructiva;
 use App\Models\PresupuestoItemProyecto;
 use App\Models\PresupuestoMaterialDistribucion;
 use App\Models\PresupuestoMaterialProyecto;
+use App\Models\Proyecto;
 use App\Models\RecetaItem;
 use App\Services\Almacenes\RecetaResolverService;
+use App\Services\Proyectos\RecalculoFinancieroService;
 use Illuminate\Support\Facades\DB;
 use Exception;
 
 class PresupuestoAutomaticoService
 {
-    public function __construct(private RecetaResolverService $recetaResolver) {}
+    public function __construct(
+        private RecetaResolverService      $recetaResolver,
+        private RecalculoFinancieroService $recalculoFinanciero,
+    ) {}
     /**
      * Genera el presupuesto completo de items y el consolidado de materiales para un proyecto.
      * Para sociales: recibe array de [plantilla_id, vivienda_id, cantidad_planificada] por item.
@@ -55,6 +60,12 @@ class PresupuestoAutomaticoService
             $this->snapshotearRecetas($proyectoId, $presupuestoItems, $actorId);
 
             $consolidado = $this->calcularConsolidado($proyectoId, $presupuestoItems, $actorId);
+
+            // Actualizar presupuesto_materiales y GG residual en el proyecto
+            $proyecto = Proyecto::find($proyectoId);
+            if ($proyecto) {
+                $this->recalculoFinanciero->recalcularMaterialesYGG($proyecto);
+            }
 
             return [
                 'items_generados'       => count($presupuestoItems),
@@ -128,7 +139,14 @@ class PresupuestoAutomaticoService
                 ->with(['itemConstructivo.receta', 'overrides'])
                 ->get();
 
-            return $this->calcularConsolidado($proyectoId, $items->all(), $actorId);
+            $consolidado = $this->calcularConsolidado($proyectoId, $items->all(), $actorId);
+
+            $proyecto = Proyecto::find($proyectoId);
+            if ($proyecto) {
+                $this->recalculoFinanciero->recalcularMaterialesYGG($proyecto);
+            }
+
+            return $consolidado;
         });
     }
 

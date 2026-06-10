@@ -118,6 +118,7 @@ class ChecklistViviendaController extends Controller
         DB::transaction(function () use ($pip, $pctNuevo, $estadoNuevo, $request, $pctAnterior, $estadoAnterior, $viviendaId) {
             $pip->porcentaje_avance = $pctNuevo;
             $pip->estado_ejecucion  = $estadoNuevo;
+            $pip->alerta_sin_reporte = false; // Cleared when user registers progress
             $pip->save();
 
             HistorialCambioItem::create([
@@ -138,12 +139,15 @@ class ChecklistViviendaController extends Controller
         $vivienda = Vivienda::find($viviendaId);
 
         $response = [
-            'item' => [
+            'item_actualizado' => [
                 'id'                => $pip->id,
                 'porcentaje_avance' => (float) $pip->porcentaje_avance,
                 'estado_ejecucion'  => $pip->estado_ejecucion,
             ],
-            'avance_total' => (float) $vivienda->porcentaje_avance,
+            'avance_vivienda' => (float) $vivienda->porcentaje_avance,
+            'reporte' => [
+                'presupuesto_item_proyecto_id' => $pip->id,
+            ],
         ];
 
         if ($advertencia) {

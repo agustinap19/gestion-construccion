@@ -88,6 +88,27 @@ const beneficiarioService = {
     urlExportar: (proyectoId, tipo = 'pdf') => {
         return `/api/beneficiarios/proyecto/${proyectoId}/exportar?tipo=${tipo}`;
     },
+
+    // ── Sincronización de tipología ───────────────────────────────────────────
+
+    syncTipologiaPreview: async (id, nuevoTipoId) => {
+        const response = await api.get(`/beneficiarios/${id}/sync-tipologia/preview`, {
+            params: { nuevo_tipo_id: nuevoTipoId },
+        });
+        return response.data.preview;
+    },
+
+    syncTipologiaAplicar: async (id, nuevoTipoId) => {
+        const response = await api.post(`/beneficiarios/${id}/sync-tipologia/aplicar`, {
+            nuevo_tipo_id: nuevoTipoId,
+        });
+        return response.data;
+    },
+
+    syncTipologiaHistorial: async (id) => {
+        const response = await api.get(`/beneficiarios/${id}/historial-tipologia`);
+        return response.data.historial;
+    },
 };
 
 export default beneficiarioService;

@@ -173,10 +173,35 @@ class ReporteAvanceService
         if (empty($itemsData)) throw new \InvalidArgumentException("No hay items para registrar.");
 
         $primerPipId = $itemsData[0]['presupuesto_item_proyecto_id'];
-        $primerPip = PresupuestoItemProyecto::where('vivienda_id', $viviendaId)->findOrFail($primerPipId);
+        $primerPip = PresupuestoItemProyecto::where('vivienda_id', $viviendaId)
+            ->with('vivienda.beneficiario')
+            ->findOrFail($primerPipId);
         $proyectoId = $primerPip->proyecto_id;
 
-        // Subir foto una sola vez
+        // Validar GPS y retrogradar antes de subir la foto para evitar archivos huérfanos
+        $beneficiario = $primerPip->vivienda?->beneficiario;
+        if ($beneficiario && $beneficiario->latitud_terreno && $beneficiario->longitud_terreno && !empty($metaDatos['coordenadas_gps'])) {
+            $coords = explode(',', $metaDatos['coordenadas_gps']);
+            if (count($coords) === 2) {
+                $lat = (float) trim($coords[0]);
+                $lng = (float) trim($coords[1]);
+                $distancia = $this->distanciaKm($lat, $lng, (float)$beneficiario->latitud_terreno, (float)$beneficiario->longitud_terreno);
+                if ($distancia > 0.100) {
+                    throw new \InvalidArgumentException('Las coordenadas de la foto están a más de 100 metros del terreno del beneficiario (' . round($distancia * 1000) . 'm).');
+                }
+            }
+        }
+
+        foreach ($itemsData as $datos) {
+            $pctAnterior = (float) PresupuestoItemProyecto::where('vivienda_id', $viviendaId)
+                ->where('id', $datos['presupuesto_item_proyecto_id'])
+                ->value('porcentaje_avance');
+            if ((float) $datos['porcentaje_avance'] < $pctAnterior && empty($metaDatos['observacion'])) {
+                throw new \InvalidArgumentException('Para reducir el avance es obligatorio incluir una observación.');
+            }
+        }
+
+        // Subir foto solo después de que todas las validaciones pasaron
         [$fotoPath, $thumbPath] = $this->subirFoto($foto, $proyectoId, $viviendaId);
 
         $reportesGenerados = [];
@@ -193,26 +218,6 @@ class ReporteAvanceService
 
                 $pctAnterior = (float) $pip->porcentaje_avance;
                 $pctNuevo    = (float) $datos['porcentaje_avance'];
-
-                if ($pctNuevo < $pctAnterior && empty($metaDatos['observacion'])) {
-                    throw new \InvalidArgumentException(
-                        'Para reducir el avance es obligatorio incluir una observación.'
-                    );
-                }
-
-                // Validación 100m
-                $beneficiario = $pip->vivienda?->beneficiario;
-                if ($beneficiario && $beneficiario->latitud_terreno && $beneficiario->longitud_terreno && !empty($metaDatos['coordenadas_gps'])) {
-                    $coords = explode(',', $metaDatos['coordenadas_gps']);
-                    if (count($coords) === 2) {
-                        $lat = (float) trim($coords[0]);
-                        $lng = (float) trim($coords[1]);
-                        $distancia = $this->distanciaKm($lat, $lng, (float)$beneficiario->latitud_terreno, (float)$beneficiario->longitud_terreno);
-                        if ($distancia > 0.100) {
-                            throw new \InvalidArgumentException('Las coordenadas de la foto están a más de 100 metros del terreno del beneficiario (' . round($distancia * 1000) . 'm).');
-                        }
-                    }
-                }
 
                 $estadoNuevo = match(true) {
                     $pctNuevo >= 100 => 'terminado',

@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
+@extends('exports.layout_membrete')
+
+@section('styles')
     <title>Presupuesto de Materiales</title>
     <style>
         body { font-family: sans-serif; font-size: 9px; color: #333; }
@@ -16,8 +15,9 @@
         tfoot td { font-weight: bold; background: #f8fafc; }
         .footer { margin-top: 12px; font-size: 8px; color: #999; text-align: right; }
     </style>
-</head>
-<body>
+@endsection
+
+@section('content')
     <div class="header">
         <div class="title">PRESUPUESTO DE MATERIALES</div>
         <div class="subtitle">Proyecto: {{ $proyecto->nombre }} ({{ $proyecto->codigo }})</div>
@@ -62,6 +62,5 @@
         </tfoot>
     </table>
 
-    <div class="footer">Total ítems: {{ $items->count() }}</div>
-</body>
-</html>
+    
+@endsection

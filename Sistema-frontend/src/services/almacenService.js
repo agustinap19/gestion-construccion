@@ -17,6 +17,11 @@ export const almacenService = {
         return res.data;
     },
 
+    dashboard: async () => {
+        const res = await api.get('/almacenes/dashboard');
+        return res.data;
+    },
+
     // ── CRUD ──────────────────────────────────────────────────────────────
     crear: async (data) => {
         const res = await api.post('/almacenes', data);

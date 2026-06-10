@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLoading } from '../../../context/LoadingContext';
@@ -288,6 +288,55 @@ export default function AlmacenDetalle() {
                 ))}
             </div>
 
+            {/* ── Capital Inmovilizado (Sub-fase E adaptado) ───────────────────── */}
+            {tab === 'stock' && (() => {
+                const DIAS_UMBRAL = 30;
+                const hoy = new Date();
+                const inmovilizados = (data?.stocks || []).filter(s => {
+                    if (!s.cantidad || s.cantidad <= 0) return false;
+                    if (!s.ultima_fecha_movimiento) return true;
+                    const dias = Math.floor((hoy - new Date(s.ultima_fecha_movimiento)) / 86400000);
+                    return dias >= DIAS_UMBRAL;
+                });
+                if (inmovilizados.length === 0) return null;
+                const valorTotal = inmovilizados.reduce((sum, s) => sum + (s.valor_total || 0), 0);
+                const bs = n => `Bs. ${Math.round(n).toLocaleString('es-BO')}`;
+                return (
+                    <div className="mb-4 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06]">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                                <h3 className="text-amber-300 font-semibold text-sm">Capital Inmovilizado</h3>
+                            </div>
+                            <span className="text-amber-400 font-bold text-sm">{bs(valorTotal)}</span>
+                        </div>
+                        <p className="text-amber-300/60 text-xs mb-3">
+                            {inmovilizados.length} material{inmovilizados.length > 1 ? 'es' : ''} en almacén sin movimiento de salida en {DIAS_UMBRAL}+ días.
+                        </p>
+                        <div className="space-y-1.5">
+                            {inmovilizados.slice(0, 5).map(s => {
+                                const dias = s.ultima_fecha_movimiento
+                                    ? Math.floor((hoy - new Date(s.ultima_fecha_movimiento)) / 86400000)
+                                    : null;
+                                return (
+                                    <div key={s.id} className="flex items-center justify-between text-xs">
+                                        <span className="text-white/70">{s.material?.nombre}</span>
+                                        <div className="flex items-center gap-3 text-white/40">
+                                            <span>{s.cantidad.toFixed(2)} {s.material?.unidadMedida?.simbolo || ''}</span>
+                                            <span className="text-amber-400/70">{bs(s.valor_total || 0)}</span>
+                                            <span>{dias !== null ? `${dias}d sin mov.` : 'Sin mov.'}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {inmovilizados.length > 5 && (
+                                <p className="text-amber-300/40 text-xs">+{inmovilizados.length - 5} más…</p>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
             <AnimatePresence mode="wait">
                 {tab === 'stock' && (
                     <motion.div key="stock" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -401,7 +450,7 @@ export default function AlmacenDetalle() {
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="border-b border-white/10">
-                                                {['Código', 'Tipo', 'Fecha', 'Receptor / Proveedor', 'Items', 'Total', 'Estado', ''].map(h => (
+                                                {['Código', 'Tipo', 'Fecha', 'Receptor / Proveedor', 'Material / Ítem', 'Total', 'Estado', ''].map(h => (
                                                     <th key={h} className="text-left text-slate-400 font-medium py-3 px-4 text-xs">{h}</th>
                                                 ))}
                                             </tr>
@@ -424,10 +473,26 @@ export default function AlmacenDetalle() {
                                                     <td className="py-3 px-4 text-slate-300 text-xs">
                                                         {mov.beneficiario
                                                             ? `${mov.beneficiario.nombre} ${mov.beneficiario.apellido_paterno}`
-                                                            : mov.receptor_nombre || mov.proveedor_nombre || '—'}
+                                                            : mov.receptor_nombre
+                                                            ? mov.receptor_nombre
+                                                            : mov.proveedor
+                                                            ? <Link to={`/dashboard/proveedores/${mov.proveedor.id}`}
+                                                                className="text-violet-300 hover:text-violet-200 hover:underline transition-colors">
+                                                                {mov.proveedor.razon_social}
+                                                              </Link>
+                                                            : mov.proveedor_nombre || '—'}
                                                     </td>
-                                                    <td className="py-3 px-4 text-slate-400 text-xs">
-                                                        {mov.detalles?.length ?? '—'} mat.
+                                                    <td className="py-3 px-4 text-xs max-w-[180px]">
+                                                        {mov.presupuesto_item?.item_constructivo
+                                                            ? <div>
+                                                                <div className="text-slate-300 truncate">{mov.presupuesto_item.item_constructivo.nombre}</div>
+                                                                <div className="text-slate-500">{mov.detalles?.[0]?.material?.nombre ?? ''}</div>
+                                                              </div>
+                                                            : <div>
+                                                                <div className="text-slate-400">{mov.detalles?.length ?? '—'} mat.</div>
+                                                                {mov.detalles?.[0]?.material && <div className="text-slate-500 truncate">{mov.detalles[0].material.nombre}</div>}
+                                                              </div>
+                                                        }
                                                     </td>
                                                     <td className="py-3 px-4 text-white text-xs font-mono">
                                                         Bs {Number(mov.monto_total).toFixed(2)}
@@ -481,6 +546,7 @@ export default function AlmacenDetalle() {
                         )}
                     </motion.div>
                 )}
+
             </AnimatePresence>
 
             {/* Drawer de detalle de movimiento */}
@@ -508,7 +574,22 @@ export default function AlmacenDetalle() {
                                     <Campo label="Tipo" value={TIPO_LABEL[detalleMov.tipo] || detalleMov.tipo} />
                                     <Campo label="Estado" value={detalleMov.estado} />
                                     <Campo label="Fecha" value={new Date(detalleMov.fecha_movimiento).toLocaleString('es-BO')} />
-                                    {detalleMov.proveedor_nombre && <Campo label="Proveedor" value={detalleMov.proveedor_nombre} />}
+                                    {detalleMov.proveedor
+                                        ? <div>
+                                            <p className="text-slate-400 text-xs mb-0.5">Proveedor</p>
+                                            <Link to={`/dashboard/proveedores/${detalleMov.proveedor.id}`}
+                                                className="text-violet-300 hover:text-violet-200 hover:underline text-sm transition-colors flex items-center gap-1">
+                                                {detalleMov.proveedor.razon_social}
+                                                <span className="text-white/25 text-xs font-mono">({detalleMov.proveedor.codigo})</span>
+                                            </Link>
+                                            {detalleMov.proveedor.telefono_principal && (
+                                                <p className="text-white/40 text-xs mt-0.5">{detalleMov.proveedor.telefono_principal}</p>
+                                            )}
+                                          </div>
+                                        : detalleMov.proveedor_nombre
+                                        ? <Campo label="Proveedor" value={detalleMov.proveedor_nombre} />
+                                        : null
+                                    }
                                     {detalleMov.numero_factura && <Campo label="Factura" value={detalleMov.numero_factura} />}
                                     {detalleMov.receptor_nombre && <Campo label="Receptor" value={detalleMov.receptor_nombre} />}
                                     {detalleMov.beneficiario && (

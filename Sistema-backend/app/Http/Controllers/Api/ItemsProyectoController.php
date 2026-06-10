@@ -71,7 +71,9 @@ class ItemsProyectoController extends Controller
                     'fuente'                   => $r['fuente'],
                     'unidad'                   => $r['unidad_material'],
                 ]),
-                'es_especial'           => (bool) ($pip->metadata['es_especial'] ?? false),
+                'es_especial'                    => (bool) ($pip->metadata['es_especial'] ?? false),
+                'alerta_sin_reporte'             => (bool) $pip->alerta_sin_reporte,
+                'fecha_primera_entrega_material' => $pip->fecha_primera_entrega_material?->toISOString(),
             ];
         });
 

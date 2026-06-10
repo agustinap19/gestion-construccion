@@ -263,18 +263,52 @@ class BeneficiarioService
         });
     }
 
-    public function asignarTipoVivienda(int $id, int $tipoViviendaId, int $actorId): Beneficiario
+    public function asignarTipoVivienda(int $id, int $tipoViviendaId, int $actorId): array
     {
-        $beneficiario = Beneficiario::findOrFail($id);
+        $beneficiario = Beneficiario::with(['vivienda', 'tipoVivienda'])->findOrFail($id);
 
         if ($beneficiario->estado_seleccion === 'vivienda_entregada') {
             throw new TransicionEstadoNoPermitidaException("No se puede cambiar el tipo de vivienda de un beneficiario con vivienda entregada.");
         }
 
-        $beneficiario->tipo_vivienda_id = $tipoViviendaId;
-        $beneficiario->save();
+        if ($beneficiario->tipo_vivienda_id === $tipoViviendaId) {
+            return [
+                'beneficiario'     => $beneficiario,
+                'sync'             => null,
+                'requiere_preview' => false,
+            ];
+        }
 
-        return $beneficiario->load('tipoVivienda');
+        $tieneEntregas = \App\Models\MovimientoAlmacen::whereHas('presupuestoItem', fn($q) =>
+            $q->where('proyecto_id', $beneficiario->proyecto_id)
+              ->where('vivienda_id', $beneficiario->vivienda?->id)
+        )->whereNotIn('estado', ['anulado', 'borrador'])->exists();
+
+        // tipo_vivienda_id NO se guarda aquí — se actualiza dentro de la transacción
+        // del servicio de sync para garantizar atomicidad completa.
+
+        $resultado = ['beneficiario' => $beneficiario, 'sync' => null];
+
+        if (!$tieneEntregas) {
+            // Sin entregas → auto-sync transparente (tipo_vivienda_id se guarda en la transacción)
+            try {
+                $sincronizarSvc = app(SincronizarTipologiaService::class);
+                $sync = $sincronizarSvc->aplicar($beneficiario, $tipoViviendaId, $actorId, 'auto');
+                $resultado['beneficiario'] = $beneficiario->fresh('tipoVivienda');
+                $resultado['sync']             = $sync;
+                $resultado['requiere_preview'] = false;
+            } catch (\Throwable $e) {
+                // Si falla, tipo_vivienda_id NO fue modificado — estado siempre consistente
+                $resultado['sync']             = ['error' => $e->getMessage()];
+                $resultado['requiere_preview'] = false;
+            }
+        } else {
+            // Con entregas → frontend abre modal de preview/confirm antes de guardar nada
+            $resultado['requiere_preview'] = true;
+            $resultado['nuevo_tipo_id']    = $tipoViviendaId;
+        }
+
+        return $resultado;
     }
 
     public function eliminar(int $id, int $actorId, ?string $razon): bool

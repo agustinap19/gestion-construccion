@@ -383,6 +383,47 @@ export default function ItemsProyecto() {
                 </p>
             </div>
 
+            {/* ── Desfase sin reporte (Sub-fase E adaptado) ──────────────────── */}
+            {(() => {
+                const sinReporte = items.filter(it => it.alerta_sin_reporte);
+                if (sinReporte.length === 0) return null;
+                return (
+                    <div className="p-4 rounded-2xl border border-orange-500/30 bg-orange-500/[0.06]">
+                        <div className="flex items-center gap-2 mb-3">
+                            <AlertTriangle className="w-4 h-4 text-orange-400" />
+                            <h3 className="text-orange-300 font-semibold text-sm">
+                                {sinReporte.length} ítem{sinReporte.length > 1 ? 's' : ''} con materiales entregados y sin reporte de avance (+3 días)
+                            </h3>
+                        </div>
+                        <div className="space-y-1.5">
+                            {sinReporte.map(it => {
+                                const dias = it.fecha_primera_entrega_material
+                                    ? Math.floor((Date.now() - new Date(it.fecha_primera_entrega_material)) / 86400000)
+                                    : null;
+                                return (
+                                    <div key={it.id} className="flex items-center justify-between text-xs bg-white/[0.03] rounded-lg px-3 py-2">
+                                        <div>
+                                            <span className="text-white/80 font-medium">{it.item_constructivo?.nombre || it.nombre}</span>
+                                            <span className="text-white/30 ml-2">{it.item_constructivo?.codigo}</span>
+                                            {it.vivienda?.codigo && <span className="text-white/25 ml-2">· {it.vivienda.codigo}</span>}
+                                        </div>
+                                        <div className="flex items-center gap-3 text-white/40 shrink-0">
+                                            <span>Avance: {parseFloat(it.porcentaje_avance ?? 0).toFixed(0)}%</span>
+                                            {dias !== null && (
+                                                <span className="text-orange-400">{dias}d sin reporte</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <p className="text-orange-300/40 text-xs mt-2">
+                            Registra el avance en el seguimiento de obra para resolver estas alertas.
+                        </p>
+                    </div>
+                );
+            })()}
+
             {/* Tabs */}
             <div className={`${glass} overflow-hidden`}>
                 <div className="flex border-b border-white/10">

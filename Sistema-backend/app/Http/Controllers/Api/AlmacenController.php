@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Almacen;
+use App\Models\Beneficiario;
 use App\Models\DetalleMovimientoAlmacen;
 use App\Models\PresupuestoItemProyecto;
 use App\Models\StockMaterial;
@@ -64,6 +65,8 @@ class AlmacenController extends Controller
             'responsable_id'     => 'nullable|integer|exists:personal,id',
             'capacidad_estimada' => 'nullable|numeric|min:0',
             'codigo'             => 'nullable|string|max:20|unique:almacenes,codigo',
+            'latitud'            => 'nullable|numeric|between:-90,90',
+            'longitud'           => 'nullable|numeric|between:-180,180',
         ]);
 
         try {
@@ -86,6 +89,8 @@ class AlmacenController extends Controller
             'descripcion'        => 'nullable|string|max:300',
             'responsable_id'     => 'nullable|integer|exists:personal,id',
             'capacidad_estimada' => 'nullable|numeric|min:0',
+            'latitud'            => 'nullable|numeric|between:-90,90',
+            'longitud'           => 'nullable|numeric|between:-180,180',
         ]);
 
         try {
@@ -119,6 +124,15 @@ class AlmacenController extends Controller
         }
 
         return response()->json(['status' => 'success', 'data' => $this->service->estadisticasResumen()]);
+    }
+
+    public function dashboard(Request $request): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('almacenes.ver')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        return response()->json(['status' => 'success', 'data' => $this->service->dashboard()]);
     }
 
     // ─── Movimientos de stock ────────────────────────────────────────────────
@@ -358,6 +372,83 @@ class AlmacenController extends Controller
         })->values();
 
         return response()->json(['status' => 'success', 'materiales' => $materiales]);
+    }
+
+    /**
+     * GET /almacenes/{almacenId}/beneficiarios/{beneficiarioId}/material/{materialId}/items
+     * Returns items that require the given material for the beneficiary's vivienda.
+     * Used for the material-first delivery flow (BLOQUE 1).
+     */
+    public function itemsPorMaterialBeneficiario(Request $request, int $almacenId, int $beneficiarioId, int $materialId): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('almacenes.ver')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $beneficiario = Beneficiario::with('vivienda')->findOrFail($beneficiarioId);
+
+        if (!$beneficiario->vivienda) {
+            return response()->json(['status' => 'success', 'items' => [], 'mensaje' => 'Beneficiario sin vivienda asignada.']);
+        }
+
+        $viviendaId = $beneficiario->vivienda->id;
+        $proyectoId = $beneficiario->proyecto_id;
+
+        // All PIPs for this vivienda that are not yet finished
+        $pips = PresupuestoItemProyecto::with(['itemConstructivo:id,nombre,codigo,unidad_base'])
+            ->where('vivienda_id', $viviendaId)
+            ->where('estado_ejecucion', '!=', 'terminado')
+            ->get();
+
+        if ($pips->isEmpty()) {
+            return response()->json(['status' => 'success', 'items' => [], 'mensaje' => 'No hay ítems pendientes para este beneficiario.']);
+        }
+
+        $resultado = [];
+        foreach ($pips as $pip) {
+            $coef = $this->recetaResolver->resolverMaterial(
+                $pip->item_constructivo_id,
+                $proyectoId,
+                $viviendaId,
+                $materialId
+            );
+
+            if ($coef <= 0) continue; // This item does not need this material
+
+            $teoricoTotal = round((float) $pip->cantidad_planificada * $coef, 4);
+
+            $yaEntregado = (float) DetalleMovimientoAlmacen::whereHas('movimiento', fn($q) => $q
+                ->where('presupuesto_item_proyecto_id', $pip->id)
+                ->whereNotIn('estado', ['anulado', 'borrador'])
+            )->where('material_id', $materialId)->sum('cantidad');
+
+            $restante = max(0.0, round($teoricoTotal - $yaEntregado, 4));
+
+            $stock = StockMaterial::where('almacen_id', $almacenId)
+                ->where('material_id', $materialId)
+                ->first();
+            $disponible = $stock ? max(0.0, (float)($stock->cantidad - $stock->cantidad_reservada)) : 0.0;
+
+            $resultado[] = [
+                'pip_id'                   => $pip->id,
+                'item_nombre'              => $pip->itemConstructivo?->nombre,
+                'item_codigo'              => $pip->itemConstructivo?->codigo,
+                'unidad_base'              => $pip->itemConstructivo?->unidad_base,
+                'cantidad_planificada'     => (float) $pip->cantidad_planificada,
+                'porcentaje_avance'        => (float) $pip->porcentaje_avance,
+                'estado_ejecucion'         => $pip->estado_ejecucion,
+                'coeficiente_material'     => $coef,
+                'cantidad_teorica_total'   => $teoricoTotal,
+                'ya_entregado'             => $yaEntregado,
+                'restante'                 => $restante,
+                'disponible_en_almacen'    => $disponible,
+                'item_completo'            => $restante <= 0,
+                'alerta_sin_reporte'       => (bool) $pip->alerta_sin_reporte,
+                'fecha_primera_entrega'    => $pip->fecha_primera_entrega_material?->toISOString(),
+            ];
+        }
+
+        return response()->json(['status' => 'success', 'items' => $resultado]);
     }
 
     public function kardex(Request $request, int $almacenId, int $materialId)

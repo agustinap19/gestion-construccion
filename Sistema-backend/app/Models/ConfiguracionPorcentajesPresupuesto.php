@@ -14,6 +14,7 @@ class ConfiguracionPorcentajesPresupuesto extends Model
         'porcentaje_gastos_generales',
         'porcentaje_utilidad_esperada',
         'umbral_rentabilidad_minima',
+        'umbral_gg_minimo',
         'notas',
         'usuario_actualizador_id',
     ];
@@ -23,6 +24,7 @@ class ConfiguracionPorcentajesPresupuesto extends Model
         'porcentaje_gastos_generales'  => 'decimal:2',
         'porcentaje_utilidad_esperada' => 'decimal:2',
         'umbral_rentabilidad_minima'   => 'decimal:2',
+        'umbral_gg_minimo'             => 'decimal:2',
     ];
 
     public function usuarioActualizador()

@@ -5,14 +5,20 @@ namespace App\Services\Almacenes;
 use App\Models\Almacen;
 use App\Models\Beneficiario;
 use App\Models\DetalleMovimientoAlmacen;
+use App\Models\Proveedor;
 use App\Models\EvidenciaMovimiento;
+use App\Models\Material;
 use App\Models\MovimientoAlmacen;
 use App\Models\PresupuestoItemProyecto;
 use App\Models\PresupuestoMaterialProyecto;
+use App\Models\Proyecto;
 use App\Models\StockMaterial;
+use App\Models\User;
+use App\Notifications\SobreentregaMaterialNotification;
 use App\Services\Almacenes\RecetaResolverService;
 use App\Services\Almacenes\StockService;
 use App\Services\Almacenes\TrazabilidadMaterialesService;
+use App\Services\Proyectos\RecalculoFinancieroService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -25,9 +31,10 @@ class EntregaService
     const UMBRAL_BLOQUEO    = 1.50; // 150% → rojo + aprobación admin
 
     public function __construct(
-        private StockService $stockService,
+        private StockService               $stockService,
         private TrazabilidadMaterialesService $trazabilidad,
-        private RecetaResolverService $recetaResolver,
+        private RecetaResolverService      $recetaResolver,
+        private RecalculoFinancieroService $recalculoFinanciero,
     ) {}
 
     // ─── ENTRADA (compra) ────────────────────────────────────────────────────────
@@ -37,6 +44,13 @@ class EntregaService
         return DB::transaction(function () use ($data, $userId) {
             $almacen = Almacen::findOrFail($data['almacen_id']);
 
+            // Resolver nombre del proveedor desde FK si se envió proveedor_id
+            $proveedorId     = isset($data['proveedor_id']) && $data['proveedor_id'] ? (int) $data['proveedor_id'] : null;
+            $proveedorNombre = $data['proveedor_nombre'] ?? null;
+            if ($proveedorId && !$proveedorNombre) {
+                $proveedorNombre = Proveedor::find($proveedorId)?->razon_social;
+            }
+
             $movimiento = MovimientoAlmacen::create([
                 'codigo'             => MovimientoAlmacen::generarCodigo('entrada_compra'),
                 'tipo'               => 'entrada_compra',
@@ -44,7 +58,8 @@ class EntregaService
                 'almacen_origen_id'  => null,
                 'almacen_destino_id' => $almacen->id,
                 'proyecto_id'        => $data['proyecto_id'] ?? null,
-                'proveedor_nombre'   => $data['proveedor_nombre'] ?? null,
+                'proveedor_id'       => $proveedorId,
+                'proveedor_nombre'   => $proveedorNombre,
                 'numero_factura'     => $data['numero_factura'] ?? null,
                 'fecha_factura'      => $data['fecha_factura'] ?? null,
                 'archivo_factura_url'=> $data['archivo_factura_url'] ?? null,
@@ -104,114 +119,163 @@ class EntregaService
 
     // ─── SALIDA SOCIAL (entrega a beneficiario) ──────────────────────────────────
 
-    public function registrarSalidaSocial(array $data, int $userId): MovimientoAlmacen
+    /**
+     * Creates one MovimientoAlmacen per item in a single transaction.
+     * When items_distribucion is empty, registers an extra delivery without item linkage.
+     * Returns array of created movements.
+     */
+    public function registrarSalidaSocial(array $data, int $userId): array
     {
         return DB::transaction(function () use ($data, $userId) {
             $almacen      = Almacen::findOrFail($data['almacen_id']);
             $beneficiario = Beneficiario::findOrFail($data['beneficiario_id']);
-            $itemPpto     = PresupuestoItemProyecto::findOrFail($data['presupuesto_item_proyecto_id']);
+            $materialId   = (int) $data['material_id'];
+            $itemsDist    = $data['items_distribucion'] ?? [];
+            $proyectoId   = $almacen->proyecto_id;
+            $movimientos  = [];
+            $concepto     = "Entrega social — " . ($beneficiario->nombre_completo ?? "BEN#{$beneficiario->id}");
 
-            // Validación de sobre-consumo por material
-            $requiereAprobacion = false;
-            $hayAlerta          = false;
-            foreach ($data['materiales'] as $mat) {
-                $pct = $this->calcularPorcentajeConsumo($itemPpto->id, $mat['material_id'], $mat['cantidad']);
-                if ($pct > self::UMBRAL_BLOQUEO * 100) {
-                    if (empty($data['aprobado_por_id'])) {
+            if (empty($itemsDist)) {
+                // ── Entrega adicional sin ítem (todos los ítems ya completos) ─────
+                if (empty(trim($data['justificacion_sobre_consumo'] ?? ''))) {
+                    throw ValidationException::withMessages([
+                        'justificacion_sobre_consumo' => 'Se requiere justificación para entregas sin ítem vinculado.',
+                    ]);
+                }
+                $mov = $this->crearMovimientoIndividual(
+                    $almacen, $beneficiario, null,
+                    $materialId, (float) $data['cantidad_total'],
+                    $data['justificacion_sobre_consumo'], $data, $userId, $concepto
+                );
+                if (!empty($data['evidencias'])) {
+                    $this->guardarEvidencias($mov->id, $data['evidencias'], $userId);
+                }
+                $movimientos[] = $mov;
+            } else {
+                // ── Un movimiento por ítem ────────────────────────────────────────
+                foreach ($itemsDist as $idx => $dist) {
+                    $itemPpto = PresupuestoItemProyecto::findOrFail($dist['presupuesto_item_proyecto_id']);
+                    $cantidad = (float) $dist['cantidad'];
+                    $just     = $dist['justificacion'] ?? null;
+
+                    // Validate over-consumption
+                    $pct = $this->calcularPorcentajeConsumo($itemPpto->id, $materialId, $cantidad);
+                    if ($pct > self::UMBRAL_BLOQUEO * 100 && empty($data['aprobado_por_id'])) {
                         throw new \RuntimeException(
-                            "Entrega supera el 150% del presupuesto para material {$mat['material_id']}. Requiere aprobación de administrador."
+                            "Entrega supera 150% para ítem «{$itemPpto->itemConstructivo?->nombre}». Requiere aprobación."
                         );
                     }
-                    $requiereAprobacion = true;
-                } elseif ($pct > self::UMBRAL_ALERTA * 100) {
-                    $hayAlerta = true;
-                }
-            }
-            if ($hayAlerta && empty(trim($data['justificacion_sobre_consumo'] ?? ''))) {
-                throw ValidationException::withMessages([
-                    'justificacion_sobre_consumo' => 'El consumo supera el 110% del presupuesto. Se requiere justificación.',
-                ]);
-            }
+                    if ($pct > self::UMBRAL_ALERTA * 100 && empty(trim($just ?? ''))) {
+                        throw ValidationException::withMessages([
+                            "items_distribucion.{$idx}.justificacion" =>
+                                'El consumo supera 110% del presupuesto. Se requiere justificación.',
+                        ]);
+                    }
 
-            // Detección automática de modalidad (ignorar el campo del request si viene)
-            $modalidadDetectada = $this->detectarModalidad($itemPpto, $data['materiales']);
-
-            $movimiento = MovimientoAlmacen::create([
-                'codigo'                       => MovimientoAlmacen::generarCodigo('salida_social'),
-                'tipo'                         => 'salida_social',
-                'estado'                       => 'completado',
-                'almacen_origen_id'            => $almacen->id,
-                'almacen_destino_id'           => null,
-                'proyecto_id'                  => $almacen->proyecto_id ?? $itemPpto->proyecto_id,
-                'beneficiario_id'              => $beneficiario->id,
-                'presupuesto_item_proyecto_id' => $itemPpto->id,
-                'modalidad_entrega'            => $modalidadDetectada,
-                'justificacion_sobre_consumo'  => $data['justificacion_sobre_consumo'] ?? null,
-                'requiere_aprobacion'          => $requiereAprobacion,
-                'aprobado_por_id'              => $data['aprobado_por_id'] ?? null,
-                'aprobado_en'                  => isset($data['aprobado_por_id']) ? now() : null,
-                'notas'                        => $data['notas'] ?? null,
-                'registrado_por_id'            => $userId,
-                'fecha_movimiento'             => now(),
-                'monto_total'                  => 0,
-            ]);
-
-            $montoTotal = 0;
-
-            foreach ($data['materiales'] as $mat) {
-                $pct = $this->calcularPorcentajeConsumo($itemPpto->id, $mat['material_id'], $mat['cantidad']);
-
-                $kardex = $this->stockService->registrarSalida(
-                    almacenId:          $almacen->id,
-                    materialId:         $mat['material_id'],
-                    cantidad:           (float) $mat['cantidad'],
-                    concepto:           "Entrega social — " . ($beneficiario->nombre_completo ?? "BEN#{$beneficiario->id}"),
-                    actorId:            $userId,
-                    referenciaTipo:     'MovimientoAlmacen',
-                    referenciaId:       $movimiento->id,
-                    movimientoAlmacenId: $movimiento->id,
-                );
-
-                DetalleMovimientoAlmacen::create([
-                    'movimiento_almacen_id'  => $movimiento->id,
-                    'material_id'            => $mat['material_id'],
-                    'cantidad'               => $mat['cantidad'],
-                    'precio_unitario'        => $kardex->precio_unitario,
-                    'pmp_anterior'           => $kardex->saldo_anterior,
-                    'pmp_posterior'          => $kardex->saldo_posterior,
-                    'saldo_anterior'         => $kardex->saldo_anterior,
-                    'saldo_posterior'        => $kardex->saldo_posterior,
-                    'movimiento_material_id' => $kardex->id,
-                    'porcentaje_presupuesto' => $pct,
-                    'observacion'            => $mat['observacion'] ?? null,
-                ]);
-
-                $montoTotal += $kardex->costo_total;
-            }
-
-            // Cascada: actualizar porcentaje_avance del ítem con modalidad auto-detectada
-            $this->actualizarAvanceItem($itemPpto, $modalidadDetectada);
-
-            $movimiento->update(['monto_total' => $montoTotal]);
-
-            // Guardar evidencias (foto + firma)
-            if (!empty($data['evidencias'])) {
-                $this->guardarEvidencias($movimiento->id, $data['evidencias'], $userId);
-            }
-
-            // ── Hook de trazabilidad (dentro de la misma transacción) ────────
-            $proyectoId = $almacen->proyecto_id ?? $itemPpto->proyecto_id;
-            if ($proyectoId) {
-                foreach ($data['materiales'] as $mat) {
-                    $this->trazabilidad->recalcularMaterial(
-                        (int) $proyectoId,
-                        (int) $mat['material_id']
+                    $mov = $this->crearMovimientoIndividual(
+                        $almacen, $beneficiario, $itemPpto,
+                        $materialId, $cantidad, $just, $data, $userId, $concepto
                     );
+
+                    // Evidencias solo en el primer movimiento
+                    if ($idx === 0 && !empty($data['evidencias'])) {
+                        $this->guardarEvidencias($mov->id, $data['evidencias'], $userId);
+                    }
+
+                    $this->registrarPrimeraEntrega($itemPpto);
+                    $modalidad = $this->detectarModalidad($itemPpto, [['material_id' => $materialId, 'cantidad' => $cantidad]]);
+                    $this->actualizarEstadoItem($itemPpto, $modalidad);
+
+                    $proyectoId = $proyectoId ?? $itemPpto->proyecto_id;
+
+                    // Sobreentregas por ítem
+                    if ($proyectoId) {
+                        $mov->load('detalles');
+                        $this->procesarSobreentregas(
+                            $proyectoId, $itemPpto, $beneficiario,
+                            [['material_id' => $materialId, 'cantidad' => $cantidad]],
+                            $mov->detalles,
+                            $just ?? ''
+                        );
+                    }
+
+                    $movimientos[] = $mov;
                 }
             }
 
-            return $movimiento->load(['detalles.material', 'beneficiario', 'presupuestoItem.itemConstructivo', 'evidencias']);
+            // Hook de trazabilidad (una vez por material)
+            if ($proyectoId) {
+                $this->trazabilidad->recalcularMaterial((int) $proyectoId, $materialId);
+            }
+
+            return $movimientos;
         });
+    }
+
+    private function crearMovimientoIndividual(
+        Almacen $almacen,
+        Beneficiario $beneficiario,
+        ?PresupuestoItemProyecto $itemPpto,
+        int $materialId,
+        float $cantidad,
+        ?string $justificacion,
+        array $data,
+        int $userId,
+        string $concepto
+    ): MovimientoAlmacen {
+        $pct        = $itemPpto ? $this->calcularPorcentajeConsumo($itemPpto->id, $materialId, $cantidad) : 0;
+        $modalidad  = $itemPpto
+            ? $this->detectarModalidad($itemPpto, [['material_id' => $materialId, 'cantidad' => $cantidad]])
+            : null;
+
+        $movimiento = MovimientoAlmacen::create([
+            'codigo'                       => MovimientoAlmacen::generarCodigo('salida_social'),
+            'tipo'                         => 'salida_social',
+            'estado'                       => 'completado',
+            'almacen_origen_id'            => $almacen->id,
+            'almacen_destino_id'           => null,
+            'proyecto_id'                  => $almacen->proyecto_id ?? $itemPpto?->proyecto_id,
+            'beneficiario_id'              => $beneficiario->id,
+            'presupuesto_item_proyecto_id' => $itemPpto?->id,
+            'modalidad_entrega'            => $modalidad,
+            'justificacion_sobre_consumo'  => $justificacion,
+            'requiere_aprobacion'          => $pct > self::UMBRAL_BLOQUEO * 100,
+            'aprobado_por_id'              => $data['aprobado_por_id'] ?? null,
+            'aprobado_en'                  => isset($data['aprobado_por_id']) ? now() : null,
+            'notas'                        => $data['notas'] ?? null,
+            'registrado_por_id'            => $userId,
+            'fecha_movimiento'             => now(),
+            'monto_total'                  => 0,
+        ]);
+
+        $kardex = $this->stockService->registrarSalida(
+            almacenId:           $almacen->id,
+            materialId:          $materialId,
+            cantidad:            $cantidad,
+            concepto:            $concepto,
+            actorId:             $userId,
+            referenciaTipo:      'MovimientoAlmacen',
+            referenciaId:        $movimiento->id,
+            movimientoAlmacenId: $movimiento->id,
+        );
+
+        DetalleMovimientoAlmacen::create([
+            'movimiento_almacen_id'  => $movimiento->id,
+            'material_id'            => $materialId,
+            'cantidad'               => $cantidad,
+            'precio_unitario'        => $kardex->precio_unitario,
+            'pmp_anterior'           => $kardex->saldo_anterior,
+            'pmp_posterior'          => $kardex->saldo_posterior,
+            'saldo_anterior'         => $kardex->saldo_anterior,
+            'saldo_posterior'        => $kardex->saldo_posterior,
+            'movimiento_material_id' => $kardex->id,
+            'porcentaje_presupuesto' => $pct,
+            'observacion'            => null,
+        ]);
+
+        $movimiento->update(['monto_total' => $kardex->costo_total]);
+
+        return $movimiento;
     }
 
     // ─── SALIDA PRIVADA (entrega a personal) ─────────────────────────────────────
@@ -281,7 +345,9 @@ class EntregaService
                 }
             }
 
-            return $movimiento->load(['detalles.material', 'receptorPersonal', 'evidencias']);
+            $resultado = $movimiento->load(['detalles.material', 'receptorPersonal', 'evidencias']);
+
+            return $resultado;
         });
     }
 
@@ -590,49 +656,100 @@ class EntregaService
     }
 
     /**
-     * Actualiza porcentaje_avance e estado_ejecucion del ítem.
-     * Parcial: ya_entregado_total / teorico_total × 100 (incluye entrega actual).
-     * Se llama DESPUÉS de persistir los detalles.
+     * Calculates over-delivery cost for materials that exceed 100% of planned quantity.
+     * Adds the cost to proyecto.sobreentregas_materiales and triggers GG recalculation.
+     * Notifies admin/gerente users.
      */
-    private function actualizarAvanceItem(PresupuestoItemProyecto $item, string $modalidad): void
-    {
-        if ($modalidad === 'total') {
-            $item->update([
-                'estado_ejecucion'  => 'terminado',
-                'porcentaje_avance' => 100,
-            ]);
-            return;
-        }
+    private function procesarSobreentregas(
+        int $proyectoId,
+        PresupuestoItemProyecto $itemPpto,
+        Beneficiario $beneficiario,
+        array $materialesData,
+        $detalles,
+        string $justificacion
+    ): void {
+        $costoExtra = 0.0;
+        $sobreentregas = [];
 
-        // Parcial: avance = MAX(ya_entregado_total / teorico_total) × 100
-        // Usa el resolver para respetar el snapshot del proyecto, no la receta global
-        $receta  = $this->recetaResolver->resolver(
-            $item->item_constructivo_id,
-            $item->proyecto_id,
-            $item->vivienda_id
-        );
-        $maxPct  = 0.0;
-
-        foreach ($receta as $r) {
-            $teoricoTotal = (float) ($item->cantidad_planificada * $r['cantidad_por_unidad_base']);
+        foreach ($materialesData as $mat) {
+            $teoricoTotal = $this->getCantidadPlanificadaMaterial($itemPpto, $mat['material_id']);
             if ($teoricoTotal <= 0) continue;
 
-            $yaEntregado = (float) DetalleMovimientoAlmacen::whereHas('movimiento', fn($q) => $q
-                ->where('presupuesto_item_proyecto_id', $item->id)
+            $entregadoTotal = (float) DetalleMovimientoAlmacen::whereHas('movimiento', fn($q) => $q
+                ->where('presupuesto_item_proyecto_id', $itemPpto->id)
                 ->whereNotIn('estado', ['anulado', 'borrador'])
-            )->where('material_id', $r['material_id'])->sum('cantidad');
+            )->where('material_id', $mat['material_id'])->sum('cantidad');
 
-            $pct    = min(100.0, round(($yaEntregado / $teoricoTotal) * 100, 2));
-            $maxPct = max($maxPct, $pct);
+            if ($entregadoTotal <= $teoricoTotal) continue;
+
+            $exceso       = $entregadoTotal - $teoricoTotal;
+            $detalle      = $detalles->firstWhere('material_id', $mat['material_id']);
+            $precioUnit   = $detalle ? (float) $detalle->precio_unitario : 0.0;
+            $costoExceso  = round($exceso * $precioUnit, 4);
+            $costoExtra  += $costoExceso;
+            $porcentajeEx = $teoricoTotal > 0 ? round(($exceso / $teoricoTotal) * 100, 2) : 0;
+
+            $sobreentregas[] = [
+                'material_id'     => $mat['material_id'],
+                'exceso'          => $exceso,
+                'costo'           => $costoExceso,
+                'porcentaje'      => $porcentajeEx,
+            ];
         }
 
-        $nuevoAvance = min(99.0, $maxPct); // nunca 100% si es parcial
+        if ($costoExtra <= 0) return;
 
-        if ($nuevoAvance > (float) ($item->porcentaje_avance ?? 0)) {
-            $item->update([
-                'porcentaje_avance' => $nuevoAvance,
-                'estado_ejecucion'  => 'en_proceso',
-            ]);
+        // Accumulate cost in proyecto
+        Proyecto::where('id', $proyectoId)->increment('sobreentregas_materiales', $costoExtra);
+
+        // Recalculate GG residual
+        $proyecto = Proyecto::find($proyectoId);
+        if ($proyecto) {
+            $this->recalculoFinanciero->recalcularMaterialesYGG($proyecto);
+        }
+
+        // Notify admin and gerente roles
+        $admins = User::permission(['proyectos.aprobar', 'admin'])->get();
+        foreach ($sobreentregas as $sb) {
+            $material = Material::find($sb['material_id']);
+            foreach ($admins as $admin) {
+                $admin->notify(new SobreentregaMaterialNotification(
+                    proyectoId:         $proyectoId,
+                    proyectoNombre:     $proyecto?->nombre ?? "Proyecto #{$proyectoId}",
+                    materialNombre:     $material?->nombre ?? "Material #{$sb['material_id']}",
+                    beneficiarioId:     $beneficiario->id,
+                    beneficiarioNombre: $beneficiario->nombre_completo ?? "Ben #{$beneficiario->id}",
+                    costoSobreentrega:  $sb['costo'],
+                    porcentajeExceso:   $sb['porcentaje'],
+                    justificacion:      $justificacion,
+                ));
+            }
+        }
+    }
+
+    /**
+     * Registers the timestamp of the very first material delivery for an item.
+     * Used as the start of the 3-day no-report alert countdown.
+     */
+    private function registrarPrimeraEntrega(PresupuestoItemProyecto $item): void
+    {
+        if ($item->fecha_primera_entrega_material === null) {
+            $item->update(['fecha_primera_entrega_material' => now()]);
+        }
+    }
+
+    /**
+     * Updates estado_ejecucion based on delivery modality.
+     * Does NOT touch porcentaje_avance — progress must be reported manually.
+     */
+    private function actualizarEstadoItem(PresupuestoItemProyecto $item, string $modalidad): void
+    {
+        if ($item->estado_ejecucion === 'terminado') {
+            return; // Already marked done by user — don't revert
+        }
+
+        if ($item->estado_ejecucion === 'pendiente') {
+            $item->update(['estado_ejecucion' => 'en_proceso']);
         }
     }
 

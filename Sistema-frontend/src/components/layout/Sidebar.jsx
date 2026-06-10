@@ -49,7 +49,7 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
                 ...(hasPermission('materiales.ver') ? [{ id: 'materiales', label: 'Materiales', icon: Package, path: '/dashboard/materiales' }] : []),
                 ...(hasPermission('almacenes.ver') ? [{ id: 'almacenes', label: 'Almacenes', icon: Warehouse, path: '/dashboard/almacenes' }] : []),
                 ...(hasPermission('biblioteca_constructiva.ver') ? [{ id: 'biblioteca', label: 'Biblioteca', icon: BookOpen, path: '/dashboard/biblioteca-constructiva' }] : []),
-                { id: 'proveedores', label: 'Proveedores', icon: Truck, path: '/dashboard/proveedores', disabled: true },
+                { id: 'proveedores', label: 'Proveedores', icon: Truck, path: '/dashboard/proveedores' },
             ]
         },
         ...(isManagerOrAdmin ? [{

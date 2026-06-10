@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
+@extends('exports.layout_membrete')
+
+@section('styles')
 <style>
     body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color: #1e293b; margin: 0; padding: 20px; }
     h1 { font-size: 16px; color: #0f172a; margin-bottom: 4px; }
@@ -21,8 +20,9 @@
     .prog-fill { background: #059669; border-radius: 3px; height: 8px; }
     .footer { margin-top: 24px; font-size: 9px; color: #94a3b8; text-align: right; }
 </style>
-</head>
-<body>
+@endsection
+
+@section('content')
 <h1>{{ $proyecto->nombre }}</h1>
 <div class="subtitle">
     {{ $proyecto->codigo }} &mdash; Estado: {{ ucfirst(str_replace('_', ' ', $proyecto->estado)) }}
@@ -82,6 +82,5 @@
     </tbody>
 </table>
 
-<div class="footer">CA &amp; KANAGF S.R.L. &mdash; Sistema ERP &mdash; Planilla de Avance (borrador — Sub-fase E)</div>
-</body>
-</html>
+
+@endsection

@@ -42,6 +42,15 @@ const authService = {
             confiar_dispositivo: confiarDispositivo,
             fingerprint,
         });
+        if (response.data.status === 'success') {
+            const data = response.data.data;
+            if (data.tipo_respuesta === 'login_exitoso') {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.usuario));
+                localStorage.setItem('permisos', JSON.stringify(data.permisos));
+            }
+            return data;
+        }
         return response.data;
     },
 

@@ -25,13 +25,10 @@ class RecalculoFinancieroController extends Controller
 
         $request->validate([
             'porcentaje_mano_obra'            => 'sometimes|numeric|min:0|max:100',
-            'porcentaje_gastos_generales'     => 'sometimes|numeric|min:0|max:100',
             'porcentaje_utilidad_esperada'    => 'sometimes|numeric|min:0|max:100',
             'presupuesto_mano_obra'           => 'sometimes|numeric|min:0',
-            'presupuesto_gastos_generales'    => 'sometimes|numeric|min:0',
             'presupuesto_utilidad_esperada'   => 'sometimes|numeric|min:0',
             'usa_monto_fijo_mo'               => 'sometimes|boolean',
-            'usa_monto_fijo_gg'               => 'sometimes|boolean',
             'usa_monto_fijo_util'             => 'sometimes|boolean',
             'justificacion_rentabilidad_baja' => 'sometimes|nullable|string|max:1000',
         ]);
