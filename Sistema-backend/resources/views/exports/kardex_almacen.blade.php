@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
+@extends('exports.layout_membrete')
+
+@section('styles')
     <title>Kardex de Almacén</title>
     <style>
         body { font-family: sans-serif; font-size: 9px; color: #333; }
@@ -20,8 +19,9 @@
         .tipo-transf   { color: #1e40af; font-weight: bold; }
         .footer { margin-top: 12px; font-size: 8px; color: #999; text-align: right; }
     </style>
-</head>
-<body>
+@endsection
+
+@section('content')
     <div class="header">
         <div class="title">KARDEX DE ALMACÉN</div>
         <div class="subtitle">{{ $almacen->nombre }} ({{ $almacen->codigo }}) — {{ $material->nombre }} ({{ $material->codigo }})</div>
@@ -78,6 +78,5 @@
         </tbody>
     </table>
 
-    <div class="footer">Generado el {{ now()->format('d/m/Y H:i') }} — Total movimientos: {{ count($movimientos) }}</div>
-</body>
-</html>
+    
+@endsection

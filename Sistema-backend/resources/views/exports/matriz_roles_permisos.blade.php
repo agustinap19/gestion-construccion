@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8">
-@include('exports._base_styles')
+@extends('exports.layout_membrete')
+
+@section('styles')
 <style>
     .matrix-table th { font-size: 8px; padding: 4px 5px; }
     .matrix-table td { font-size: 8px; padding: 3px 5px; text-align: center; }
@@ -10,8 +9,9 @@
     .check-no  { color: #e2e8f0; }
     .rol-header { background: #1e3a5f; color: #fff; max-width: 60px; overflow: hidden; }
 </style>
-</head>
-<body>
+@endsection
+
+@section('content')
 <div class="page-header">
     <div class="page-header-left">
         <div class="empresa-nombre">CA &amp; KANAGF S.R.L.</div>
@@ -55,9 +55,6 @@
 </table>
 @endforeach
 
-<div class="footer">
-    <div class="footer-left">CA &amp; KANAGF S.R.L. — Sistema ERP Construcción</div>
-    <div class="footer-right">{{ $roles->count() }} roles · {{ $totalPermisos ?? 0 }} permisos — {{ now()->format('d/m/Y') }}</div>
-</div>
-</body>
-</html>
+
+    
+@endsection

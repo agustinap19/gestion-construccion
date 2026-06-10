@@ -3,7 +3,9 @@
 namespace App\Services\Almacenes;
 
 use App\Models\Almacen;
+use App\Models\MovimientoMaterial;
 use App\Models\StockMaterial;
+use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -100,6 +102,8 @@ class AlmacenService
                 'descripcion'         => $datos['descripcion'] ?? null,
                 'proyecto_id'         => $datos['proyecto_id'] ?? null,
                 'ubicacion'           => $datos['ubicacion'] ?? null,
+                'latitud'             => isset($datos['latitud'])  && $datos['latitud']  !== '' ? (float) $datos['latitud']  : null,
+                'longitud'            => isset($datos['longitud']) && $datos['longitud'] !== '' ? (float) $datos['longitud'] : null,
                 'tipo'                => $datos['tipo'] ?? 'obra',
                 'estado'              => 'activo',
                 'responsable_id'      => $datos['responsable_id'] ?? null,
@@ -117,13 +121,22 @@ class AlmacenService
             throw new Exception('No se puede cambiar el tipo del almacén central.');
         }
 
-        $almacen->update(array_filter([
+        $campos = [
             'nombre'             => $datos['nombre']             ?? $almacen->nombre,
             'descripcion'        => $datos['descripcion']        ?? $almacen->descripcion,
             'ubicacion'          => $datos['ubicacion']          ?? $almacen->ubicacion,
             'responsable_id'     => $datos['responsable_id']     ?? $almacen->responsable_id,
             'capacidad_estimada' => $datos['capacidad_estimada'] ?? $almacen->capacidad_estimada,
-        ], fn($v) => $v !== null));
+        ];
+
+        if (array_key_exists('latitud', $datos)) {
+            $campos['latitud']  = $datos['latitud']  !== '' && $datos['latitud']  !== null ? (float) $datos['latitud']  : null;
+        }
+        if (array_key_exists('longitud', $datos)) {
+            $campos['longitud'] = $datos['longitud'] !== '' && $datos['longitud'] !== null ? (float) $datos['longitud'] : null;
+        }
+
+        $almacen->update(array_filter($campos, fn($v) => $v !== null));
 
         return $almacen->fresh();
     }
@@ -147,6 +160,143 @@ class AlmacenService
         $central = Almacen::where('tipo', 'central')->first();
 
         return compact('total', 'activos', 'central');
+    }
+
+    public function dashboard(): array
+    {
+        // ── KPIs ──────────────────────────────────────────────────────────────
+        $total     = Almacen::count();
+        $activos   = Almacen::where('estado', 'activo')->count();
+        $inactivos = Almacen::where('estado', 'inactivo')->count();
+        $cerrados  = Almacen::where('estado', 'cerrado')->count();
+
+        $valorTotal = (float) (StockMaterial::selectRaw('COALESCE(SUM(cantidad * costo_promedio), 0) as total')->first()?->total ?? 0);
+
+        $itemsCriticos = StockMaterial::whereRaw(
+            '(cantidad - COALESCE(cantidad_reservada, 0)) <= COALESCE(stock_minimo_alerta, 0)'
+        )->where('cantidad', '>', 0)->count();
+
+        $itemsAgotados = StockMaterial::where('cantidad', '<=', 0)->count();
+
+        // ── Distribución por tipo ─────────────────────────────────────────────
+        $porTipo = Almacen::selectRaw('tipo, COUNT(*) as cantidad')
+            ->groupBy('tipo')
+            ->get()
+            ->map(fn($r) => ['tipo' => $r->tipo, 'cantidad' => (int) $r->cantidad])
+            ->values();
+
+        // ── Movimientos últimos 6 meses ───────────────────────────────────────
+        $mesesEsp = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        $desde    = Carbon::now()->subMonths(2)->startOfMonth();
+
+        $movs = MovimientoMaterial::selectRaw(
+            "DATE_FORMAT(fecha_movimiento, '%Y-%m') as mes,
+             SUM(CASE WHEN tipo IN ('entrada','transferencia_entrada','ajuste_positivo','inventario_inicial') THEN 1 ELSE 0 END) as entradas,
+             SUM(CASE WHEN tipo IN ('salida','transferencia_salida','ajuste_negativo') THEN 1 ELSE 0 END) as salidas"
+        )
+        ->where('fecha_movimiento', '>=', $desde)
+        ->groupBy('mes')
+        ->get()
+        ->keyBy('mes');
+
+        $movimientosPorMes = [];
+        for ($i = 2; $i >= 0; $i--) {
+            $d   = Carbon::now()->subMonths($i);
+            $key = $d->format('Y-m');
+            $movimientosPorMes[] = [
+                'mes'      => $key,
+                'label'    => $mesesEsp[(int) $d->format('m')],
+                'entradas' => (int) ($movs[$key]?->entradas ?? 0),
+                'salidas'  => (int) ($movs[$key]?->salidas ?? 0),
+            ];
+        }
+
+        // ── Top 5 materiales por valor ────────────────────────────────────────
+        $topMateriales = StockMaterial::selectRaw(
+            'material_id, SUM(cantidad * costo_promedio) as valor_total, SUM(cantidad) as cantidad_total'
+        )
+        ->with('material:id,nombre,codigo')
+        ->where('cantidad', '>', 0)
+        ->groupBy('material_id')
+        ->orderByDesc('valor_total')
+        ->limit(5)
+        ->get()
+        ->map(fn($s) => [
+            'nombre'      => $s->material?->nombre ?? 'Sin nombre',
+            'codigo'      => $s->material?->codigo ?? '',
+            'valor_total' => round((float) $s->valor_total, 2),
+        ])
+        ->values();
+
+        // ── Stocks críticos (tabla de alerta) ─────────────────────────────────
+        $stocksCriticos = StockMaterial::with([
+            'material:id,nombre,codigo,unidad_medida_id',
+            'material.unidadMedida:id,simbolo',
+            'almacen:id,nombre',
+        ])
+        ->whereRaw('(cantidad - COALESCE(cantidad_reservada, 0)) <= COALESCE(stock_minimo_alerta, 0)')
+        ->where('cantidad', '>', 0)
+        ->orderByRaw('(cantidad - COALESCE(cantidad_reservada, 0)) ASC')
+        ->limit(8)
+        ->get()
+        ->map(fn($s) => [
+            'material'   => $s->material?->nombre ?? 'Desconocido',
+            'codigo'     => $s->material?->codigo ?? '',
+            'almacen'    => $s->almacen?->nombre ?? 'Desconocido',
+            'disponible' => max(0, round((float) ($s->cantidad - $s->cantidad_reservada), 2)),
+            'minimo'     => round((float) ($s->stock_minimo_alerta ?? 0), 2),
+            'unidad'     => $s->material?->unidadMedida?->simbolo ?? '',
+            'estado'     => $s->estado_stock,
+        ])
+        ->values();
+
+        // ── Resumen por almacén ───────────────────────────────────────────────
+        $almacenesData  = Almacen::with(['proyecto:id,nombre'])->get();
+        $almacenIds     = $almacenesData->pluck('id');
+
+        $stockPorAlmacen = StockMaterial::selectRaw(
+            'almacen_id,
+             COUNT(*) as total_items,
+             COALESCE(SUM(cantidad * costo_promedio), 0) as valor_inventario,
+             SUM(CASE WHEN (cantidad - COALESCE(cantidad_reservada,0)) <= COALESCE(stock_minimo_alerta,0) AND cantidad > 0 THEN 1 ELSE 0 END) as items_criticos'
+        )
+        ->whereIn('almacen_id', $almacenIds)
+        ->where('cantidad', '>', 0)
+        ->groupBy('almacen_id')
+        ->get()
+        ->keyBy('almacen_id');
+
+        $almacenesResumen = $almacenesData->map(fn($a) => [
+            'id'               => $a->id,
+            'nombre'           => $a->nombre,
+            'codigo'           => $a->codigo,
+            'tipo'             => $a->tipo,
+            'estado'           => $a->estado,
+            'ubicacion'        => $a->ubicacion,
+            'latitud'          => $a->latitud  !== null ? (float) $a->latitud  : null,
+            'longitud'         => $a->longitud !== null ? (float) $a->longitud : null,
+            'proyecto'         => $a->proyecto?->nombre,
+            'total_items'      => (int)   ($stockPorAlmacen[$a->id]?->total_items      ?? 0),
+            'valor_inventario' => round((float) ($stockPorAlmacen[$a->id]?->valor_inventario ?? 0), 2),
+            'items_criticos'   => (int)   ($stockPorAlmacen[$a->id]?->items_criticos   ?? 0),
+        ])->values();
+
+        return [
+            'kpis' => [
+                'total'          => $total,
+                'activos'        => $activos,
+                'inactivos'      => $inactivos,
+                'cerrados'       => $cerrados,
+                'valor_total'    => round($valorTotal, 2),
+                'items_criticos' => $itemsCriticos,
+                'items_agotados' => $itemsAgotados,
+            ],
+            'por_tipo'            => $porTipo,
+            'movimientos_por_mes' => $movimientosPorMes,
+            'top_materiales'      => $topMateriales,
+            'stocks_criticos'     => $stocksCriticos,
+            'almacenes_resumen'   => $almacenesResumen,
+        ];
     }
 
     private function validarSingletonCentral(): void

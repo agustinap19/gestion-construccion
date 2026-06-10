@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
+@extends('exports.layout_membrete')
+
+@section('styles')
     <title>Movimientos de Almacén</title>
     <style>
         body { font-family: sans-serif; font-size: 9px; color: #333; }
@@ -26,8 +25,9 @@
         .footer { margin-top: 12px; font-size: 8px; color: #999; text-align: right; }
         .small { font-size: 8px; color: #6b7280; }
     </style>
-</head>
-<body>
+@endsection
+
+@section('content')
     <div class="header">
         <div class="title">REGISTRO DE MOVIMIENTOS — ALMACÉN</div>
         <div class="subtitle">Generado el {{ now()->format('d/m/Y H:i') }} por {{ $usuario }}</div>
@@ -101,6 +101,5 @@
         </tbody>
     </table>
 
-    <div class="footer">Total de registros: {{ $movimientos->count() }}</div>
-</body>
-</html>
+    
+@endsection

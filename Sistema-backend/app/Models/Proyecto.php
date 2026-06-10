@@ -41,6 +41,8 @@ class Proyecto extends Model
         // Financiero rediseño
         'monto_contractual',
         'presupuesto_materiales',
+        'sobreentregas_materiales',
+        'alerta_gg_bajo',
         'porcentaje_mano_obra',
         'porcentaje_gastos_generales',
         'porcentaje_utilidad_esperada',
@@ -74,6 +76,8 @@ class Proyecto extends Model
         'monto_contrato'                    => 'decimal:2',
         'monto_contractual'                 => 'decimal:2',
         'presupuesto_materiales'            => 'decimal:2',
+        'sobreentregas_materiales'          => 'decimal:2',
+        'alerta_gg_bajo'                    => 'boolean',
         'porcentaje_mano_obra'              => 'decimal:2',
         'porcentaje_gastos_generales'       => 'decimal:2',
         'porcentaje_utilidad_esperada'      => 'decimal:2',

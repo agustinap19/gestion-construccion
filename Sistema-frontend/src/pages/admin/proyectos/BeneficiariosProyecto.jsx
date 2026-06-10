@@ -7,6 +7,7 @@ import beneficiarioService from '../../../services/beneficiarioService';
 import tipoViviendaService from '../../../services/tipoViviendaService';
 import proyectoService from '../../../services/proyectoService';
 import cierreRegistrosService from '../../../services/cierreRegistrosService';
+import SyncTipologiaModal from '../beneficiarios/SyncTipologiaModal';
 import {
     ArrowLeft, Plus, Download, Search, Users, MapPin, Phone,
     Edit, Trash2, X, Check, AlertTriangle, ChevronDown, ChevronUp,
@@ -185,7 +186,7 @@ function BeneficiarioCard({ b, onClick }) {
 }
 
 /* ─── Modal detalle ─────────────────────────────────────────────── */
-function ModalDetalle({ b, onClose, onEditar, onDarDeBaja, canEdit }) {
+function ModalDetalle({ b, onClose, onEditar, onDarDeBaja, canEdit, onVerHistorialSync }) {
     const [tab, setTab] = useState('datos');
     const [transiciones, setTransiciones] = useState([]);
     useEffect(() => {
@@ -306,19 +307,29 @@ function ModalDetalle({ b, onClose, onEditar, onDarDeBaja, canEdit }) {
                         )}
                     </div>
                     {/* Footer */}
-                    {canEdit && (
-                        <div className="flex items-center justify-between p-6 border-t border-white/[0.08]">
-                            <button onClick={() => onDarDeBaja(b)}
-                                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all">
-                                <Trash2 size={15} /> Dar de baja
-                            </button>
+                    <div className="flex items-center justify-between p-6 border-t border-white/[0.08]">
+                        <div className="flex items-center gap-2">
+                            {canEdit && (
+                                <button onClick={() => onDarDeBaja(b)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all">
+                                    <Trash2 size={15} /> Dar de baja
+                                </button>
+                            )}
+                            {onVerHistorialSync && (
+                                <button onClick={() => onVerHistorialSync(b)}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all">
+                                    <FileText size={13} /> Historial tipo
+                                </button>
+                            )}
+                        </div>
+                        {canEdit && (
                             <button onClick={() => onEditar(b)}
                                 className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all"
                                 style={{ background: 'rgba(96,165,250,0.2)', border: '1px solid rgba(96,165,250,0.4)' }}>
                                 <Edit size={15} /> Editar
                             </button>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
         </>
@@ -388,8 +399,9 @@ const CAMPOS_FORM = [
     { key: 'comunidad',        label: 'Comunidad',         required: false, col: 1 },
 ];
 
-function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose, onGuardado }) {
+function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose, onGuardado, onTipoCambiado }) {
     const isEdit = !!beneficiario;
+    const tipoOriginal = isEdit ? (beneficiario.tipo_vivienda_id ?? '') : '';
     const [form, setForm] = useState(isEdit ? { ...beneficiario, tipo_vivienda_id: beneficiario.tipo_vivienda_id ?? '' } : {
         nombre: '', apellido_paterno: '', apellido_materno: '', apellido_conyuge: '',
         ci: '', ci_complemento: '', fecha_nacimiento: '', estado_civil: '',
@@ -487,12 +499,34 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
             delete payload.direccion_actual;
             if (payload.latitud_terreno === '') delete payload.latitud_terreno;
             if (payload.longitud_terreno === '') delete payload.longitud_terreno;
-            if (!payload.tipo_vivienda_id) delete payload.tipo_vivienda_id;
+
+            const nuevoTipoId = payload.tipo_vivienda_id || null;
+            const tipoCambio  = isEdit && String(nuevoTipoId) !== String(tipoOriginal);
+
+            // Excluir tipo_vivienda_id del PUT — se maneja por PATCH dedicado
+            delete payload.tipo_vivienda_id;
 
             if (isEdit) {
                 await beneficiarioService.update(beneficiario.id, payload);
-                toast.success('Beneficiario actualizado');
+
+                if (tipoCambio && nuevoTipoId) {
+                    // Llamar al endpoint dedicado que maneja el auto-sync o retorna requiere_preview
+                    const res = await beneficiarioService.asignarTipoVivienda(beneficiario.id, parseInt(nuevoTipoId));
+                    if (res.requiere_preview) {
+                        toast.success('Beneficiario actualizado. Revisá los ítems del nuevo tipo.');
+                        onGuardado();
+                        onTipoCambiado?.({ ...beneficiario, ...payload, tipo_vivienda_id: parseInt(nuevoTipoId) }, parseInt(nuevoTipoId));
+                        return;
+                    } else if (res.sync?.estado) {
+                        toast.success(`Beneficiario actualizado — tipología sincronizada (${res.sync.estado})`);
+                    } else {
+                        toast.success('Beneficiario actualizado');
+                    }
+                } else {
+                    toast.success('Beneficiario actualizado');
+                }
             } else {
+                if (nuevoTipoId) payload.tipo_vivienda_id = parseInt(nuevoTipoId);
                 await beneficiarioService.create(payload);
                 toast.success('Beneficiario registrado y vivienda asignada automáticamente');
             }
@@ -741,10 +775,12 @@ export default function BeneficiariosProyecto() {
     const [filtroEstado, setFiltroEstado] = useState('');
     const [filtroTipologia, setFiltroTipologia] = useState('');
 
-    const [modalDetalle, setModalDetalle] = useState(null);
-    const [modalForm, setModalForm]       = useState(null); // null | 'crear' | beneficiario
-    const [modalBaja, setModalBaja]       = useState(null);
-    const [bajaLoading, setBajaLoading]   = useState(false);
+    const [modalDetalle, setModalDetalle]   = useState(null);
+    const [modalForm, setModalForm]         = useState(null); // null | 'crear' | beneficiario
+    const [modalBaja, setModalBaja]         = useState(null);
+    const [bajaLoading, setBajaLoading]     = useState(false);
+    const [modalSync, setModalSync]         = useState(null); // { beneficiario, nuevoTipoId } | { beneficiario, soloHistorial }
+
 
     // Cierre de registros
     const [estadoCierre, setEstadoCierre] = useState(null);
@@ -838,7 +874,8 @@ export default function BeneficiariosProyecto() {
     };
 
     const registrosCerrados = estadoCierre?.cerrado === true;
-    const limiteAlcanzado = registrosCerrados || (cupo && cupo.cupos_disponibles <= 0);
+    const canEditEfectivo   = canEdit && !registrosCerrados;
+    const limiteAlcanzado   = registrosCerrados || (cupo && cupo.cupos_disponibles <= 0);
 
     if (cargando) return (
         <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#0f172a,#1e293b,#0f172a)' }}>
@@ -913,7 +950,7 @@ export default function BeneficiariosProyecto() {
                                 )
                             )}
                             {/* Nuevo */}
-                            {canEdit && (
+                            {canEditEfectivo && (
                                 <div className="relative group">
                                     <button onClick={() => !limiteAlcanzado && setModalForm('crear')}
                                         disabled={limiteAlcanzado}
@@ -993,7 +1030,7 @@ export default function BeneficiariosProyecto() {
                             <Users size={36} className="text-emerald-400" />
                         </div>
                         <p className="text-slate-400 text-lg">No hay beneficiarios registrados</p>
-                        {canEdit && !limiteAlcanzado && (
+                        {canEditEfectivo && !limiteAlcanzado && (
                             <button onClick={() => setModalForm('crear')}
                                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white mt-2"
                                 style={{ background: 'rgba(52,211,153,0.2)', border: '1px solid rgba(52,211,153,0.4)' }}>
@@ -1012,10 +1049,11 @@ export default function BeneficiariosProyecto() {
 
             {/* ─── Modales ─── */}
             {modalDetalle && (
-                <ModalDetalle b={modalDetalle} canEdit={canEdit}
+                <ModalDetalle b={modalDetalle} canEdit={canEditEfectivo}
                     onClose={() => setModalDetalle(null)}
                     onEditar={b => { setModalForm(b); setModalDetalle(null); }}
-                    onDarDeBaja={b => { setModalBaja(b); setModalDetalle(null); }} />
+                    onDarDeBaja={b => { setModalBaja(b); setModalDetalle(null); }}
+                    onVerHistorialSync={b => { setModalDetalle(null); setModalSync({ beneficiario: b, nuevoTipoId: null }); }} />
             )}
             {modalForm && (
                 <FormularioBeneficiario
@@ -1023,7 +1061,20 @@ export default function BeneficiariosProyecto() {
                     beneficiario={modalForm === 'crear' ? null : modalForm}
                     tipologias={tipologias}
                     onClose={() => setModalForm(null)}
-                    onGuardado={() => { setModalForm(null); cargarBeneficiarios(); cargarDatos(); }} />
+                    onGuardado={() => { setModalForm(null); cargarBeneficiarios(); cargarDatos(); }}
+                    onTipoCambiado={(benef, nuevoTipoId) => {
+                        setModalForm(null);
+                        cargarBeneficiarios();
+                        cargarDatos();
+                        setModalSync({ beneficiario: benef, nuevoTipoId });
+                    }} />
+            )}
+            {modalSync && (
+                <SyncTipologiaModal
+                    beneficiario={modalSync.beneficiario}
+                    nuevoTipoId={modalSync.nuevoTipoId ?? null}
+                    onClose={() => setModalSync(null)}
+                    onSincronizado={() => { setModalSync(null); cargarBeneficiarios(); cargarDatos(); }} />
             )}
             {modalBaja && (
                 <ModalBaja beneficiario={modalBaja} loading={bajaLoading}

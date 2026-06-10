@@ -26,6 +26,7 @@ class MovimientoAlmacen extends Model
         'receptor_nombre',
         'receptor_ci',
         'proveedor_nombre',
+        'proveedor_id',
         'numero_factura',
         'fecha_factura',
         'archivo_factura_url',
@@ -113,6 +114,11 @@ class MovimientoAlmacen extends Model
     public function anuladoPor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'anulado_por_id');
+    }
+
+    public function proveedor(): BelongsTo
+    {
+        return $this->belongsTo(Proveedor::class, 'proveedor_id');
     }
 
     public function detalles(): HasMany

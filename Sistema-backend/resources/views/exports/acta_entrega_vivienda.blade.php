@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8">
-@include('exports._base_styles')
+@extends('exports.layout_membrete')
+
+@section('styles')
 <style>
     .acta-titulo { font-size: 16px; font-weight: bold; text-align: center; color: #1e3a5f; text-transform: uppercase; letter-spacing: 0.1em; margin: 10px 0; }
     .acta-sub    { font-size: 10px; text-align: center; color: #64748b; margin-bottom: 14px; }
@@ -13,8 +12,9 @@
     .firma-line  { border-top: 1px solid #1e293b; margin-top: 48px; padding-top: 4px; font-size: 9px; color: #475569; }
     .nro-acta    { font-size: 11px; text-align: right; color: #64748b; font-weight: bold; }
 </style>
-</head>
-<body>
+@endsection
+
+@section('content')
 <div style="display:table; width:100%; margin-bottom:8px;">
     <div style="display:table-cell; vertical-align:middle;">
         <div class="empresa-nombre">CA &amp; KANAGF S.R.L.</div>
@@ -96,9 +96,6 @@
     </div>
 </div>
 
-<div class="footer">
-    <div class="footer-left">CA &amp; KANAGF S.R.L. — {{ $proyecto->codigo }} — Documento oficial</div>
-    <div class="footer-right">Generado por: {{ $usuario }} el {{ now()->format('d/m/Y H:i') }}</div>
-</div>
-</body>
-</html>
+
+    
+@endsection

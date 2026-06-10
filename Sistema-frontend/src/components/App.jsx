@@ -65,6 +65,10 @@ import MaterialesIndex from '../pages/admin/almacenes/MaterialesIndex';
 import AlmacenesIndex  from '../pages/admin/almacenes/AlmacenesIndex';
 import AlmacenDetalle  from '../pages/admin/almacenes/AlmacenDetalle';
 
+// Proveedores
+import ProveedoresIndex  from '../pages/admin/proveedores/ProveedoresIndex';
+import DetalleProveedor  from '../pages/admin/proveedores/DetalleProveedor';
+
 // Biblioteca Constructiva
 import BibliotecaConstructiva from '../pages/admin/biblioteca/BibliotecaConstructiva';
 
@@ -120,6 +124,9 @@ const AppContent = () => {
                     <Route path="/dashboard/almacenes" element={<AlmacenesIndex />} />
                     <Route path="/dashboard/almacenes/:id" element={<AlmacenDetalle />} />
                     <Route path="/dashboard/biblioteca-constructiva" element={<BibliotecaConstructiva />} />
+
+                    <Route path="/dashboard/proveedores" element={<ProveedoresIndex />} />
+                    <Route path="/dashboard/proveedores/:id" element={<DetalleProveedor />} />
 
                     <Route path="/dashboard/proyectos" element={<ListaProyectos />} />
                     <Route path="/dashboard/proyectos/crear" element={<CrearProyecto />} />

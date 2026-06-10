@@ -66,16 +66,31 @@ class CalculadoraAvanceService
 
         // ── Almacén ──────────────────────────────────────────────────────────
         $almacen        = $proyecto->almacen;
-        $almacenResumen = $almacen ? [
-            'id'                => $almacen->id,
-            'codigo'            => $almacen->codigo,
-            'nombre'            => $almacen->nombre,
-            'ubicacion'         => $almacen->ubicacion,
-            'estado'            => $almacen->estado,
-            'existe'            => true,
-            'movimientos_mes'   => 0,
-            'ultimos_movimientos' => [],
-        ] : ['existe' => false];
+        if ($almacen) {
+            $itemsRegistrados = $almacen->stocks()->where('cantidad', '>', 0)->count();
+            $movimientosMes   = $almacen->movimientos()
+                ->whereMonth('fecha_movimiento', now()->month)
+                ->whereYear('fecha_movimiento', now()->year)
+                ->count();
+            $itemsCriticos = $almacen->stocks()
+                ->whereRaw('(cantidad - COALESCE(cantidad_reservada, 0)) <= COALESCE(stock_minimo_alerta, 0)')
+                ->where('cantidad', '>', 0)
+                ->count();
+
+            $almacenResumen = [
+                'id'               => $almacen->id,
+                'codigo'           => $almacen->codigo,
+                'nombre'           => $almacen->nombre,
+                'ubicacion'        => $almacen->ubicacion,
+                'estado'           => $almacen->estado,
+                'existe'           => true,
+                'items_registrados' => $itemsRegistrados,
+                'movimientos_mes'  => $movimientosMes,
+                'items_criticos'   => $itemsCriticos,
+            ];
+        } else {
+            $almacenResumen = ['existe' => false];
+        }
 
         // ── Beneficiarios resumen (solo social) ──────────────────────────────
         $beneficiariosResumen = null;

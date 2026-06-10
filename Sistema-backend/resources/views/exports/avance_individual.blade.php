@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
+@extends('exports.layout_membrete')
+
+@section('styles')
 <style>
     body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10px; color: #333; margin: 0; padding: 0; }
     .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; padding-top: 10px; }
@@ -42,8 +41,9 @@
     .alerta { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 3px; padding: 3px 7px; font-size: 8px; color: #9a3412; display: inline-block; margin-bottom: 4px; }
     .no-data { font-size: 9px; color: #94a3b8; font-style: italic; }
 </style>
-</head>
-<body>
+@endsection
+
+@section('content')
 
     <div class="header">
         <h1>CA & KANAGF S.R.L.</h1>
@@ -195,6 +195,5 @@
     @endforeach
 @endif
 
-<div class="footer">CA &amp; KANAGF S.R.L. &mdash; Sistema ERP &mdash; {{ now()->format('d/m/Y H:i') }}</div>
-</body>
-</html>
+
+@endsection

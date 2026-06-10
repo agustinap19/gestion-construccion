@@ -1,6 +1,6 @@
 <style>
     * { box-sizing: border-box; }
-    body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color: #1e293b; margin: 0; padding: 24px; }
+    body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color: #1e293b; }
     .page-header { display: table; width: 100%; border-bottom: 3px solid #1e3a5f; padding-bottom: 10px; margin-bottom: 16px; }
     .page-header-left  { display: table-cell; vertical-align: middle; }
     .page-header-right { display: table-cell; vertical-align: middle; text-align: right; }

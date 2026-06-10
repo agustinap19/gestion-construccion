@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8">
-@include('exports._base_styles')
+@extends('exports.layout_membrete')
+
+@section('styles')
 <style>
     .timeline-row { border-left: 3px solid #cbd5e1; padding-left: 12px; margin-bottom: 14px; margin-left: 6px; }
     .timeline-row.created  { border-left-color: #059669; }
@@ -24,8 +23,9 @@
     .badge-restored { background: #fef3c7; color: #92400e; }
     .periodo-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 6px 12px; margin-bottom: 14px; font-size: 10px; color: #0369a1; }
 </style>
-</head>
-<body>
+@endsection
+
+@section('content')
 
 <div class="page-header">
     <div class="page-header-left">
@@ -165,10 +165,6 @@
 </p>
 @endforelse
 
-<div class="footer">
-    <div class="footer-left">CA &amp; KANAGF S.R.L. — Sistema ERP Construcción</div>
-    <div class="footer-right">{{ $audits->count() }} registro{{ $audits->count() !== 1 ? 's' : '' }}</div>
-</div>
 
-</body>
-</html>
+    
+@endsection

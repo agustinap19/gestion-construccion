@@ -5,6 +5,7 @@ namespace App\Services\Proyectos;
 use App\Models\ConfiguracionPorcentajesPresupuesto;
 use App\Models\HitoCobro;
 use App\Models\PresupuestoItemProyecto;
+use App\Models\PresupuestoMaterialProyecto;
 use App\Models\Proyecto;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -12,65 +13,83 @@ use Illuminate\Validation\ValidationException;
 class RecalculoFinancieroService
 {
     /**
-     * Recalculate all financial fields from new percentages / fixed amounts.
-     * Called when the admin edits porcentajes in the dashboard.
+     * Recalculate all financial fields when the admin edits MO/Utilidad percentages.
+     * GG is NOT editable — it is always the residual after Materiales + MO + Utilidad.
      *
      * @param  Proyecto  $proyecto
-     * @param  array     $datos  Keys: porcentaje_mano_obra, porcentaje_gastos_generales,
-     *                           porcentaje_utilidad_esperada, usa_monto_fijo_mo, usa_monto_fijo_gg,
-     *                           usa_monto_fijo_util, presupuesto_mano_obra, presupuesto_gastos_generales,
-     *                           presupuesto_utilidad_esperada, justificacion_rentabilidad_baja
+     * @param  array     $datos  Keys: porcentaje_mano_obra, porcentaje_utilidad_esperada,
+     *                           usa_monto_fijo_mo, usa_monto_fijo_util,
+     *                           presupuesto_mano_obra, presupuesto_utilidad_esperada,
+     *                           justificacion_rentabilidad_baja
      */
     public function calcularPresupuestoCompleto(Proyecto $proyecto, array $datos): Proyecto
     {
-        $configSet = ConfiguracionPorcentajesPresupuesto::paraProyecto($proyecto->categoria);
-        $umbral    = (float) $configSet->umbral_rentabilidad_minima;
+        $configSet    = ConfiguracionPorcentajesPresupuesto::paraProyecto($proyecto->categoria);
+        $umbralUtil   = (float) $configSet->umbral_rentabilidad_minima;
+        $umbralGGPct  = (float) ($configSet->umbral_gg_minimo ?? 3.00);
 
         $contractual = (float) $proyecto->monto_contractual_efectivo;
 
-        $usaFijoMO   = (bool) ($datos['usa_monto_fijo_mo']  ?? $proyecto->usa_monto_fijo_mo);
-        $usaFijoGG   = (bool) ($datos['usa_monto_fijo_gg']  ?? $proyecto->usa_monto_fijo_gg);
+        // ── MO ───────────────────────────────────────────────────────────────
+        $usaFijoMO = (bool) ($datos['usa_monto_fijo_mo']  ?? $proyecto->usa_monto_fijo_mo);
+        $porMO     = (float) ($datos['porcentaje_mano_obra'] ?? $proyecto->porcentaje_mano_obra ?? 0);
+        $presupMO  = $usaFijoMO
+            ? (float) ($datos['presupuesto_mano_obra'] ?? $proyecto->presupuesto_mano_obra ?? 0)
+            : $contractual * $porMO / 100;
+
+        // ── Utilidad ─────────────────────────────────────────────────────────
         $usaFijoUtil = (bool) ($datos['usa_monto_fijo_util'] ?? $proyecto->usa_monto_fijo_util);
+        $porUtil     = (float) ($datos['porcentaje_utilidad_esperada'] ?? $proyecto->porcentaje_utilidad_esperada ?? 0);
+        $presupUtil  = $usaFijoUtil
+            ? (float) ($datos['presupuesto_utilidad_esperada'] ?? $proyecto->presupuesto_utilidad_esperada ?? 0)
+            : $contractual * $porUtil / 100;
 
-        $porMO   = (float) ($datos['porcentaje_mano_obra']        ?? $proyecto->porcentaje_mano_obra        ?? 0);
-        $porGG   = (float) ($datos['porcentaje_gastos_generales'] ?? $proyecto->porcentaje_gastos_generales ?? 0);
-        $porUtil = (float) ($datos['porcentaje_utilidad_esperada'] ?? $proyecto->porcentaje_utilidad_esperada ?? 0);
+        // ── Materiales: sum from DB + sobreentregas ──────────────────────────
+        $sumMateriales  = (float) PresupuestoMaterialProyecto::where('proyecto_id', $proyecto->id)
+            ->whereNull('deleted_at')
+            ->sum('monto_total');
+        $sobreentregas  = (float) ($proyecto->sobreentregas_materiales ?? 0);
+        $presupMat      = $sumMateriales + $sobreentregas;
 
-        $presupMO   = $usaFijoMO   ? (float) ($datos['presupuesto_mano_obra']         ?? $proyecto->presupuesto_mano_obra         ?? 0) : $contractual * $porMO   / 100;
-        $presupGG   = $usaFijoGG   ? (float) ($datos['presupuesto_gastos_generales']  ?? $proyecto->presupuesto_gastos_generales  ?? 0) : $contractual * $porGG   / 100;
-        $presupUtil = $usaFijoUtil  ? (float) ($datos['presupuesto_utilidad_esperada'] ?? $proyecto->presupuesto_utilidad_esperada ?? 0) : $contractual * $porUtil / 100;
+        // ── GG residual ──────────────────────────────────────────────────────
+        $presupGG = $contractual - $presupMat - $presupMO - $presupUtil;
+        $porGG    = $contractual > 0 ? ($presupGG / $contractual) * 100 : 0.0;
 
-        $presupMat    = max(0.0, $contractual - $presupMO - $presupGG - $presupUtil);
-        $costos       = $presupMat + $presupMO + $presupGG;
-        $rentabilidad = $contractual - $costos;
-        $pctUtil      = $contractual > 0 ? ($rentabilidad / $contractual) * 100 : 0;
+        // ── Alert: GG below minimum threshold or negative ────────────────────
+        $umbralGGMonto = $contractual * $umbralGGPct / 100;
+        $alertaGGBajo  = $presupGG < $umbralGGMonto;
 
-        // Validate minimum rentability
-        if ($contractual > 0 && $pctUtil < $umbral) {
+        // ── Validate minimum utilidad ────────────────────────────────────────
+        $pctUtil = $contractual > 0 ? ($presupUtil / $contractual) * 100 : 0.0;
+        if ($contractual > 0 && $pctUtil < $umbralUtil) {
             $justificacion = trim($datos['justificacion_rentabilidad_baja'] ?? $proyecto->justificacion_rentabilidad_baja ?? '');
             if (empty($justificacion)) {
                 throw ValidationException::withMessages([
-                    'justificacion_rentabilidad_baja' => "Rentabilidad estimada ({$pctUtil}%) bajo el umbral mínimo ({$umbral}%). Proporcione justificación.",
+                    'justificacion_rentabilidad_baja' => "Utilidad estimada ({$pctUtil}%) bajo el umbral mínimo ({$umbralUtil}%). Proporcione justificación.",
                 ]);
             }
         }
 
-        $saludFinanciera = $contractual > 0
-            ? ($pctUtil >= $umbral + 5 ? 'saludable' : ($pctUtil >= $umbral ? 'atencion' : 'critico'))
-            : null;
+        $saludFinanciera = $this->calcularSaludFinanciera($presupGG, $pctUtil, $umbralUtil);
 
-        return DB::transaction(function () use ($proyecto, $datos, $porMO, $porGG, $porUtil, $presupMO, $presupGG, $presupUtil, $presupMat, $usaFijoMO, $usaFijoGG, $usaFijoUtil, $saludFinanciera) {
+        return DB::transaction(function () use (
+            $proyecto, $datos,
+            $porMO, $porGG, $porUtil,
+            $presupMO, $presupGG, $presupUtil, $presupMat,
+            $usaFijoMO, $usaFijoUtil, $alertaGGBajo, $saludFinanciera
+        ) {
             $proyecto->fill([
                 'porcentaje_mano_obra'          => $porMO,
-                'porcentaje_gastos_generales'   => $porGG,
+                'porcentaje_gastos_generales'   => round($porGG, 4),
                 'porcentaje_utilidad_esperada'  => $porUtil,
                 'presupuesto_mano_obra'         => $presupMO,
                 'presupuesto_gastos_generales'  => $presupGG,
                 'presupuesto_utilidad_esperada' => $presupUtil,
                 'presupuesto_materiales'        => $presupMat,
                 'usa_monto_fijo_mo'             => $usaFijoMO,
-                'usa_monto_fijo_gg'             => $usaFijoGG,
+                'usa_monto_fijo_gg'             => false,   // GG never fixed
                 'usa_monto_fijo_util'           => $usaFijoUtil,
+                'alerta_gg_bajo'                => $alertaGGBajo,
                 'salud_financiera'              => $saludFinanciera,
             ]);
 
@@ -79,12 +98,47 @@ class RecalculoFinancieroService
             }
 
             $proyecto->save();
-
-            // Cascade: update monto_calculado on all HitoCobro records
             $this->recalcularMontoHitosCobro($proyecto);
 
             return $proyecto->fresh();
         });
+    }
+
+    /**
+     * Recalculate presupuesto_materiales from the DB sum and update GG (residual).
+     * Call this whenever PIPs are added/deleted or beneficiary count changes.
+     */
+    public function recalcularMaterialesYGG(Proyecto $proyecto): void
+    {
+        $configSet   = ConfiguracionPorcentajesPresupuesto::paraProyecto($proyecto->categoria);
+        $umbralGGPct = (float) ($configSet->umbral_gg_minimo ?? 3.00);
+        $contractual = (float) $proyecto->monto_contractual_efectivo;
+
+        $sumMateriales = (float) PresupuestoMaterialProyecto::where('proyecto_id', $proyecto->id)
+            ->whereNull('deleted_at')
+            ->sum('monto_total');
+        $sobreentregas = (float) ($proyecto->sobreentregas_materiales ?? 0);
+        $presupMat     = $sumMateriales + $sobreentregas;
+
+        $presupMO   = (float) ($proyecto->presupuesto_mano_obra         ?? 0);
+        $presupUtil = (float) ($proyecto->presupuesto_utilidad_esperada  ?? 0);
+        $presupGG   = $contractual - $presupMat - $presupMO - $presupUtil;
+        $porGG      = $contractual > 0 ? ($presupGG / $contractual) * 100 : 0.0;
+
+        $umbralGGMonto = $contractual * $umbralGGPct / 100;
+        $alertaGGBajo  = $presupGG < $umbralGGMonto;
+
+        $pctUtil         = $contractual > 0 ? ($presupUtil / $contractual) * 100 : 0.0;
+        $umbralUtil      = (float) $configSet->umbral_rentabilidad_minima;
+        $saludFinanciera = $this->calcularSaludFinanciera($presupGG, $pctUtil, $umbralUtil);
+
+        $proyecto->update([
+            'presupuesto_materiales'      => $presupMat,
+            'presupuesto_gastos_generales' => $presupGG,
+            'porcentaje_gastos_generales'  => round($porGG, 4),
+            'alerta_gg_bajo'              => $alertaGGBajo,
+            'salud_financiera'            => $saludFinanciera,
+        ]);
     }
 
     /**
@@ -97,7 +151,6 @@ class RecalculoFinancieroService
 
     /**
      * Recalculate budget per contractual product (HitoCobro).
-     * Each hito gets: porcentaje_contrato% of monto_contractual.
      */
     public function recalcularPresupuestoPorProducto(Proyecto $proyecto): void
     {
@@ -121,8 +174,6 @@ class RecalculoFinancieroService
 
     /**
      * Auto-assign PresupuestoItemProyecto rows to HitoCobro products by constructive category.
-     * Rule: items of category "estructural" → P1 (lowest order), "instalaciones" → P2, etc.
-     * If fewer than 4 products exist, all go to P1.
      */
     public function asignacionAutomaticaPorCategoria(Proyecto $proyecto): int
     {
@@ -134,7 +185,6 @@ class RecalculoFinancieroService
             return 0;
         }
 
-        // Heuristic: distribute items across products by position in item list
         $items = PresupuestoItemProyecto::with('itemConstructivo.categoria')
             ->where('proyecto_id', $proyecto->id)
             ->orderBy('orden')
@@ -144,15 +194,15 @@ class RecalculoFinancieroService
             return 0;
         }
 
-        $total         = $items->count();
-        $numProductos  = $hitos->count();
-        $chunkSize     = (int) ceil($total / $numProductos);
+        $total        = $items->count();
+        $numProductos = $hitos->count();
+        $chunkSize    = (int) ceil($total / $numProductos);
 
         $updated = 0;
         DB::transaction(function () use ($items, $hitos, $chunkSize, &$updated) {
             $hitoArray = $hitos->values();
             foreach ($items as $idx => $item) {
-                $productoIdx = min((int) floor($idx / $chunkSize), $hitoArray->count() - 1);
+                $productoIdx      = min((int) floor($idx / $chunkSize), $hitoArray->count() - 1);
                 $item->hito_cobro_id = $hitoArray[$productoIdx]->id;
                 $item->save();
                 $updated++;
@@ -181,8 +231,7 @@ class RecalculoFinancieroService
         ->orderBy('orden')
         ->get();
 
-        // Group items by hito_cobro_id
-        $byHito = [];
+        $byHito     = [];
         $sinAsignar = [];
 
         foreach ($items as $item) {
@@ -199,8 +248,8 @@ class RecalculoFinancieroService
             'por_producto' => $byHito,
             'sin_asignar'  => $sinAsignar,
             'totales'      => [
-                'items_total'      => $items->count(),
-                'items_asignados'  => $items->whereNotNull('hito_cobro_id')->count(),
+                'items_total'       => $items->count(),
+                'items_asignados'   => $items->whereNotNull('hito_cobro_id')->count(),
                 'items_sin_asignar' => count($sinAsignar),
             ],
         ];
@@ -216,5 +265,19 @@ class RecalculoFinancieroService
             $hito->monto_calculado = $contractual * ((float) $hito->porcentaje_contrato / 100);
             $hito->save();
         });
+    }
+
+    private function calcularSaludFinanciera(float $presupGG, float $pctUtil, float $umbralUtil): ?string
+    {
+        if ($presupGG < 0) {
+            return 'critico';
+        }
+        if ($pctUtil >= $umbralUtil + 5) {
+            return 'saludable';
+        }
+        if ($pctUtil >= $umbralUtil) {
+            return 'atencion';
+        }
+        return 'critico';
     }
 }

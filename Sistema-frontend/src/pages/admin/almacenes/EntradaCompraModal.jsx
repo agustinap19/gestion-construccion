@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Trash2, ShoppingCart, Check, Package } from '../../../components/icons/Icons';
+import { X, Plus, Trash2, ShoppingCart, Check, Package, Search } from '../../../components/icons/Icons';
 import movimientoAlmacenService from '../../../services/movimientoAlmacenService';
 import { almacenService } from '../../../services/almacenService';
+import { proveedorService } from '../../../services/proveedorService';
 import api from '../../../services/api';
 
 const glassInput = (hasError) =>
@@ -13,20 +14,104 @@ const glassInput = (hasError) =>
 
 const labelCls = 'block text-white/50 text-xs mb-1 font-medium';
 
-const LineaMaterial = ({ linea, idx, onChange, onRemove, materiales, canRemove }) => (
+const MaterialSearchSelect = ({ value, onChange, materiales, hasError }) => {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const ref = useRef(null);
+    const inputRef = useRef(null);
+
+    const selected = materiales.find(m => String(m.id) === String(value));
+
+    useEffect(() => {
+        const handler = (e) => {
+            if (ref.current && !ref.current.contains(e.target)) {
+                setOpen(false);
+                setQuery('');
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const filtered = query
+        ? materiales.filter(m => {
+            const q = query.toLowerCase();
+            return m.nombre?.toLowerCase().includes(q) || m.codigo?.toLowerCase().includes(q);
+        })
+        : materiales;
+
+    const handleSelect = (m) => {
+        onChange(String(m.id));
+        setQuery('');
+        setOpen(false);
+        inputRef.current?.blur();
+    };
+
+    const displayValue = open ? query : (selected ? `${selected.nombre} (${selected.codigo})` : '');
+
+    return (
+        <div ref={ref} className="relative">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/25 pointer-events-none" />
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={displayValue}
+                    onChange={e => { setQuery(e.target.value); setOpen(true); }}
+                    onFocus={() => { setQuery(''); setOpen(true); }}
+                    placeholder="Buscar material por nombre o código…"
+                    className={`w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.06] border text-white text-sm placeholder-white/25
+                        focus:outline-none transition-all focus:bg-white/[0.09]
+                        ${hasError && !open ? 'border-red-500/60 focus:border-red-500/80' : 'border-white/10 focus:border-violet-400/60'}`}
+                />
+            </div>
+
+            {open && (
+                <div className="absolute z-50 top-full mt-1 w-full rounded-xl overflow-hidden
+                    bg-white/[0.08] backdrop-blur-2xl border border-white/15 shadow-2xl shadow-black/40">
+                    <div className="max-h-56 overflow-y-auto">
+                        {filtered.length === 0 ? (
+                            <div className="px-4 py-5 text-center text-white/30 text-sm">Sin resultados</div>
+                        ) : (
+                            filtered.map(m => (
+                                <button key={m.id} type="button"
+                                    onMouseDown={e => e.preventDefault()}
+                                    onClick={() => handleSelect(m)}
+                                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-3
+                                        ${String(m.id) === String(value)
+                                            ? 'bg-violet-500/25 text-violet-200'
+                                            : 'text-white/80 hover:bg-white/10'}`}>
+                                    <span className="truncate">{m.nombre}</span>
+                                    <span className="text-white/30 text-xs shrink-0 font-mono">{m.codigo}</span>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const LineaMaterial = ({ linea, idx, onChange, onRemove, materiales, canRemove }) => {
+    const material = materiales.find(m => String(m.id) === String(linea.material_id));
+    const unidad   = material?.unidad_medida?.simbolo ?? material?.unidadMedida?.simbolo ?? null;
+
+    return (
     <div className="flex items-end gap-2 p-3 rounded-xl bg-white/[0.04] border border-white/8">
         <div className="flex-1 min-w-0">
             <label className={labelCls}>Material</label>
-            <select value={linea.material_id} onChange={e => onChange(idx, 'material_id', e.target.value)}
-                className={glassInput(!linea.material_id)}>
-                <option value="">— Seleccionar —</option>
-                {materiales.map(m => (
-                    <option key={m.id} value={m.id}>{m.nombre} ({m.codigo})</option>
-                ))}
-            </select>
+            <MaterialSearchSelect
+                value={linea.material_id}
+                onChange={val => onChange(idx, 'material_id', val)}
+                materiales={materiales}
+                hasError={!linea.material_id}
+            />
         </div>
         <div className="w-28">
-            <label className={labelCls}>Cantidad</label>
+            <label className={labelCls}>
+                Cantidad{unidad && <span className="ml-1 text-violet-400/80">({unidad})</span>}
+            </label>
             <input type="number" min="0.0001" step="any" value={linea.cantidad}
                 onChange={e => onChange(idx, 'cantidad', e.target.value)}
                 placeholder="0"
@@ -50,25 +135,34 @@ const LineaMaterial = ({ linea, idx, onChange, onRemove, materiales, canRemove }
             <Trash2 className="w-4 h-4" />
         </button>
     </div>
-);
+    );
+};
 
 export default function EntradaCompraModal({ almacen, onClose, onGuardado }) {
+    const hoy = new Date().toISOString().split('T')[0];
+
     const [form, setForm] = useState({
+        proveedor_id:     '',
         proveedor_nombre: '',
-        numero_factura:   '',
-        fecha_factura:    '',
+        fecha_factura:    hoy,
         notas:            '',
     });
     const [lineas, setLineas] = useState([
         { material_id: '', cantidad: '', precio_unitario: '' },
     ]);
-    const [materiales, setMateriales] = useState([]);
-    const [saving, setSaving]         = useState(false);
+    const [materiales, setMateriales]     = useState([]);
+    const [proveedores, setProveedores]   = useState([]);
+    const [loadingProvs, setLoadingProvs] = useState(true);
+    const [saving, setSaving]             = useState(false);
 
     useEffect(() => {
         api.get('/materiales', { params: { per_page: 500, activo: 1 } })
            .then(r => setMateriales(r.data?.data?.data || r.data?.data || r.data || []))
            .catch(() => {});
+        proveedorService.listar({ estado: 'activo', per_page: 500 })
+           .then(r => setProveedores(r.data?.data?.data ?? r.data?.data ?? []))
+           .catch(() => {})
+           .finally(() => setLoadingProvs(false));
     }, [almacen.id]);
 
     const agregarLinea = () => setLineas(prev => [
@@ -99,8 +193,8 @@ export default function EntradaCompraModal({ almacen, onClose, onGuardado }) {
             await movimientoAlmacenService.registrarEntrada({
                 almacen_id:       almacen.id,
                 proyecto_id:      almacen.proyecto_id || null,
+                proveedor_id:     form.proveedor_id ? parseInt(form.proveedor_id) : null,
                 proveedor_nombre: form.proveedor_nombre || null,
-                numero_factura:   form.numero_factura || null,
                 fecha_factura:    form.fecha_factura || null,
                 notas:            form.notas || null,
                 materiales: lineas.map(l => ({
@@ -152,23 +246,28 @@ export default function EntradaCompraModal({ almacen, onClose, onGuardado }) {
                         <div className="grid grid-cols-3 gap-3">
                             <div className="col-span-3 sm:col-span-1">
                                 <label className={labelCls}>Proveedor</label>
-                                <input value={form.proveedor_nombre}
-                                    onChange={e => setForm(p => ({ ...p, proveedor_nombre: e.target.value }))}
-                                    placeholder="Nombre del proveedor"
-                                    className={glassInput(false)} />
+                                <select
+                                    value={form.proveedor_id}
+                                    disabled={loadingProvs}
+                                    onChange={e => {
+                                        const sel = proveedores.find(p => String(p.id) === e.target.value);
+                                        setForm(prev => ({
+                                            ...prev,
+                                            proveedor_id:     e.target.value,
+                                            proveedor_nombre: sel ? sel.razon_social : '',
+                                        }));
+                                    }}
+                                    className={glassInput(false)}>
+                                    <option value="">{loadingProvs ? 'Cargando…' : 'Sin proveedor'}</option>
+                                    {proveedores.map(p => (
+                                        <option key={p.id} value={p.id}>{p.razon_social}</option>
+                                    ))}
+                                </select>
                             </div>
-                            <div>
-                                <label className={labelCls}>N° Factura</label>
-                                <input value={form.numero_factura}
-                                    onChange={e => setForm(p => ({ ...p, numero_factura: e.target.value }))}
-                                    placeholder="001-001-00000001"
-                                    className={glassInput(false)} />
-                            </div>
-                            <div>
-                                <label className={labelCls}>Fecha factura</label>
-                                <input type="date" value={form.fecha_factura}
-                                    onChange={e => setForm(p => ({ ...p, fecha_factura: e.target.value }))}
-                                    className={glassInput(false)} />
+                            <div className="col-span-2">
+                                <label className={labelCls}>Fecha de entrada</label>
+                                <input type="date" value={form.fecha_factura} readOnly
+                                    className={`${glassInput(false)} cursor-default opacity-70`} />
                             </div>
                         </div>
 

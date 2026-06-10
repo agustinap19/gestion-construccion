@@ -1,7 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
+@extends('exports.layout_membrete')
+
+@section('styles')
     <title>{{ $proyecto->nombre }} - Beneficiarios</title>
     <style>
         body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10px; color: #333; margin: 0; padding: 0; }
@@ -33,8 +32,9 @@
         .retirado { background: #fed7aa; color: #9a3412; }
         .rechazado { background: #fee2e2; color: #991b1b; }
     </style>
-</head>
-<body>
+@endsection
+
+@section('content')
     <div class="header">
         <h1>CA & KANAGF S.R.L.</h1>
         <h2>{{ $proyecto->nombre }} — Beneficiarios</h2>
@@ -96,8 +96,5 @@
         </tbody>
     </table>
 
-    <div class="footer">
-        CA & KANAGF S.R.L. - Sistema ERP Integrado | Página <span class="page-number"></span>
-    </div>
-</body>
-</html>
+    
+@endsection

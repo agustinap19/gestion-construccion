@@ -33,6 +33,8 @@ class MovimientoAlmacenController extends Controller
             'receptorPersonal:id,nombre,apellido_paterno',
             'registradoPor:id,name',
             'detalles.material:id,nombre,codigo,unidad_medida_id',
+            'presupuestoItem.itemConstructivo:id,nombre,codigo',
+            'proveedor:id,codigo,razon_social',
         ])->latest('fecha_movimiento');
 
         if ($almacenId = $request->almacen_id) {
@@ -90,6 +92,7 @@ class MovimientoAlmacenController extends Controller
                 'anuladoPor:id,name',
                 'detalles.material',
                 'evidencias',
+                'proveedor:id,codigo,razon_social,telefono_principal,email_oficial',
             ])
         );
     }
@@ -103,6 +106,7 @@ class MovimientoAlmacenController extends Controller
         $validated = $request->validate([
             'almacen_id'         => 'required|exists:almacenes,id',
             'proyecto_id'        => 'nullable|exists:proyectos,id',
+            'proveedor_id'       => 'nullable|exists:proveedores,id',
             'proveedor_nombre'   => 'nullable|string|max:150',
             'numero_factura'     => 'nullable|string|max:60',
             'fecha_factura'      => 'nullable|date',
@@ -127,15 +131,16 @@ class MovimientoAlmacenController extends Controller
         $validated = $request->validate([
             'almacen_id'                    => 'required|exists:almacenes,id',
             'beneficiario_id'               => 'required|exists:beneficiarios,id',
-            'presupuesto_item_proyecto_id'  => 'required|exists:presupuesto_items_proyecto,id',
-            'modalidad_entrega'             => 'nullable|in:total,parcial',
+            'material_id'                   => 'required|exists:materiales,id',
+            'cantidad_total'                => 'required|numeric|min:0.0001',
+            // items_distribucion: uno por ítem. Vacío = entrega adicional sin ítem
+            'items_distribucion'            => 'nullable|array',
+            'items_distribucion.*.presupuesto_item_proyecto_id' => 'required_with:items_distribucion|exists:presupuesto_items_proyecto,id',
+            'items_distribucion.*.cantidad' => 'required_with:items_distribucion|numeric|min:0.0001',
+            'items_distribucion.*.justificacion' => 'nullable|string',
             'justificacion_sobre_consumo'   => 'nullable|string',
             'aprobado_por_id'               => 'nullable|exists:users,id',
             'notas'                         => 'nullable|string',
-            'materiales'                    => 'required|array|min:1',
-            'materiales.*.material_id'      => 'required|exists:materiales,id',
-            'materiales.*.cantidad'         => 'required|numeric|min:0.0001',
-            'materiales.*.observacion'      => 'nullable|string',
             'evidencias'                    => 'nullable|array',
             'evidencias.*.tipo'             => 'required_with:evidencias|in:foto,firma,documento',
             'evidencias.*.base64'           => 'nullable|string',
@@ -144,8 +149,8 @@ class MovimientoAlmacenController extends Controller
             'evidencias.*.longitud'         => 'nullable|numeric',
         ]);
 
-        $movimiento = $this->entregaService->registrarSalidaSocial($validated, auth()->id());
-        return response()->json($movimiento, 201);
+        $movimientos = $this->entregaService->registrarSalidaSocial($validated, auth()->id());
+        return response()->json(['movimientos' => $movimientos], 201);
     }
 
     // ─── Salida privada ───────────────────────────────────────────────────────────

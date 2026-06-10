@@ -35,14 +35,13 @@ const authService = {
         return response.data;
     },
 
-    verificarOtp: async (tokenTemporal, codigo, confiarDispositivo, fingerprint) => {
+    verificarOtp: async (tokenTemporal, codigo, confiarDispositivo = false, fingerprint = '') => {
         const response = await api.post('/2fa/verificar-otp', {
             token_temporal: tokenTemporal,
             codigo,
             confiar_dispositivo: confiarDispositivo,
             fingerprint,
         });
-
         if (response.data.status === 'success') {
             const data = response.data.data;
             if (data.tipo_respuesta === 'login_exitoso') {
@@ -52,7 +51,6 @@ const authService = {
             }
             return data;
         }
-
         return response.data;
     },
 

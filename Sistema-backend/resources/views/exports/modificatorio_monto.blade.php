@@ -1,8 +1,6 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    @include('exports._base_styles')
+@extends('exports.layout_membrete')
+
+@section('styles')
     <style>
         .firma-row { display: table; width: 100%; margin-top: 40px; }
         .firma-cell { display: table-cell; width: 50%; text-align: center; padding: 0 20px; }
@@ -12,8 +10,9 @@
         .total-row td { font-weight: bold; background: #f1f5f9; }
         .suma-zero { background: #d1fae5; color: #065f46; padding: 6px 12px; border-radius: 4px; font-size: 10px; font-weight: bold; text-align: center; margin: 8px 0 12px; }
     </style>
-</head>
-<body>
+@endsection
+
+@section('content')
     <div class="page-header">
         <div class="page-header-left">
             <div class="empresa-nombre">CA & KANAGF S.R.L.</div>
@@ -130,9 +129,6 @@
         </div>
     </div>
 
-    <div class="footer">
-        <div class="footer-left">CA & KANAGF S.R.L. &mdash; Sistema de Gestión de Construcción</div>
-        <div class="footer-right">Documento: {{ $modificatorio->numero }}</div>
-    </div>
-</body>
-</html>
+    
+        
+    @endsection

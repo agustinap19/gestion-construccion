@@ -268,13 +268,12 @@ export default function ChecklistVivienda({ viviendaId, viviendaCodigo }) {
     useEffect(() => { cargar(); }, [cargar]);
 
     const handleGuardado = useCallback((resultado) => {
-        // Actualizar datos localmente con el nuevo avance
         setData(prev => {
             if (!prev) return prev;
+            const actualizados = resultado.items_actualizados ?? [];
+            const actualizadoMap = Object.fromEntries(actualizados.map(a => [a.id, a]));
             const items = prev.items.map(i =>
-                i.id === resultado.item_actualizado.id
-                    ? { ...i, ...resultado.item_actualizado }
-                    : i
+                actualizadoMap[i.id] ? { ...i, ...actualizadoMap[i.id] } : i
             );
             return {
                 ...prev,
@@ -282,11 +281,16 @@ export default function ChecklistVivienda({ viviendaId, viviendaCodigo }) {
                 vivienda: { ...prev.vivienda, avance_total: resultado.avance_vivienda },
             };
         });
-        setConteos(prev => ({
-            ...prev,
-            [resultado.reporte.presupuesto_item_proyecto_id]:
-                (prev[resultado.reporte.presupuesto_item_proyecto_id] ?? 0) + 1,
-        }));
+        const reportes = resultado.reportes ?? [];
+        if (reportes.length > 0) {
+            setConteos(prev => {
+                const nuevos = { ...prev };
+                reportes.forEach(r => {
+                    nuevos[r.presupuesto_item_proyecto_id] = (nuevos[r.presupuesto_item_proyecto_id] ?? 0) + 1;
+                });
+                return nuevos;
+            });
+        }
     }, []);
 
     // ── Skeleton ───────────────────────────────────────────────────────────

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" fill="black">
+  <!-- Edificio central alto -->
+  <rect x="120" y="15" width="55" height="165"/>
+
+  <!-- Cara lateral derecha del edificio central (perspectiva) -->
+  <polygon points="175,15 200,35 200,185 175,180"/>
+
+  <!-- Edificio izquierdo con efecto de capas diagonales (estilo chevron) -->
+  <polygon points="15,95 120,55 120,75 15,115" fill="black"/>
+  <polygon points="15,115 120,75 120,95 15,135" fill="black"/>
+  <polygon points="15,135 120,95 120,115 15,155" fill="black"/>
+  <polygon points="15,155 120,115 120,135 15,175" fill="black"/>
+  <polygon points="15,175 120,135 120,155 15,195" fill="black"/>
+  <polygon points="15,95 120,55 120,60 15,100" fill="black"/>
+
+  <!-- Edificio derecho con grilla de ventanas -->
+  <rect x="200" y="80" width="75" height="110"/>
+  <!-- Líneas horizontales ventanas -->
+  <rect x="200" y="80" width="75" height="110" fill="black"/>
+  <line x1="200" y1="105" x2="275" y2="105" stroke="white" stroke-width="3"/>
+  <line x1="200" y1="130" x2="275" y2="130" stroke="white" stroke-width="3"/>
+  <line x1="200" y1="155" x2="275" y2="155" stroke="white" stroke-width="3"/>
+  <!-- Líneas verticales ventanas -->
+  <line x1="225" y1="80" x2="225" y2="190" stroke="white" stroke-width="3"/>
+  <line x1="250" y1="80" x2="250" y2="190" stroke="white" stroke-width="3"/>
+
+  <!-- Columna conectora izquierda -->
+  <rect x="112" y="155" width="16" height="55"/>
+
+  <!-- Columna conectora derecha -->
+  <rect x="191" y="175" width="14" height="40"/>
+
+  <!-- Arco base -->
+  <ellipse cx="148" cy="222" rx="140" ry="18"/>
+</svg>
