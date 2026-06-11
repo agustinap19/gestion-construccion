@@ -25,6 +25,9 @@ RUN chown -R www-data:www-data /var/www/html/storage \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
 
+RUN mkdir -p storage/framework/views storage/framework/cache storage/framework/sessions \
+    && chmod -R 775 storage/framework
+
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
