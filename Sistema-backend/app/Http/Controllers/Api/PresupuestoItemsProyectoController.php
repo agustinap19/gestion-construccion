@@ -263,9 +263,9 @@ class PresupuestoItemsProyectoController extends Controller
         $query = PresupuestoItemProyecto::with([
             'itemConstructivo:id,nombre,codigo,unidad_base',
             'itemConstructivo.categoria:id,nombre,color',
-            'itemConstructivo.receta',
-            'itemConstructivo.receta.material:id,nombre,codigo,unidad_medida_id',
-            'itemConstructivo.receta.material.unidadMedida:id,nombre,simbolo',
+            'itemConstructivo.recetas',
+            'itemConstructivo.recetas.material:id,nombre,codigo,unidad_medida_id',
+            'itemConstructivo.recetas.material.unidadMedida:id,nombre,simbolo',
             'vivienda:id,codigo',
         ]);
 

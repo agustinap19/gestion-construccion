@@ -42,7 +42,7 @@ class PlantillaConstructivaService
     {
         $plantilla = PlantillaConstructiva::with([
             'items.itemConstructivo.categoria:id,nombre,color',
-            'items.itemConstructivo.receta.material:id,nombre,codigo',
+            'items.itemConstructivo.recetas.material:id,nombre,codigo',
             'creador:id,name',
         ])->findOrFail($id);
 

@@ -57,8 +57,8 @@ class BibliotecaConstructivaService
     {
         $q = ItemConstructivo::with([
             'categoria:id,nombre,color',
-            'receta.material:id,nombre,codigo',
-            'receta.material.unidadMedida:id,simbolo',
+            'recetas.material:id,nombre,codigo',
+            'recetas.material.unidadMedida:id,simbolo',
         ]);
 
         if (!empty($filtros['busqueda'])) {
@@ -89,8 +89,8 @@ class BibliotecaConstructivaService
     {
         return ItemConstructivo::with([
             'categoria:id,nombre,color',
-            'receta.material:id,nombre,codigo,precio_referencial',
-            'receta.material.unidadMedida:id,nombre,simbolo',
+            'recetas.material:id,nombre,codigo,precio_referencial',
+            'recetas.material.unidadMedida:id,nombre,simbolo',
         ])->findOrFail($id);
     }
 
@@ -121,7 +121,7 @@ class BibliotecaConstructivaService
 
             $this->recalcularPrecioReferencial($item);
 
-            return $item->fresh(['categoria', 'receta.material.unidadMedida']);
+            return $item->fresh(['categoria', 'recetas.material.unidadMedida']);
         });
     }
 
@@ -154,7 +154,7 @@ class BibliotecaConstructivaService
 
             $this->recalcularPrecioReferencial($item);
 
-            return $item->fresh(['categoria', 'receta.material.unidadMedida']);
+            return $item->fresh(['categoria', 'recetas.material.unidadMedida']);
         });
     }
 
@@ -171,7 +171,7 @@ class BibliotecaConstructivaService
         if ($item->presupuestoItems()->exists()) {
             throw new Exception('No se puede eliminar: el ítem está en uso en proyectos.');
         }
-        $item->receta()->delete();
+        $item->recetas()->delete();
         $item->delete();
     }
 

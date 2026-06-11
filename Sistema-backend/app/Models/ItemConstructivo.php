@@ -30,7 +30,7 @@ class ItemConstructivo extends Model
         return $this->belongsTo(CategoriaConstructiva::class, 'categoria_constructiva_id');
     }
 
-    public function receta()
+    public function recetas()
     {
         return $this->hasMany(RecetaItem::class, 'item_constructivo_id');
     }

@@ -84,7 +84,7 @@ class PresupuestoAutomaticoService
         $itemsData = [];
 
         foreach ($tipologias as $tipologia) {
-            $plantilla = PlantillaConstructiva::with('items.itemConstructivo.receta')->findOrFail($tipologia['plantilla_id']);
+            $plantilla = PlantillaConstructiva::with('items.itemConstructivo.recetas')->findOrFail($tipologia['plantilla_id']);
 
             foreach ($tipologia['viviendas'] as $viviendaId) {
                 foreach ($plantilla->items as $itemPlantilla) {
@@ -136,7 +136,7 @@ class PresupuestoAutomaticoService
     {
         return DB::transaction(function () use ($proyectoId, $actorId) {
             $items = PresupuestoItemProyecto::where('proyecto_id', $proyectoId)
-                ->with(['itemConstructivo.receta', 'overrides'])
+                ->with(['itemConstructivo.recetas', 'overrides'])
                 ->get();
 
             $consolidado = $this->calcularConsolidado($proyectoId, $items->all(), $actorId);
@@ -279,11 +279,11 @@ class PresupuestoAutomaticoService
         foreach ($presupuestoItems as $pip) {
             $item = $pip instanceof PresupuestoItemProyecto
                 ? $pip
-                : PresupuestoItemProyecto::with(['itemConstructivo.receta', 'overrides'])->find($pip);
+                : PresupuestoItemProyecto::with(['itemConstructivo.recetas', 'overrides'])->find($pip);
 
             if (!$item) continue;
 
-            $itemConstructivo = $item->itemConstructivo ?? ItemConstructivo::with('receta')->find($item->item_constructivo_id);
+            $itemConstructivo = $item->itemConstructivo ?? ItemConstructivo::with('recetas')->find($item->item_constructivo_id);
             if (!$item->itemConstructivo) {
                 $item->setRelation('itemConstructivo', $itemConstructivo);
             }
