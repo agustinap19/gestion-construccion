@@ -2,23 +2,11 @@
 
 @section('styles')
 <style>
-    body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10px; color: #333; margin: 0; padding: 0; }
-    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; padding-top: 10px; }
-    .header h1 { margin: 0; font-size: 16px; color: #1e3a8a; }
-    .header h2 { margin: 5px 0; font-size: 14px; color: #1e40af; }
-    .header p { margin: 2px 0; font-size: 10px; color: #64748b; }
-    h2 { font-size: 12px; color: #0f172a; margin: 16px 0 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
-    .kpi-row { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-    .kpi-row td { text-align: center; border: 1px solid #e2e8f0; padding: 10px; background: #f8fafc; width: 25%; }
     .kpi-val { font-size: 16px; font-weight: bold; color: #2563eb; display: block; margin-bottom: 2px; }
     .kpi-lbl { font-size: 9px; color: #64748b; text-transform: uppercase; }
-    .info-block { flex: 1; background: #f8fafc; border-radius: 4px; padding: 8px 12px; border: 1px solid #e2e8f0; }
-    .info-row { margin-bottom: 3px; }
-    .info-lbl { font-size: 8px; color: #94a3b8; text-transform: uppercase; }
-    .info-val { font-size: 10px; color: #1e293b; font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; }
-    th { background: #f1f5f9; padding: 5px 7px; text-align: left; font-size: 8px; text-transform: uppercase; color: #475569; }
-    td { padding: 4px 7px; border-bottom: 1px solid #f1f5f9; font-size: 9px; vertical-align: middle; }
+    .kpi-row  { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    .kpi-row td { text-align: center; border: 1px solid #e2e8f0; padding: 10px; background: #f8fafc; width: 25%; }
+    h2 { font-size: 12px; color: #0f172a; margin: 16px 0 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
     .prog-wrap { background: #e2e8f0; border-radius: 3px; height: 7px; width: 80px; display: inline-block; vertical-align: middle; }
     .prog-fill { border-radius: 3px; height: 7px; }
     .prog-green  { background: #059669; }
@@ -31,57 +19,61 @@
     .badge-baja   { background: #d1fae5; color: #065f46; }
     .badge-media  { background: #fef3c7; color: #92400e; }
     .badge-alta   { background: #fed7aa; color: #9a3412; }
-    .badge-critica { background: #fee2e2; color: #991b1b; }
+    .badge-critica{ background: #fee2e2; color: #991b1b; }
     .reporte-card { border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
     .reporte-header { font-size: 9px; color: #64748b; margin-bottom: 4px; }
-    .reporte-desc { font-size: 9px; color: #1e293b; margin-bottom: 4px; }
-    .foto-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-    .foto-img { width: 60px; height: 60px; object-fit: cover; border-radius: 3px; }
-    .footer { margin-top: 20px; font-size: 8px; color: #94a3b8; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 6px; }
+    .reporte-desc   { font-size: 9px; color: #1e293b; margin-bottom: 4px; }
     .alerta { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 3px; padding: 3px 7px; font-size: 8px; color: #9a3412; display: inline-block; margin-bottom: 4px; }
     .no-data { font-size: 9px; color: #94a3b8; font-style: italic; }
 </style>
 @endsection
 
 @section('content')
-
-    <div class="header">
-        <h1>CA & KANAGF S.R.L.</h1>
-        <h2>Reporte de Avance Individual</h2>
-        <p>Beneficiario: {{ $vivienda->beneficiario ? $vivienda->beneficiario->nombre . ' ' . $vivienda->beneficiario->apellido_paterno : 'Sin Asignar' }} | Proyecto: {{ $vivienda->proyecto?->codigo ?? '—' }} | Generado: {{ now()->format('d/m/Y H:i') }}</p>
+<div class="page-header">
+    <div class="page-header-left">
+        <div class="empresa-nombre">CA &amp; KANAGF S.R.L.</div>
+        <div class="reporte-titulo">Reporte de Avance Individual</div>
+        <div class="reporte-sub">
+            Beneficiario: {{ $vivienda->beneficiario ? $vivienda->beneficiario->nombre . ' ' . $vivienda->beneficiario->apellido_paterno : 'Sin Asignar' }}
+            | Proyecto: {{ $vivienda->proyecto?->codigo ?? '—' }}
+        </div>
     </div>
+    <div class="page-header-right">
+        <div class="reporte-sub">Generado: {{ now()->format('d/m/Y H:i') }}</div>
+    </div>
+</div>
 
-    {{-- KPIs --}}
-    <table class="kpi-row">
-        <tr>
-            <td>
-                <span class="kpi-val">{{ number_format($vivienda->porcentaje_avance, 1) }}%</span>
-                <span class="kpi-lbl">Avance Físico</span>
-            </td>
-            <td>
-                <span class="kpi-val">{{ $vivienda->itemsChecklist->where('estado','completado')->count() }}/{{ $vivienda->itemsChecklist->count() }}</span>
-                <span class="kpi-lbl">Items Completados</span>
-            </td>
-            <td>
-                <span class="kpi-val">{{ $reportes->count() }}</span>
-                <span class="kpi-lbl">Últimos Reportes</span>
-            </td>
-            <td>
-                <span class="kpi-val">{{ ucfirst(str_replace('_', ' ', $vivienda->estado)) }}</span>
-                <span class="kpi-lbl">Estado</span>
-            </td>
-        </tr>
-    </table>
+{{-- KPIs --}}
+<table class="kpi-row">
+    <tr>
+        <td>
+            <span class="kpi-val">{{ number_format($vivienda->porcentaje_avance, 1) }}%</span>
+            <span class="kpi-lbl">Avance Físico</span>
+        </td>
+        <td>
+            <span class="kpi-val">{{ $vivienda->itemsChecklist->where('estado','completado')->count() }}/{{ $vivienda->itemsChecklist->count() }}</span>
+            <span class="kpi-lbl">Items Completados</span>
+        </td>
+        <td>
+            <span class="kpi-val">{{ $reportes->count() }}</span>
+            <span class="kpi-lbl">Últimos Reportes</span>
+        </td>
+        <td>
+            <span class="kpi-val">{{ ucfirst(str_replace('_', ' ', $vivienda->estado)) }}</span>
+            <span class="kpi-lbl">Estado</span>
+        </td>
+    </tr>
+</table>
 
 {{-- Info general --}}
 <div class="info-grid">
-    <div class="info-block">
-        <div class="info-row"><span class="info-lbl">Tipología</span><br><span class="info-val">{{ $vivienda->tipoVivienda?->nombre ?? '—' }}</span></div>
-        <div class="info-row"><span class="info-lbl">Código Vivienda</span><br><span class="info-val">{{ $vivienda->codigo }}</span></div>
+    <div class="info-cell">
+        <div class="info-row"><div class="info-label">Tipología</div><div class="info-value">{{ $vivienda->tipoVivienda?->nombre ?? '—' }}</div></div>
+        <div class="info-row"><div class="info-label">Código Vivienda</div><div class="info-value">{{ $vivienda->codigo }}</div></div>
     </div>
-    <div class="info-block">
-        <div class="info-row"><span class="info-lbl">CI Beneficiario</span><br><span class="info-val">{{ $vivienda->beneficiario?->ci ?? '—' }}</span></div>
-        <div class="info-row"><span class="info-lbl">Comunidad</span><br><span class="info-val">{{ $vivienda->beneficiario?->comunidad ?? '—' }}</span></div>
+    <div class="info-cell">
+        <div class="info-row"><div class="info-label">CI Beneficiario</div><div class="info-value">{{ $vivienda->beneficiario?->ci ?? '—' }}</div></div>
+        <div class="info-row"><div class="info-label">Comunidad</div><div class="info-value">{{ $vivienda->beneficiario?->comunidad ?? '—' }}</div></div>
     </div>
 </div>
 
@@ -137,7 +129,7 @@
             &mdash; Técnico: {{ $rep->usuario?->nombre ?? '—' }} {{ $rep->usuario?->apellido_paterno ?? '' }}
             &mdash; Estado: <span class="badge badge-{{ $rep->estado === 'aprobado' ? 'completado' : 'en_proceso' }}">{{ ucfirst($rep->estado) }}</span>
             @if($rep->alerta_distancia)
-                <span class="alerta">⚠ Fuera de rango ({{ number_format($rep->distancia_vivienda_metros,0) }} m)</span>
+                <span class="alerta">&#9888; Fuera de rango ({{ number_format($rep->distancia_vivienda_metros,0) }} m)</span>
             @endif
         </div>
 
@@ -158,7 +150,7 @@
         @endif
 
         @if($rep->fotos->isNotEmpty())
-        <table style="width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px;">
+        <table style="width:100%; border-collapse:collapse; table-layout:fixed; margin-top:6px;">
             <tr>
             @foreach($rep->fotos->take(6) as $index => $foto)
                 @php
@@ -169,12 +161,12 @@
                 @if($index > 0 && $index % 3 == 0)
                     </tr><tr>
                 @endif
-                <td style="width: 33.33%; padding: 4px; vertical-align: top;">
+                <td style="width:33.33%; padding:4px; vertical-align:top;">
                     @if(file_exists($path))
-                        <img src="{{ $path }}" alt="Foto" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0;">
+                        <img src="{{ $path }}" alt="Foto" style="width:100%; height:100px; object-fit:cover; border-radius:4px; border:1px solid #e2e8f0;">
                     @else
-                        <div style="width: 100%; height: 100px; background: #f1f5f9; border-radius: 4px; border: 1px solid #e2e8f0; display: table;">
-                            <div style="display: table-cell; vertical-align: middle; text-align: center; font-size: 8px; color: #94a3b8;">N/A</div>
+                        <div style="width:100%; height:100px; background:#f1f5f9; border-radius:4px; border:1px solid #e2e8f0; display:table;">
+                            <div style="display:table-cell; vertical-align:middle; text-align:center; font-size:8px; color:#94a3b8;">N/A</div>
                         </div>
                     @endif
                 </td>
@@ -182,11 +174,7 @@
             @php
                 $count = min(6, $rep->fotos->count());
                 $resto = $count % 3;
-                if($resto > 0) {
-                    for($i = 0; $i < (3 - $resto); $i++) {
-                        echo '<td style="width: 33.33%; padding: 4px;"></td>';
-                    }
-                }
+                if($resto > 0) { for($i = 0; $i < (3 - $resto); $i++) { echo '<td style="width:33.33%;padding:4px;"></td>'; } }
             @endphp
             </tr>
         </table>
@@ -194,6 +182,5 @@
     </div>
     @endforeach
 @endif
-
 
 @endsection

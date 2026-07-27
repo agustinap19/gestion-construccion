@@ -77,7 +77,8 @@ const glassSelect = 'bg-white/[0.05] border border-white/[0.09] text-slate-200 t
 /* ── Component ── */
 const ListaProyectos = () => {
     const navigate = useNavigate();
-    const { hasPermission } = useAuth();
+    const { hasPermission, user } = useAuth();
+    const esAccesoTotal = ['super_admin', 'gerente_general'].includes(user?.rol?.nombre);
 
     const [proyectos, setProyectos]       = useState([]);
     const [stats, setStats]               = useState(null);
@@ -316,9 +317,15 @@ const ListaProyectos = () => {
                         <Briefcase size={28} className="text-slate-600" />
                     </div>
                     <div className="text-center">
-                        <p className="text-slate-400 font-medium">No se encontraron proyectos</p>
+                        <p className="text-slate-400 font-medium">
+                            {!hayFiltros && !esAccesoTotal ? 'Sin proyectos asignados' : 'No se encontraron proyectos'}
+                        </p>
                         <p className="text-slate-600 text-sm mt-1">
-                            {hayFiltros ? 'Prueba cambiando los filtros' : 'Crea el primer proyecto para comenzar'}
+                            {hayFiltros
+                                ? 'Prueba cambiando los filtros'
+                                : !esAccesoTotal
+                                    ? 'Aún no tienes proyectos asignados. Contacta con tu gerente.'
+                                    : 'Crea el primer proyecto para comenzar'}
                         </p>
                     </div>
                     {hasPermission('proyectos.crear') && !filtros.archivados && !hayFiltros && (

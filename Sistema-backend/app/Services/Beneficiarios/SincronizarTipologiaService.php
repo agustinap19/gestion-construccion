@@ -11,6 +11,7 @@ use App\Models\PresupuestoItemProyecto;
 use App\Models\TipoVivienda;
 use App\Services\Almacenes\IntegracionBeneficiarioService;
 use App\Services\Almacenes\PresupuestoAutomaticoService;
+use App\Services\Proyectos\CalculadoraAvanceService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\SyncTipologiaNotification;
@@ -20,6 +21,7 @@ class SincronizarTipologiaService
     public function __construct(
         private PresupuestoAutomaticoService $presupuestoSvc,
         private IntegracionBeneficiarioService $integracionSvc,
+        private CalculadoraAvanceService $calculadora,
     ) {}
 
     // ─── Preview (sin aplicar cambios) ────────────────────────────────────────
@@ -177,14 +179,19 @@ class SincronizarTipologiaService
                 }
             }
 
-            // 4. Recalcular consolidado de materiales
+            // 4. Recalcular ponderaciones por costo real (reemplaza los valores heredados de la plantilla)
+            if ($viviendaId) {
+                $this->calculadora->recalcularPonderacionesPorCosto($viviendaId);
+            }
+
+            // 5. Recalcular consolidado de materiales
             try {
                 $this->presupuestoSvc->recalcularConsolidado($beneficiario->proyecto_id, $actorId);
             } catch (\Throwable) {
                 // No bloquear el sync si falla el consolidado
             }
 
-            // 5. Guardar historial
+            // 6. Guardar historial
             $estado  = count($preview['conflictos']) > 0 ? 'parcial' : 'completado';
             $historial = HistorialSyncTipologia::create([
                 'beneficiario_id'  => $beneficiario->id,

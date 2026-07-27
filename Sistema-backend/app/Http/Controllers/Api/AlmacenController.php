@@ -32,7 +32,7 @@ class AlmacenController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
         }
 
-        $data = $this->service->listarConFiltros($request->all(), $request->input('per_page', 15));
+        $data = $this->service->listarConFiltros($request->all(), $request->input('per_page', 15), $request->user());
         return response()->json(['status' => 'success', 'data' => $data]);
     }
 
@@ -123,7 +123,7 @@ class AlmacenController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
         }
 
-        return response()->json(['status' => 'success', 'data' => $this->service->estadisticasResumen()]);
+        return response()->json(['status' => 'success', 'data' => $this->service->estadisticasResumen($request->user())]);
     }
 
     public function dashboard(Request $request): JsonResponse
@@ -132,7 +132,7 @@ class AlmacenController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
         }
 
-        return response()->json(['status' => 'success', 'data' => $this->service->dashboard()]);
+        return response()->json(['status' => 'success', 'data' => $this->service->dashboard($request->user())]);
     }
 
     // ─── Movimientos de stock ────────────────────────────────────────────────

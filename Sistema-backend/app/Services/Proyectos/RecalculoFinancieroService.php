@@ -255,6 +255,71 @@ class RecalculoFinancieroService
         ];
     }
 
+    /**
+     * Build the Items×Productos matrix grouped by ItemConstructivo (one row per item type).
+     * Ignores per-vivienda duplication — assignment is treated as a property of the item type.
+     */
+    public function obtenerMatrizAgrupada(Proyecto $proyecto): array
+    {
+        $hitos = HitoCobro::where('proyecto_id', $proyecto->id)
+            ->orderBy('orden')
+            ->get(['id', 'nombre', 'tipo', 'orden', 'porcentaje_contrato', 'monto_calculado']);
+
+        $pips = PresupuestoItemProyecto::with([
+            'itemConstructivo:id,nombre,codigo,unidad_base,categoria_constructiva_id',
+            'itemConstructivo.categoria:id,nombre,color',
+        ])
+        ->where('proyecto_id', $proyecto->id)
+        ->get();
+
+        $agrupados = $pips->groupBy('item_constructivo_id')
+            ->map(function ($grupo, $icId) {
+                $first   = $grupo->first();
+                $hitoIds = $grupo->pluck('hito_cobro_id')->unique()->values();
+                $hitoCobroId = ($hitoIds->count() === 1) ? $hitoIds->first() : null;
+
+                return [
+                    'item_constructivo_id' => (int) $icId,
+                    'nombre'               => $first->itemConstructivo?->nombre ?? "Ítem #{$icId}",
+                    'codigo'               => $first->itemConstructivo?->codigo,
+                    'unidad_base'          => $first->itemConstructivo?->unidad_base,
+                    'categoria_id'         => $first->itemConstructivo?->categoria_constructiva_id,
+                    'categoria_nombre'     => $first->itemConstructivo?->categoria?->nombre,
+                    'categoria_color'      => $first->itemConstructivo?->categoria?->color,
+                    'cantidad_total'       => (float) $grupo->sum('cantidad_planificada'),
+                    'viviendas_count'      => $grupo->count(),
+                    'hito_cobro_id'        => $hitoCobroId,
+                    'mixto'                => $hitoIds->count() > 1,
+                ];
+            })
+            ->values()
+            ->sortBy('nombre')
+            ->values();
+
+        $asignados = $agrupados->filter(fn($i) => $i['hito_cobro_id'] !== null)->count();
+
+        return [
+            'hitos'   => $hitos,
+            'items'   => $agrupados,
+            'totales' => [
+                'items_total'       => $agrupados->count(),
+                'items_asignados'   => $asignados,
+                'items_sin_asignar' => $agrupados->count() - $asignados,
+            ],
+        ];
+    }
+
+    /**
+     * Assign ALL PresupuestoItemProyecto rows with a given item_constructivo_id to a HitoCobro.
+     * Returns the number of rows updated.
+     */
+    public function asignarPorItemConstructivo(Proyecto $proyecto, int $itemConstructivoId, ?int $hitoCobroId): int
+    {
+        return PresupuestoItemProyecto::where('proyecto_id', $proyecto->id)
+            ->where('item_constructivo_id', $itemConstructivoId)
+            ->update(['hito_cobro_id' => $hitoCobroId]);
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private function recalcularMontoHitosCobro(Proyecto $proyecto): void

@@ -40,6 +40,9 @@ const TopBar = ({ onOpenMobileMenu, onOpenNotificaciones, onOpenSearch }) => {
             'nuevo': 'Nuevo',
             'mi-perfil': 'Mi Perfil',
             'configuracion': 'Configuración',
+            'activos': 'Activos',
+            'asignaciones': 'Asignaciones',
+            'prestamos-sociales': 'Préstamos Sociales',
         };
 
         // Fallback label when a numeric segment has no context override
@@ -51,6 +54,7 @@ const TopBar = ({ onOpenMobileMenu, onOpenNotificaciones, onOpenSearch }) => {
             'beneficiarios': 'Detalle',
             'clientes': 'Detalle',
             'entidades-estatales': 'Detalle',
+            'activos': 'Detalle del Activo',
         };
 
         const breadcrumbs = [];

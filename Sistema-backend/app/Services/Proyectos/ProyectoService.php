@@ -4,6 +4,7 @@ namespace App\Services\Proyectos;
 
 use App\Models\ConfiguracionPorcentajesPresupuesto;
 use App\Models\HitoCobro;
+use App\Models\PresupuestoItemProyecto;
 use App\Models\Proyecto;
 use App\Models\TipoProyecto;
 use App\Models\User;
@@ -37,9 +38,30 @@ class ProyectoService
         $this->calculadora   = $calculadora;
     }
 
-    public function listarConFiltros(array $filtros, int $perPage = 20): LengthAwarePaginator
+    private const ROLES_ACCESO_TOTAL = ['super_admin', 'gerente_general'];
+
+    private function esAccesoTotal(?User $actor): bool
+    {
+        if (!$actor) return true;
+        return in_array($actor->rol?->nombre, self::ROLES_ACCESO_TOTAL);
+    }
+
+    private function aplicarScopeUsuario(\Illuminate\Database\Eloquent\Builder $query, ?User $actor): void
+    {
+        if ($this->esAccesoTotal($actor)) return;
+        $query->where(function ($q) use ($actor) {
+            $q->where('responsable_id', $actor->id)
+              ->orWhereHas('asignacionesPersonal', fn($qa) =>
+                  $qa->where('estado', 'activa')
+                     ->whereHas('personal', fn($qp) => $qp->where('usuario_id', $actor->id))
+              );
+        });
+    }
+
+    public function listarConFiltros(array $filtros, int $perPage = 20, ?User $actor = null): LengthAwarePaginator
     {
         $query = Proyecto::with(['tipoProyecto', 'cliente', 'entidadEstatal', 'zona', 'responsable']);
+        $this->aplicarScopeUsuario($query, $actor);
 
         if (isset($filtros['archivados']) && $filtros['archivados'] === 'true') {
             $query->onlyTrashed();
@@ -129,16 +151,129 @@ class ProyectoService
 
         $dashData = $this->calculadora->calcularDashboard($proyecto);
 
-        $hitoCobros = $proyecto->hitosCobro->map(fn($h) => [
-            'id'                  => $h->id,
-            'nombre'              => $h->nombre,
-            'porcentaje_contrato' => (float) $h->porcentaje_contrato,
-            'monto_calculado'     => (float) $h->monto_calculado,
-            'fecha_planificada'   => $h->fecha_planificada?->format('Y-m-d'),
-            'fecha_cobrado'       => $h->fecha_cobrado?->format('Y-m-d'),
-            'tipo'                => $h->tipo,
-            'estado'              => $h->estado,
-        ])->values();
+        // ── Avance real y peso programado por producto (dos niveles) ──────────
+        //
+        // avance_real:       qué % de los ítems del producto está completado (0–100%).
+        // avance_programado: qué % del trabajo total del proyecto representa este producto.
+        //                    Se deriva de las ponderaciones de sus ítems → suma 100% entre todos.
+        //                    Si el Producto 3 tiene más ítems/peso que el 1, su porcentaje es mayor.
+        //                    NO es tiempo transcurrido.
+        //
+        // Cálculo en dos niveles para respetar ponderaciones por tipo de vivienda:
+        //   Nivel 1 — por vivienda: cada tipo tiene sus propias ponderaciones (suman 100%).
+        //                           Se calcula peso y avance por separado dentro de cada vivienda.
+        //   Nivel 2 — por producto: promedio de viviendas → avance_real y peso_bruto.
+        //   Normalización final:    pesos normalizados → avance_programado suma 100%.
+        $pipsParaHitos = PresupuestoItemProyecto::where('proyecto_id', $proyecto->id)
+            ->whereNotNull('hito_cobro_id')
+            ->select(['hito_cobro_id', 'vivienda_id', 'porcentaje_avance', 'ponderacion_avance'])
+            ->get();
+
+        $agrupado = $pipsParaHitos->groupBy('hito_cobro_id')->map(function ($pips) {
+            $itemsTotal      = $pips->count();
+            $itemsSinAvance  = $pips->where('porcentaje_avance', 0)->count();
+
+            $pipsConVivienda = $pips->filter(fn($p) => $p->vivienda_id !== null);
+            $pipsSinVivienda = $pips->filter(fn($p) => $p->vivienda_id === null);
+
+            // Nivel 1: por vivienda → peso (suma ponderaciones) + avance ponderado
+            $unidades = $pipsConVivienda->groupBy('vivienda_id')->map(function ($pipsV) {
+                $totalPond = (float) $pipsV->sum('ponderacion_avance');
+                $avanceV   = $totalPond > 0
+                    ? $pipsV->sum(fn($p) => (float) $p->porcentaje_avance * (float) $p->ponderacion_avance) / $totalPond
+                    : (float) ($pipsV->avg('porcentaje_avance') ?? 0.0);
+                return ['peso' => $totalPond, 'avance' => $avanceV];
+            });
+
+            // Proyectos no-sociales: PIPs sin vivienda como una unidad adicional
+            if ($pipsSinVivienda->isNotEmpty()) {
+                $totalPond = (float) $pipsSinVivienda->sum('ponderacion_avance');
+                $avanceSV  = $totalPond > 0
+                    ? $pipsSinVivienda->sum(fn($p) => (float) $p->porcentaje_avance * (float) $p->ponderacion_avance) / $totalPond
+                    : (float) ($pipsSinVivienda->avg('porcentaje_avance') ?? 0.0);
+                $unidades->push(['peso' => $totalPond, 'avance' => $avanceSV]);
+            }
+
+            // Nivel 2: promedio de unidades
+            return (object) [
+                'peso_bruto'       => $unidades->avg('peso') ?? 0.0,   // se normaliza después
+                'avance_real'      => round($unidades->avg('avance') ?? 0.0, 1),
+                'items_total'      => $itemsTotal,
+                'items_sin_avance' => $itemsSinAvance,
+            ];
+        });
+
+        // Normalización: avance_programado suma exactamente 100% entre todos los productos con ítems
+        $sumaPesos = $agrupado->sum('peso_bruto');
+        $avancePorHito = $agrupado->map(function ($data) use ($sumaPesos) {
+            $data->avance_programado = $sumaPesos > 0
+                ? round($data->peso_bruto / $sumaPesos * 100, 1)
+                : null;
+            return $data;
+        });
+
+        $hoy            = Carbon::today();
+        $inicioProyecto = $proyecto->fecha_inicio_planificada;
+        $hitosOrdenados = $proyecto->hitosCobro->sortBy('orden')->values();
+
+        $hitoCobros = $hitosOrdenados->map(function ($h) use ($avancePorHito, $hoy, $inicioProyecto) {
+            $hitoData         = $avancePorHito->get($h->id);
+            $avanceReal       = $hitoData ? (float) $hitoData->avance_real       : 0.0;
+            $avanceProgramado = $hitoData ? $hitoData->avance_programado          : null;
+            $itemsTotal       = $hitoData ? (int)   $hitoData->items_total       : 0;
+            $itemsSinAvance   = $hitoData ? (int)   $hitoData->items_sin_avance  : 0;
+
+            $retraso           = null;
+            $nivelAlerta       = null;
+            $diasRestantes     = null;
+            $avancePlanificado = null;
+
+            $fechaFin = $h->fecha_planificada;
+            if ($fechaFin) {
+                $diasRestantes = $fechaFin->gte($hoy) ? (int) abs($fechaFin->diffInDays($hoy)) : 0;
+            }
+
+            // Avance planificado temporal: % que debería estar terminado HOY según fecha inicio → deadline
+            if ($fechaFin && $inicioProyecto && $inicioProyecto->lte($fechaFin)) {
+                $diasTotales       = max(1, (int) abs($inicioProyecto->diffInDays($fechaFin)));
+                $diasTranscurridos = max(0, min((int) abs($inicioProyecto->diffInDays($hoy)), $diasTotales));
+                $avancePlanificado = round(($diasTranscurridos / $diasTotales) * 100, 1);
+            }
+
+            // retraso: pp de desvío temporal (positivo = retrasado respecto al plan de hoy)
+            $retraso = ($avancePlanificado !== null) ? round($avancePlanificado - $avanceReal, 1) : null;
+
+            // nivelAlerta: vencido → urgente (>20pp de retraso) → próximo (>10pp o deadline ≤7d) → al día
+            if ($fechaFin && $fechaFin->lt($hoy) && $avanceReal < 100.0) {
+                $nivelAlerta = 'vencido';
+            } elseif ($retraso !== null && $retraso > 20.0) {
+                $nivelAlerta = 'rojo';
+            } elseif (($retraso !== null && $retraso > 10.0) || ($diasRestantes !== null && $diasRestantes <= 7 && $avanceReal < 80.0)) {
+                $nivelAlerta = 'amarillo';
+            } else {
+                $nivelAlerta = 'verde';
+            }
+
+            return [
+                'id'                  => $h->id,
+                'nombre'              => $h->nombre,
+                'orden'               => $h->orden,
+                'porcentaje_contrato' => (float) $h->porcentaje_contrato,
+                'monto_calculado'     => (float) $h->monto_calculado,
+                'fecha_planificada'   => $fechaFin?->format('Y-m-d'),
+                'fecha_cobrado'       => $h->fecha_cobrado?->format('Y-m-d'),
+                'tipo'                => $h->tipo,
+                'estado'              => $h->estado,
+                'avance_real'         => $avanceReal,
+                'avance_programado'   => $avanceProgramado,
+                'items_total'         => $itemsTotal,
+                'items_sin_avance'    => $itemsSinAvance,
+                'retraso'             => $retraso,
+                'nivel_alerta'        => $nivelAlerta,
+                'dias_restantes'      => $diasRestantes,
+                'avance_planificado'  => $avancePlanificado,
+            ];
+        })->values();
 
         return array_merge(
             [
@@ -493,26 +628,27 @@ class ProyectoService
         return $this->cambiarResponsable($id, $administradorId, $actorId);
     }
 
-    public function obtenerEstadisticasGenerales(): array
+    public function obtenerEstadisticasGenerales(?User $actor = null): array
     {
+        $base = fn() => tap(Proyecto::query(), fn($q) => $this->aplicarScopeUsuario($q, $actor));
         return [
-            'total'       => Proyecto::count(),
+            'total'       => $base()->count(),
             'por_estado'  => [
-                'formulacion'  => Proyecto::porEstado('formulacion')->count(),
-                'licitacion'   => Proyecto::porEstado('licitacion')->count(),
-                'adjudicado'   => Proyecto::porEstado('adjudicado')->count(),
-                'en_ejecucion' => Proyecto::porEstado('en_ejecucion')->count(),
-                'pausado'      => Proyecto::porEstado('pausado')->count(),
-                'finalizado'   => Proyecto::porEstado('finalizado')->count(),
-                'cancelado'    => Proyecto::porEstado('cancelado')->count(),
+                'formulacion'  => $base()->porEstado('formulacion')->count(),
+                'licitacion'   => $base()->porEstado('licitacion')->count(),
+                'adjudicado'   => $base()->porEstado('adjudicado')->count(),
+                'en_ejecucion' => $base()->porEstado('en_ejecucion')->count(),
+                'pausado'      => $base()->porEstado('pausado')->count(),
+                'finalizado'   => $base()->porEstado('finalizado')->count(),
+                'cancelado'    => $base()->porEstado('cancelado')->count(),
             ],
             'por_categoria' => [
-                'social'  => Proyecto::where('categoria', 'social')->count(),
-                'privado' => Proyecto::where('categoria', 'privado')->count(),
+                'social'  => $base()->where('categoria', 'social')->count(),
+                'privado' => $base()->where('categoria', 'privado')->count(),
             ],
-            'avance_promedio'          => round(Proyecto::activos()->avg('avance_fisico') ?? 0, 2),
-            'presupuesto_total_activos' => Proyecto::activos()->sum('presupuesto_referencial'),
-            'creados_ultimo_mes'       => Proyecto::where('created_at', '>=', now()->subMonth())->count(),
+            'avance_promedio'          => round($base()->activos()->avg('avance_fisico') ?? 0, 2),
+            'presupuesto_total_activos' => $base()->activos()->sum('presupuesto_referencial'),
+            'creados_ultimo_mes'       => $base()->where('created_at', '>=', now()->subMonth())->count(),
         ];
     }
 

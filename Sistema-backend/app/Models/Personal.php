@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Rol;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 
@@ -20,8 +21,8 @@ class Personal extends Model
     protected $table = 'personal';
 
     protected $fillable = [
-        'usuario_id', 'codigo_empleado', 'nombre', 'apellido_paterno', 'apellido_materno',
-        'ci', 'ci_complemento', 'telefono', 'direccion', 'fecha_nacimiento', 'tipo',
+        'usuario_id', 'rol_id', 'codigo_empleado', 'nombre', 'apellido_paterno', 'apellido_materno',
+        'ci', 'ci_complemento', 'telefono', 'direccion', 'fecha_nacimiento',
         'especialidad', 'categoria', 'fecha_contratacion', 'fecha_desvinculacion',
         'tipo_contrato', 'salario_base', 'frecuencia_pago', 'banco', 'numero_cuenta',
         'tipo_cuenta', 'estado_laboral'
@@ -82,6 +83,11 @@ class Personal extends Model
         return $this->belongsTo(User::class, 'usuario_id');
     }
 
+    public function rol(): BelongsTo
+    {
+        return $this->belongsTo(Rol::class, 'rol_id');
+    }
+
     public function competencias(): BelongsToMany
     {
         return $this->belongsToMany(Competencia::class, 'personal_competencia', 'personal_id', 'competencia_id')
@@ -97,5 +103,15 @@ class Personal extends Model
     public function registrosAsistencia(): HasMany
     {
         return $this->hasMany(RegistroAsistencia::class ?? Model::class, 'personal_id');
+    }
+
+    public function activosResponsable(): HasMany
+    {
+        return $this->hasMany(Activo::class, 'responsable_id');
+    }
+
+    public function asignacionesActivo(): HasMany
+    {
+        return $this->hasMany(AsignacionActivo::class, 'personal_id');
     }
 }

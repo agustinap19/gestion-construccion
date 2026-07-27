@@ -38,7 +38,7 @@
             <th>Código</th>
             <th>Apellidos y Nombre</th>
             <th>C.I.</th>
-            <th>Tipo</th>
+            <th>Rol</th>
             <th>Especialidad</th>
             <th>Estado</th>
             <th style="text-align:right">Salario (Bs.)</th>
@@ -54,7 +54,7 @@
             <td><strong>{{ $p->codigo_empleado }}</strong></td>
             <td>{{ $p->apellido_paterno }} {{ $p->apellido_materno ?? '' }}, {{ $p->nombre }}</td>
             <td>{{ $p->ci }}{{ $p->ci_complemento ? '-'.$p->ci_complemento : '' }}</td>
-            <td>{{ ucfirst($p->tipo ?? '—') }}</td>
+            <td>{{ $p->rol?->nombre_visible ?? '—' }}</td>
             <td>{{ $p->especialidad ?? '—' }}</td>
             <td><span class="badge {{ $badge }}">{{ ucfirst($p->estado_laboral) }}</span></td>
             <td style="text-align:right">{{ number_format($p->salario_base ?? 0, 2) }}</td>

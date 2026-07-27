@@ -68,6 +68,9 @@ import AlmacenDetalle  from '../pages/admin/almacenes/AlmacenDetalle';
 // Biblioteca Constructiva
 import BibliotecaConstructiva from '../pages/admin/biblioteca/BibliotecaConstructiva';
 
+// Activos (maquinaria y herramientas)
+import ActivosIndex from '../pages/admin/activos/ActivosIndex';
+
 const AppContent = () => {
     const { startLoading, stopLoading } = useLoading();
 
@@ -120,6 +123,8 @@ const AppContent = () => {
                     <Route path="/dashboard/almacenes" element={<AlmacenesIndex />} />
                     <Route path="/dashboard/almacenes/:id" element={<AlmacenDetalle />} />
                     <Route path="/dashboard/biblioteca-constructiva" element={<BibliotecaConstructiva />} />
+
+                    <Route path="/dashboard/activos" element={<ActivosIndex />} />
 
                     <Route path="/dashboard/proyectos" element={<ListaProyectos />} />
                     <Route path="/dashboard/proyectos/crear" element={<CrearProyecto />} />

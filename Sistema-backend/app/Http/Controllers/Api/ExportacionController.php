@@ -9,6 +9,7 @@ use App\Exports\ProyectosExport;
 use App\Exports\UsuariosExport;
 use App\Http\Controllers\Controller;
 use App\Jobs\GenerarZipActasJob;
+use App\Models\Almacen;
 use App\Models\Beneficiario;
 use App\Models\MovimientoAlmacen;
 use App\Models\Personal;
@@ -25,7 +26,10 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ExportacionController extends Controller
 {
-    public function __construct(private ExportacionService $svc) {}
+    public function __construct(
+        private ExportacionService $svc,
+        private \App\Services\Activos\ActaEntregaService $actaEntregaService,
+    ) {}
 
     // ── Proyectos ────────────────────────────────────────────────────────────
 
@@ -70,16 +74,17 @@ class ExportacionController extends Controller
         }
 
         // PDF usa la vista existente avance_proyecto.blade.php
-        $proyecto = Proyecto::with(['responsable', 'entidadEstatal', 'cliente'])->findOrFail($proyectoId);
+        $proyecto = Proyecto::with(['responsable', 'entidadEstatal', 'cliente', 'productosContractuales'])->findOrFail($proyectoId);
         $export   = new AvanceProyectoExport($proyectoId);
         $avance   = $export->getAvance();
         $unidades = $avance['avance_por_unidad'] ?? [];
 
         return $this->svc->pdf('avance_proyecto', [
-            'proyecto' => $proyecto,
-            'avance'   => $avance,
-            'unidades' => $unidades,
-            '_filas'   => count($unidades),
+            'proyecto'  => $proyecto,
+            'avance'    => $avance,
+            'unidades'  => $unidades,
+            'productos' => $proyecto->productosContractuales,
+            '_filas'    => count($unidades),
         ], 'avance_proyecto', 'avance_' . $proyecto->codigo . '_' . now()->format('Ymd'), $request->user());
     }
 
@@ -348,8 +353,11 @@ class ExportacionController extends Controller
         $q = MovimientoAlmacen::with([
             'almacenDestino:id,nombre,codigo',
             'almacenOrigen:id,nombre,codigo',
-            'detalles.material:id,nombre,codigo',
-            'registradoPor:id,name',
+            'detalles.material:id,nombre,codigo,unidad_medida',
+            'registradoPor:id,nombre,apellido_paterno',
+            'beneficiario:id,nombre,apellido_paterno,apellido_materno',
+            'receptorPersonal:id,nombre,apellido_paterno',
+            'proveedor:id,razon_social',
         ])->latest('fecha_movimiento');
 
         if (!empty($filtros['almacen_id'])) {
@@ -373,6 +381,166 @@ class ExportacionController extends Controller
             '_landscape'  => true,
             'filtros'     => $filtros,
         ], 'movimientos_almacen', 'movimientos_almacen_' . now()->format('Ymd'), $request->user(), $filtros);
+    }
+
+    // ── Reporte Fotográfico: Entregas a Beneficiario ──────────────────────
+
+    public function reporteFotograficoEntregas(Request $request, int $almacenId): Response
+    {
+        if (!$request->user()->hasPermissionTo('movimientos.ver')) abort(403);
+
+        $almacen = Almacen::with(['proyecto:id,nombre,codigo'])->findOrFail($almacenId);
+        $beneficiarioId = $request->input('beneficiario_id');
+
+        if (!$beneficiarioId) abort(422, 'Se requiere beneficiario_id.');
+
+        $beneficiario = Beneficiario::findOrFail($beneficiarioId);
+        $vivienda     = $beneficiario->viviendas()->where('proyecto_id', $almacen->proyecto_id)->first()
+                     ?? $beneficiario->vivienda;
+
+        $movimientos = MovimientoAlmacen::with([
+            'detalles.material:id,nombre,codigo',
+            'evidencias',
+            'registradoPor:id,nombre,apellido_paterno',
+        ])
+        ->where('tipo', 'salida_social')
+        ->where('beneficiario_id', $beneficiarioId)
+        ->where(fn($q) => $q->where('almacen_origen_id', $almacenId)->orWhere('almacen_destino_id', $almacenId))
+        ->where('estado', 'completado')
+        ->orderBy('fecha_movimiento')
+        ->get();
+
+        $proyecto = $almacen->proyecto ?? Proyecto::find($movimientos->first()?->proyecto_id);
+
+        return $this->svc->pdf('reporte_fotografico_entrega', [
+            'beneficiario' => $beneficiario,
+            'vivienda'     => $vivienda,
+            'proyecto'     => $proyecto,
+            'movimientos'  => $movimientos,
+            '_filas'       => $movimientos->count(),
+        ], 'reporte_fotografico_entrega',
+           "entrega_fotografico_{$beneficiario->apellido_paterno}_" . now()->format('Ymd'),
+           $request->user());
+    }
+
+    // ── Reporte Fotográfico: Entradas al Almacén ──────────────────────────
+
+    public function reporteFotograficoEntradas(Request $request, int $almacenId): Response
+    {
+        if (!$request->user()->hasPermissionTo('movimientos.ver')) abort(403);
+
+        $almacen = Almacen::with(['proyecto:id,nombre,codigo'])->findOrFail($almacenId);
+
+        $q = MovimientoAlmacen::with([
+            'detalles.material:id,nombre,codigo',
+            'evidencias',
+            'proveedor:id,razon_social',
+            'registradoPor:id,nombre,apellido_paterno',
+        ])
+        ->whereIn('tipo', ['entrada_compra', 'entrada_devolucion', 'entrada_transferencia', 'entrada_ajuste', 'inventario_inicial'])
+        ->where('almacen_destino_id', $almacenId)
+        ->where('estado', 'completado')
+        ->orderBy('fecha_movimiento');
+
+        if ($request->filled('fecha_desde')) $q->whereDate('fecha_movimiento', '>=', $request->input('fecha_desde'));
+        if ($request->filled('fecha_hasta')) $q->whereDate('fecha_movimiento', '<=', $request->input('fecha_hasta'));
+
+        $movimientos = $q->get();
+
+        return $this->svc->pdf('reporte_fotografico_entradas', [
+            'almacen'     => $almacen,
+            'movimientos' => $movimientos,
+            '_filas'      => $movimientos->count(),
+        ], 'reporte_fotografico_entradas',
+           "entradas_fotografico_{$almacen->codigo}_" . now()->format('Ymd'),
+           $request->user());
+    }
+
+    // ── Activos (maquinaria y herramientas) ─────────────────────────────────
+
+    public function activos(Request $request): Response|BinaryFileResponse
+    {
+        $filtros = $request->input('filtros', $request->all());
+        $fmt     = $request->input('formato', 'pdf');
+
+        if ($fmt === 'excel') {
+            return $this->svc->excel(
+                new \App\Exports\ActivosExport($filtros),
+                'activos', 'maquinaria_herramientas_' . now()->format('Ymd'),
+                $request->user(), $filtros
+            );
+        }
+
+        $query = \App\Models\Activo::with(['almacen:id,nombre'])->orderBy('nombre');
+
+        if (!empty($filtros['tipo']) && $filtros['tipo'] !== 'todos') {
+            $query->where('tipo', $filtros['tipo']);
+        }
+        if (!empty($filtros['estado']) && $filtros['estado'] !== 'todos') {
+            $query->where('estado', $filtros['estado']);
+        }
+        if (!empty($filtros['almacen_id'])) {
+            $query->where('almacen_id', $filtros['almacen_id']);
+        }
+        if (!empty($filtros['buscar'])) {
+            $b = $filtros['buscar'];
+            $query->where(function ($w) use ($b) {
+                $w->where('nombre', 'like', "%{$b}%")
+                  ->orWhere('codigo', 'like', "%{$b}%");
+            });
+        }
+
+        $activos = $query->get();
+
+        $kpis = [
+            'total'         => $activos->count(),
+            'disponibles'   => $activos->where('estado', 'disponible')->count(),
+            'asignados'     => $activos->where('estado', 'asignado')->count(),
+            'mantenimiento' => $activos->where('estado', 'mantenimiento')->count(),
+            'valorDiaTotal' => (float) $activos->where('estado', '!=', 'baja')->sum('costo_dia_uso'),
+        ];
+
+        return $this->svc->pdf('lista_activos', [
+            'activos'    => $activos,
+            'kpis'       => $kpis,
+            '_filas'     => $activos->count(),
+        ], 'activos', 'maquinaria_herramientas_' . now()->format('Ymd'), $request->user(), $filtros);
+    }
+
+    // ── Entregas finalizadas (actas devueltas) ──────────────────────────────
+
+    public function entregasFinalizadas(Request $request): Response
+    {
+        if (!$request->user()->hasPermissionTo('activos.ver_actas')) {
+            abort(403, 'Sin permiso.');
+        }
+
+        $filtros = $request->input('filtros', $request->all());
+
+        $actas = $this->actaEntregaService->queryDevueltas($filtros)
+            ->orderByDesc('fecha_devolucion_real')
+            ->get();
+
+        $subtitulo = match ($filtros['categoria'] ?? null) {
+            'social'  => 'Proyectos sociales',
+            'privado' => 'Proyectos privados',
+            default   => 'Todos los proyectos',
+        };
+        if (!empty($filtros['buscar'])) {
+            $subtitulo .= ' — Búsqueda: "' . $filtros['buscar'] . '"';
+        }
+        if (!empty($filtros['fecha_desde']) || !empty($filtros['fecha_hasta'])) {
+            $desde = $filtros['fecha_desde'] ?? null;
+            $hasta = $filtros['fecha_hasta'] ?? now()->toDateString();
+            $subtitulo .= ' — Periodo: ' . ($desde ? \Carbon\Carbon::parse($desde)->format('d/m/Y') : '…')
+                . ' al ' . \Carbon\Carbon::parse($hasta)->format('d/m/Y');
+        }
+
+        return $this->svc->pdf('entregas_finalizadas', [
+            'actas'     => $actas,
+            'subtitulo' => $subtitulo,
+            '_filas'    => $actas->count(),
+        ], 'entregas_finalizadas', 'entregas_finalizadas_' . now()->format('Ymd'), $request->user(), $filtros);
     }
 
     // ── Helper ────────────────────────────────────────────────────────────

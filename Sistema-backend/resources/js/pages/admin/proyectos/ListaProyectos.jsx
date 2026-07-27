@@ -61,7 +61,8 @@ const glassSelect = 'bg-white/[0.05] border border-white/[0.09] text-slate-200 t
 /* ── Component ── */
 const ListaProyectos = () => {
     const navigate = useNavigate();
-    const { hasPermission } = useAuth();
+    const { hasPermission, user } = useAuth();
+    const esAccesoTotal = ['super_admin', 'gerente_general'].includes(user?.rol?.nombre);
 
     const [proyectos, setProyectos] = useState([]);
     const [stats, setStats] = useState(null);
@@ -249,7 +250,14 @@ const ListaProyectos = () => {
                 ) : proyectos.length === 0 ? (
                     <div className="py-16 flex flex-col items-center gap-3">
                         <Briefcase size={32} className="text-slate-600" />
-                        <p className="text-slate-500 text-sm">No se encontraron proyectos</p>
+                        <p className="text-slate-500 text-sm">
+                            {!esAccesoTotal ? 'Sin proyectos asignados' : 'No se encontraron proyectos'}
+                        </p>
+                        {!esAccesoTotal && (
+                            <p className="text-slate-600 text-xs text-center max-w-xs">
+                                Aún no tienes proyectos asignados. Contacta con tu gerente.
+                            </p>
+                        )}
                         {hasPermission('proyectos.crear') && !filtros.archivados && (
                             <button onClick={() => navigate('/dashboard/proyectos/crear')}
                                 className="mt-1 px-4 py-2 rounded-xl text-sm font-medium text-white"

@@ -6,6 +6,8 @@ import zonaGeograficaService from '../../../services/zonaGeograficaService';
 import api from '../../../services/api';
 import Skeleton from '../../../components/ui/Skeleton';
 import { Briefcase, ArrowLeft, Check, MapPin, AlertTriangle, TrendingUp, TrendingDown } from '../../../components/icons/Icons';
+import { parseGPSInput, decimalToGMS } from '../../../utils/gps';
+import MapLocationPicker from '../../../components/ui/MapLocationPicker';
 
 /* ── Glass helpers ── */
 const GF = ({ label, error, children, required }) => (
@@ -51,6 +53,46 @@ const GlassCard = ({ title, accent = '#34d399', children }) => (
     </div>
 );
 
+const GpsField = ({ label, value, onChange, isLat, error }) => {
+    const [raw, setRaw] = useState(value != null && value !== '' ? decimalToGMS(value, isLat) : '');
+    const [gpsErr, setGpsErr] = useState('');
+
+    // Sincronizar 'raw' si 'value' cambia desde afuera (ej: clic en el mapa)
+    useEffect(() => {
+        if (value != null && value !== '') {
+            setRaw(decimalToGMS(value, isLat));
+        } else {
+            setRaw('');
+        }
+    }, [value, isLat]);
+
+    const handleBlur = () => {
+        if (!raw.trim()) { onChange(null); setGpsErr(''); return; }
+        const { decimal, error: parseError } = parseGPSInput(raw, isLat);
+        if (decimal === null) { setGpsErr(parseError || 'Formato inválido — usa GMS (17°23\'45.6"S) o decimal (-17.3960)'); return; }
+        setGpsErr('');
+        onChange(decimal);
+        setRaw(decimalToGMS(decimal, isLat));
+    };
+
+    return (
+        <GF label={label} error={error || gpsErr}>
+            <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                    <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                        className={gI(!!(error || gpsErr)) + ' pl-8'}
+                        value={raw}
+                        onChange={e => { setRaw(e.target.value); setGpsErr(''); }}
+                        onBlur={handleBlur}
+                        placeholder={isLat ? '17°23\'45.6"S  ó  -17.3960' : '66°09\'12.3"W  ó  -66.1534'}
+                    />
+                </div>
+            </div>
+        </GF>
+    );
+};
+
 const EditarProyecto = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -68,7 +110,7 @@ const EditarProyecto = () => {
         porcentaje_mano_obra: '', porcentaje_gastos_generales: '', porcentaje_utilidad_esperada: '', justificacion_rentabilidad_baja: '',
         fecha_inicio_planificada: '', fecha_fin_planificada: '',
         fecha_inicio_real: '', fecha_fin_real: '',
-        direccion_obra: '', observaciones: '',
+        direccion_obra: '', observaciones: '', latitud: '', longitud: '',
     });
 
     useEffect(() => {
@@ -102,6 +144,8 @@ const EditarProyecto = () => {
                     fecha_inicio_real: p.fecha_inicio_real?.split('T')[0] || '',
                     fecha_fin_real: p.fecha_fin_real?.split('T')[0] || '',
                     direccion_obra: p.direccion_obra || '',
+                    latitud: p.latitud || '',
+                    longitud: p.longitud || '',
                     observaciones: p.observaciones || '',
                 });
                 setZonas(zonasRes || []);
@@ -120,8 +164,14 @@ const EditarProyecto = () => {
     const handleSubmit = async () => {
         const e = {};
         if (!form.nombre.trim()) e.nombre = 'Obligatorio';
-        if (form.fecha_inicio_planificada && form.fecha_fin_planificada && form.fecha_inicio_planificada >= form.fecha_fin_planificada)
-            e.fecha_fin_planificada = 'La fecha de fin debe ser posterior al inicio';
+        if (form.fecha_inicio_planificada && form.fecha_fin_planificada) {
+            const ini = new Date(form.fecha_inicio_planificada + 'T00:00:00');
+            const fin = new Date(form.fecha_fin_planificada + 'T00:00:00');
+            const minFin = new Date(ini); minFin.setDate(ini.getDate() + 30);
+            const maxFin = new Date(ini); maxFin.setFullYear(ini.getFullYear() + 4);
+            if (fin < minFin) e.fecha_fin_planificada = 'Debe ser al menos 30 días después del inicio';
+            else if (fin > maxFin) e.fecha_fin_planificada = 'No puede superar 4 años desde el inicio';
+        }
         setErrores(e);
         if (Object.keys(e).length) return;
 
@@ -147,6 +197,13 @@ const EditarProyecto = () => {
     if (!proyecto) return null;
 
     const esSocial = proyecto.categoria === 'social';
+
+    const minFinStr = form.fecha_inicio_planificada
+        ? (() => { const d = new Date(form.fecha_inicio_planificada + 'T00:00:00'); d.setDate(d.getDate() + 30); return d.toISOString().split('T')[0]; })()
+        : '';
+    const maxFinStr = form.fecha_inicio_planificada
+        ? (() => { const d = new Date(form.fecha_inicio_planificada + 'T00:00:00'); d.setFullYear(d.getFullYear() + 4); return d.toISOString().split('T')[0]; })()
+        : '';
 
     /* ── Cálculos Financieros ── */
     const montoContractual = parseFloat(form.monto_contractual || 0);
@@ -364,7 +421,9 @@ const EditarProyecto = () => {
                             <input type="date" className={gI(false)} value={form.fecha_inicio_planificada} onChange={e => set('fecha_inicio_planificada', e.target.value)} />
                         </GF>
                         <GF label="Fin Planificado" error={errores.fecha_fin_planificada}>
-                            <input type="date" className={gI(!!errores.fecha_fin_planificada)} value={form.fecha_fin_planificada} onChange={e => set('fecha_fin_planificada', e.target.value)} />
+                            <input type="date" className={gI(!!errores.fecha_fin_planificada)}
+                                min={minFinStr} max={maxFinStr}
+                                value={form.fecha_fin_planificada} onChange={e => set('fecha_fin_planificada', e.target.value)} />
                         </GF>
                         <GF label="Inicio Real">
                             <input type="date" className={gI(false)} value={form.fecha_inicio_real} onChange={e => set('fecha_inicio_real', e.target.value)} />
@@ -377,14 +436,52 @@ const EditarProyecto = () => {
 
                 {/* Ubicación */}
                 <GlassCard title="Ubicación y Notas" accent="#fbbf24">
-                    <div className="space-y-4">
-                        <GF label="Dirección de Obra">
-                            <input className={gI(false)} value={form.direccion_obra} onChange={e => set('direccion_obra', e.target.value)} placeholder="Av. Principal 123..." />
-                        </GF>
-                        <GF label="Observaciones">
-                            <textarea rows={3} className={gI(false) + ' resize-none'} value={form.observaciones}
-                                onChange={e => set('observaciones', e.target.value)} placeholder="Información adicional..." />
-                        </GF>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2">
+                            <GF label="Dirección de Obra">
+                                <div className="relative">
+                                    <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                    <input className={gI(false) + ' pl-8'} value={form.direccion_obra} onChange={e => set('direccion_obra', e.target.value)} placeholder="Av. Principal 123..." />
+                                </div>
+                            </GF>
+                        </div>
+                        <GpsField label="Latitud (GPS)" value={form.latitud} onChange={v => set('latitud', v ?? '')} isLat={true} error={errores.latitud} />
+                        <GpsField label="Longitud (GPS)" value={form.longitud} onChange={v => set('longitud', v ?? '')} isLat={false} error={errores.longitud} />
+                        <div className="sm:col-span-2 flex justify-end">
+                            <button 
+                                type="button"
+                                onClick={() => {
+                                    if (navigator.geolocation) {
+                                        navigator.geolocation.getCurrentPosition((position) => {
+                                            set('latitud', position.coords.latitude);
+                                            set('longitud', position.coords.longitude);
+                                            toast.success('Ubicación obtenida');
+                                        }, () => toast.error('Error al obtener ubicación'));
+                                    } else {
+                                        toast.error('Geolocalización no soportada');
+                                    }
+                                }}
+                                className="px-3 py-1.5 rounded-xl text-xs font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
+                            >
+                                📍 Usar mi ubicación actual
+                            </button>
+                        </div>
+                        <div className="sm:col-span-2">
+                            <MapLocationPicker 
+                                latitud={form.latitud} 
+                                longitud={form.longitud} 
+                                onChange={(lat, lng) => {
+                                    set('latitud', lat);
+                                    set('longitud', lng);
+                                }} 
+                            />
+                        </div>
+                        <div className="sm:col-span-2 mt-2">
+                            <GF label="Observaciones">
+                                <textarea rows={3} className={gI(false) + ' resize-none'} value={form.observaciones}
+                                    onChange={e => set('observaciones', e.target.value)} placeholder="Información adicional..." />
+                            </GF>
+                        </div>
                     </div>
                 </GlassCard>
 

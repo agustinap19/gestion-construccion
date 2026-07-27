@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 class ReporteTecnicoService
 {
-    private const DISTANCIA_ALERTA_METROS = 500;
+    private const DISTANCIA_ALERTA_METROS = 100;
 
     public function __construct(
         private CalculadoraAvanceService $calculadora,

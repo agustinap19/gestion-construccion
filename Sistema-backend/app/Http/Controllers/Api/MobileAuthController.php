@@ -55,10 +55,11 @@ class MobileAuthController extends Controller
             'token'     => $token,
             'expira_en' => null,
             'user'      => [
-                'id'     => $user->id,
-                'nombre' => trim($user->nombre . ' ' . $user->apellido_paterno),
-                'email'  => $user->email,
-                'rol'    => $user->rol?->nombre,
+                'id'          => $user->id,
+                'nombre'      => trim($user->nombre . ' ' . $user->apellido_paterno),
+                'email'       => $user->email,
+                'rol'         => $user->rol?->nombre,
+                'personal_id' => $user->personal?->id,   // Para identificar al técnico en la app
             ],
         ]);
     }

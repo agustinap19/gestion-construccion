@@ -30,6 +30,16 @@ class ZonaGeograficaService
     }
 
     /**
+     * Crea una nueva zona geográfica
+     */
+    public function crear(array $datos): ZonaGeografica
+    {
+        $datos['estado'] = $datos['estado'] ?? 'activa';
+
+        return ZonaGeografica::create($datos);
+    }
+
+    /**
      * Obtiene zonas cercanas a una coordenada
      */
     public function obtenerCercanas(float $lat, float $lng, float $radioKm = 50): Collection

@@ -16,6 +16,18 @@ const zonaGeograficaService = {
     },
 
     /**
+     * Crea una nueva zona geográfica
+     */
+    crear: async (datos) => {
+        try {
+            const response = await api.post('/zonas-geograficas', datos);
+            return response.data?.data;
+        } catch (error) {
+            throw error;
+        }
+    },
+
+    /**
      * Lista zonas por departamento
      */
     porDepartamento: async (departamento) => {

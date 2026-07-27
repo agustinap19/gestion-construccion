@@ -4,12 +4,24 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Proyectos\ReporteAvanceService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ReporteAvanceController extends Controller
 {
     public function __construct(protected ReporteAvanceService $service) {}
+
+    // GET /api/proyectos/{proyectoId}/reportes-avance/galeria
+    public function galeriaProyecto(Request $request, int $proyectoId): JsonResponse
+    {
+        $data = $this->service->galeriaProyecto(
+            $proyectoId,
+            $request->input('desde'),
+            $request->input('hasta'),
+        );
+        return response()->json($data);
+    }
 
     // GET /api/viviendas/{viviendaId}/reportes-avance
     public function index(Request $request, int $viviendaId): JsonResponse
@@ -65,6 +77,26 @@ class ReporteAvanceController extends Controller
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    // GET /api/viviendas/{viviendaId}/reportes-avance/exportar-fotografico
+    public function exportarFotografico(Request $request, int $viviendaId)
+    {
+        $datos  = $this->service->datosParaExportarFotografico($viviendaId);
+        $html   = view('exports.reporte_avance_fotografico', $datos)->render();
+        $pdf    = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
+        $nombre = 'fotos_avance_' . ($datos['vivienda']->codigo ?? $viviendaId) . '.pdf';
+        return $pdf->download($nombre);
+    }
+
+    // GET /api/viviendas/{viviendaId}/reportes-avance/exportar-concluidos
+    public function exportarConcluidos(Request $request, int $viviendaId)
+    {
+        $datos  = $this->service->datosParaExportarConcluidos($viviendaId);
+        $html   = view('exports.reporte_avance_concluidos', $datos)->render();
+        $pdf    = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
+        $nombre = 'concluidos_' . ($datos['vivienda']->codigo ?? $viviendaId) . '.pdf';
+        return $pdf->download($nombre);
     }
 
     private function puedeRegistrar($user): bool

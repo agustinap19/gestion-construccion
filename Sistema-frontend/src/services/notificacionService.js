@@ -1,8 +1,12 @@
 import api from './api';
 
 const notificacionService = {
-    obtenerTodas: async (page = 1, perPage = 20) => {
-        const response = await api.get(`/notificaciones?page=${page}&per_page=${perPage}`);
+    obtenerTodas: async (page = 1, perPage = 20, leida = null) => {
+        let url = `/notificaciones?page=${page}&per_page=${perPage}`;
+        if (leida !== null) {
+            url += `&leida=${leida}`;
+        }
+        const response = await api.get(url);
         return response.data;
     },
 

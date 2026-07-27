@@ -117,7 +117,13 @@ const AlmacenProyecto = () => {
 
             {modalOpen && (
                 <AlmacenFormModal
-                    almacen={{ tipo: 'obra', proyecto_id: id }}
+                    almacen={{ 
+                        tipo: 'obra', 
+                        proyecto_id: id,
+                        latitud: proyecto?.latitud,
+                        longitud: proyecto?.longitud,
+                        ubicacion: proyecto?.direccion_obra || ''
+                    }}
                     onClose={() => setModalOpen(false)}
                     onGuardado={() => { setModalOpen(false); loadData(); }}
                 />

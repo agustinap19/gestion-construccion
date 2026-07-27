@@ -55,6 +55,11 @@ class CrearProyectoRequest extends FormRequest
             'fecha_inicio_planificada' => 'required|date',
             'fecha_fin_planificada'    => 'required|date|after:fecha_inicio_planificada',
 
+            // Optimización de activos (Simplex)
+            'avance_esperado'        => 'nullable|numeric|min:0|max:100',
+            'penalidad_diaria'       => 'nullable|numeric|min:0',
+            'dias_estimados_activo'  => 'nullable|integer|min:1',
+
             // Personal
             'responsable_id' => 'nullable|exists:users,id',
 

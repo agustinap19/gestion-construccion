@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ZonasGeograficas\CrearZonaGeograficaRequest;
 use App\Services\Clientes\ZonaGeograficaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +26,17 @@ class ZonaGeograficaController extends Controller
             'status' => 'success',
             'data' => $zonas
         ]);
+    }
+
+    public function store(CrearZonaGeograficaRequest $request): JsonResponse
+    {
+        $zona = $this->zonaService->crear($request->validated());
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Zona geográfica creada exitosamente.',
+            'data' => $zona
+        ], 201);
     }
 
     public function porDepartamento(string $departamento): JsonResponse

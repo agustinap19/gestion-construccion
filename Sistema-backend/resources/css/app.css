@@ -70,11 +70,68 @@
 @custom-variant sidebar-expanded (&:is([data-sidebar="expanded"] *));
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Scrollbar personalizado */
-.scrollbar-thin::-webkit-scrollbar { width: 4px; }
-.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: oklch(40% 0.01 260 / 0.4); border-radius: 999px; }
-.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: oklch(55% 0.01 260 / 0.6); }
+/* ── Scrollbar personalizado ───────────────────────────────────────────── */
+.scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; border-radius: 999px; }
+.scrollbar-thin::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, oklch(55% 0.2 290 / 0.4), oklch(62% 0.2 145 / 0.4));
+    border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(to bottom, oklch(55% 0.2 290 / 0.7), oklch(62% 0.2 145 / 0.7));
+}
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: oklch(55% 0.2 290 / 0.4) transparent; }
+
+/* ── Slider (range input) personalizado ─────────────────────────────────── */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    cursor: pointer;
+    outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 2px 8px oklch(0% 0 0 / 0.25), 0 0 0 2px oklch(55% 0.2 290 / 0.5);
+    cursor: grab;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    transform: scale(1.15);
+    box-shadow: 0 3px 12px oklch(0% 0 0 / 0.35), 0 0 0 3px oklch(55% 0.2 290 / 0.6);
+}
+input[type="range"]::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 2px 8px oklch(0% 0 0 / 0.25), 0 0 0 2px oklch(55% 0.2 290 / 0.5);
+    cursor: grab;
+}
+
+/* ── Selects personalizados ─────────────────────────────────────────────── */
+select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px !important;
+}
+
+/* ── Placeholders ───────────────────────────────────────────────────────── */
+::placeholder { color: var(--fg-subtle); opacity: 1; }
+textarea { resize: vertical; }
 
 /* Glass utility */
 .glass {

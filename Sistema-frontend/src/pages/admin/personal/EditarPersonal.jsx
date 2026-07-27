@@ -3,18 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import personalService from '../../../services/personalService';
+import api from '../../../services/api';
 import DatePickerInput from '../../../components/ui/DatePickerInput';
 import { CheckCircle, Briefcase, FileText, Shield, X, AlertTriangle, ChevronDown } from '../../../components/icons/Icons';
-
-const TIPOS_PERSONAL = [
-    { id: 'tecnico', label: 'Técnico' },
-    { id: 'obrero', label: 'Obrero' },
-    { id: 'trabajadora_social', label: 'Trabajadora Social' },
-    { id: 'administrativo', label: 'Administrativo' },
-    { id: 'gerente', label: 'Gerente' },
-    { id: 'encargado_almacen', label: 'Encargado de Almacén' },
-    { id: 'encargado_finanzas', label: 'Encargado de Finanzas' },
-];
 
 const TIPOS_CONTRATO = [
     { id: 'indefinido', label: 'Indefinido' },
@@ -125,13 +116,20 @@ const EditarPersonal = () => {
     const [errores, setErrores] = useState({});
     const [codigoEmpleado, setCodigoEmpleado] = useState('');
     const [nombreCompleto, setNombreCompleto] = useState('');
+    const [roles, setRoles] = useState([]);
+
+    useEffect(() => {
+        api.get('/roles', { params: { estado: 'activo' } })
+            .then(r => setRoles(r.data?.data?.data ?? []))
+            .catch(() => {});
+    }, []);
 
     const isGerenteOrFinanzas = user?.rol?.nombre === 'gerente' || user?.rol?.nombre === 'encargado_finanzas';
 
     const [f, setF] = useState({
         nombre: '', apellido_paterno: '', apellido_materno: '',
         ci: '', ci_complemento: '', fecha_nacimiento: '', telefono: '', direccion: '',
-        tipo: '', especialidad: '', categoria: '', fecha_contratacion: '',
+        rol_id: '', especialidad: '', categoria: '', fecha_contratacion: '',
         tipo_contrato: '', salario_base: '', frecuencia_pago: 'mensual',
         banco: '', numero_cuenta: '', tipo_cuenta: '',
     });
@@ -152,7 +150,7 @@ const EditarPersonal = () => {
                 fecha_nacimiento: p.fecha_nacimiento ? p.fecha_nacimiento.substring(0, 10) : '',
                 telefono: p.telefono || '',
                 direccion: p.direccion || '',
-                tipo: p.tipo || '',
+                rol_id: p.rol_id ? String(p.rol_id) : '',
                 especialidad: p.especialidad || '',
                 categoria: p.categoria || '',
                 fecha_contratacion: p.fecha_contratacion ? p.fecha_contratacion.substring(0, 10) : '',
@@ -216,7 +214,7 @@ const EditarPersonal = () => {
     const handleConfirmar = async () => {
         try {
             setSaving(true);
-            const payload = { ...f };
+            const payload = { ...f, rol_id: f.rol_id ? parseInt(f.rol_id) : undefined };
             if (!isGerenteOrFinanzas) {
                 delete payload.salario_base;
                 delete payload.frecuencia_pago;
@@ -420,8 +418,14 @@ const EditarPersonal = () => {
                             <SectionHeader icon={<Briefcase size={15} />} title="Información Laboral" color="blue" />
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <LBL required>Tipo de Personal</LBL>
-                                    <GlassSelect value={f.tipo} onChange={v => setField('tipo', v)} options={TIPOS_PERSONAL} />
+                                    <LBL required>Rol</LBL>
+                                    <GlassSelect
+                                        value={f.rol_id}
+                                        onChange={v => setField('rol_id', v)}
+                                        options={roles.map(r => ({ id: String(r.id), label: r.nombre_visible }))}
+                                        hasErr={!!errores.rol_id}
+                                    />
+                                    <ERR msg={errores.rol_id} />
                                 </div>
 
                                 <div>

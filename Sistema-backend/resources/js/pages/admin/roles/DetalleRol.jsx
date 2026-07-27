@@ -7,12 +7,10 @@ import PageHeader from '../../../components/layout/PageHeader';
 import Card from '../../../components/ui/Card';
 import Badge from '../../../components/ui/Badge';
 import Button from '../../../components/ui/Button';
-import Modal from '../../../components/ui/Modal';
 import Skeleton from '../../../components/ui/Skeleton';
 import Avatar from '../../../components/ui/Avatar';
-import SearchInput from '../../../components/ui/SearchInput';
 import EmptyState from '../../../components/ui/EmptyState';
-import { Shield, Edit, Trash, ArrowLeft, Users, Key, Check, Info, ShieldCheck, Eye } from '../../../components/icons/Icons';
+import { Shield, Edit, Trash, ArrowLeft, Users, Key, Check, Info, ShieldCheck, Eye, X, Search, ChevronDown } from '../../../components/icons/Icons';
 import { useBreadcrumbTitle } from '../../../context/BreadcrumbContext';
 
 const DetalleRol = () => {
@@ -120,8 +118,8 @@ const DetalleRol = () => {
         if (!busquedaPermisos) return permisos;
         const b = busquedaPermisos.toLowerCase();
         return permisos.filter(p =>
-            p.nombre_visible.toLowerCase().includes(b) ||
-            (p.descripcion && p.descripcion.toLowerCase().includes(b))
+            (p.nombre_visible?.toLowerCase() ?? '').includes(b) ||
+            (p.descripcion?.toLowerCase() ?? '').includes(b)
         );
     };
 
@@ -357,95 +355,157 @@ const DetalleRol = () => {
                 )}
             </div>
 
-            {/* Modal Edición de Permisos */}
-            <Modal
-                open={modalPermisos}
-                onClose={() => setModalPermisos(false)}
-                title={`Editar permisos de ${rol.nombre_visible}`}
-                size="xl"
-                footer={
-                    <div className="flex items-center justify-between w-full">
-                        <span className="text-sm text-slate-500 dark:text-slate-400">
-                            <strong className="text-emerald-600 dark:text-emerald-400">{permisosSeleccionados.length}</strong> permisos seleccionados
-                        </span>
-                        <div className="flex gap-3">
-                            <Button variant="secondary" onClick={() => setModalPermisos(false)} disabled={guardandoPermisos}>
-                                Cancelar
-                            </Button>
-                            <Button onClick={guardarPermisos} loading={guardandoPermisos}>
-                                Guardar cambios
-                            </Button>
+            {/* Modal Edición de Permisos — Glass Design */}
+            {modalPermisos && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(10px)' }}>
+                    <div className="w-full max-w-2xl rounded-2xl flex flex-col max-h-[90vh]"
+                        style={{ background: 'rgba(8,15,35,0.98)', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 40px 80px rgba(0,0,0,0.75)' }}>
+
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.07]">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                                    style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.25)' }}>
+                                    <Key size={18} className="text-emerald-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Editar Permisos</h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">{rol.nombre_visible}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs px-3 py-1 rounded-full font-semibold"
+                                    style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.2)', color: '#6ee7b7' }}>
+                                    {permisosSeleccionados.length} seleccionados
+                                </span>
+                                <button onClick={() => setModalPermisos(false)}
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/8 transition-colors">
+                                    <X size={16} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Search */}
+                        <div className="px-6 py-4 border-b border-white/[0.05]">
+                            <div className="relative">
+                                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                <input
+                                    value={busquedaPermisos}
+                                    onChange={e => setBusquedaPermisos(e.target.value)}
+                                    placeholder="Buscar permiso..."
+                                    className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none text-slate-200 placeholder-slate-600"
+                                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+                            {Object.entries(todosPermisos).map(([modulo, permisos]) => {
+                                const filtrados = permisosFiltrados(permisos);
+                                if (filtrados.length === 0) return null;
+                                const ids = permisos.map(p => p.id);
+                                const todosCheck = ids.every(pid => permisosSeleccionados.includes(pid));
+                                const algunosCheck = ids.some(pid => permisosSeleccionados.includes(pid)) && !todosCheck;
+                                const isOpen = modulosAbiertos[modulo];
+                                const selCount = ids.filter(pid => permisosSeleccionados.includes(pid)).length;
+
+                                return (
+                                    <div key={modulo} className="rounded-xl overflow-hidden"
+                                        style={{ border: `1px solid ${isOpen ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.07)'}` }}>
+
+                                        {/* Module header */}
+                                        <div className="flex items-center gap-3 px-4 py-3"
+                                            style={{ background: isOpen ? 'rgba(52,211,153,0.05)' : 'rgba(255,255,255,0.02)' }}>
+                                            <div className="relative flex items-center justify-center w-5 h-5 rounded border transition-all shrink-0 cursor-pointer"
+                                                style={{
+                                                    background: todosCheck ? 'rgba(52,211,153,0.2)' : 'rgba(255,255,255,0.04)',
+                                                    borderColor: todosCheck || algunosCheck ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.15)',
+                                                }}
+                                                onClick={() => toggleModulo(modulo, permisos)}>
+                                                {todosCheck && <Check size={11} className="text-emerald-400" />}
+                                                {algunosCheck && <span className="w-2 h-0.5 rounded-full bg-emerald-400" />}
+                                            </div>
+                                            <button className="flex-1 flex items-center gap-2 text-left min-w-0"
+                                                onClick={() => toggleModuloAbierto(modulo)}>
+                                                <span className="text-sm font-bold text-slate-200 capitalize">{modulo}</span>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0"
+                                                    style={{
+                                                        background: selCount > 0 ? 'rgba(52,211,153,0.12)' : 'rgba(148,163,184,0.1)',
+                                                        color: selCount > 0 ? '#6ee7b7' : '#94a3b8',
+                                                    }}>
+                                                    {selCount}/{permisos.length}
+                                                </span>
+                                            </button>
+                                            <button onClick={() => toggleModuloAbierto(modulo)}
+                                                className="text-slate-500 hover:text-slate-300 transition-colors shrink-0">
+                                                <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                                            </button>
+                                        </div>
+
+                                        {/* Permissions list */}
+                                        {isOpen && (
+                                            <div className="divide-y divide-white/[0.04]"
+                                                style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                                {filtrados.map(p => {
+                                                    const checked = permisosSeleccionados.includes(p.id);
+                                                    return (
+                                                        <label key={p.id}
+                                                            className="flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors"
+                                                            style={{ background: checked ? 'rgba(52,211,153,0.04)' : 'transparent' }}
+                                                            onMouseEnter={e => { if (!checked) e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                                                            onMouseLeave={e => { if (!checked) e.currentTarget.style.background = 'transparent'; }}>
+                                                            <div className="relative flex items-center justify-center w-5 h-5 rounded border transition-all shrink-0 mt-0.5"
+                                                                style={{
+                                                                    background: checked ? 'rgba(52,211,153,0.2)' : 'rgba(255,255,255,0.04)',
+                                                                    borderColor: checked ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.12)',
+                                                                }}>
+                                                                <input type="checkbox" className="absolute opacity-0 cursor-pointer w-full h-full"
+                                                                    checked={checked} onChange={() => togglePermiso(p.id)} />
+                                                                {checked && <Check size={10} className="text-emerald-400" />}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm text-slate-300">{p.nombre_visible ?? p.codigo}</p>
+                                                                {p.descripcion && (
+                                                                    <p className="text-xs text-slate-600 mt-0.5">{p.descripcion}</p>
+                                                                )}
+                                                            </div>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-between px-6 py-5 border-t border-white/[0.07]">
+                            <span className="text-sm text-slate-500">
+                                <span className="text-emerald-400 font-semibold">{permisosSeleccionados.length}</span> permisos seleccionados
+                            </span>
+                            <div className="flex gap-3">
+                                <button onClick={() => setModalPermisos(false)}
+                                    disabled={guardandoPermisos}
+                                    className="px-4 py-2.5 rounded-xl text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+                                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                                    Cancelar
+                                </button>
+                                <button onClick={guardarPermisos} disabled={guardandoPermisos}
+                                    className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 flex items-center gap-2 transition-all"
+                                    style={{ background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.35)' }}>
+                                    {guardandoPermisos
+                                        ? <span className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
+                                        : <Check size={14} />}
+                                    Guardar cambios
+                                </button>
+                            </div>
                         </div>
                     </div>
-                }
-            >
-                <div className="space-y-4">
-                    <SearchInput
-                        value={busquedaPermisos}
-                        onChange={setBusquedaPermisos}
-                        placeholder="Buscar permisos..."
-                    />
-
-                    <div className="max-h-[50vh] overflow-y-auto space-y-3 pr-1">
-                        {Object.entries(todosPermisos).map(([modulo, permisos]) => {
-                            const filtrados = permisosFiltrados(permisos);
-                            if (filtrados.length === 0) return null;
-                            const ids = permisos.map(p => p.id);
-                            const todosCheck = ids.every(pid => permisosSeleccionados.includes(pid));
-                            const algunosCheck = ids.some(pid => permisosSeleccionados.includes(pid)) && !todosCheck;
-
-                            return (
-                                <div key={modulo} className="border border-slate-200 dark:border-slate-800/50 rounded-xl overflow-hidden">
-                                    <button
-                                        onClick={() => toggleModuloAbierto(modulo)}
-                                        className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <input
-                                                type="checkbox"
-                                                checked={todosCheck}
-                                                ref={el => { if (el) el.indeterminate = algunosCheck; }}
-                                                onChange={() => toggleModulo(modulo, permisos)}
-                                                onClick={e => e.stopPropagation()}
-                                                className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                                            />
-                                            <span className="text-sm font-bold text-slate-900 dark:text-white capitalize">{modulo}</span>
-                                            <Badge variant="neutral">{permisos.length}</Badge>
-                                        </div>
-                                        <svg className={`w-4 h-4 text-slate-400 transition-transform ${modulosAbiertos[modulo] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <polyline points="6 9 12 15 18 9" />
-                                        </svg>
-                                    </button>
-
-                                    {modulosAbiertos[modulo] && (
-                                        <div className="p-3 space-y-1">
-                                            {filtrados.map(p => (
-                                                <label
-                                                    key={p.id}
-                                                    className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={permisosSeleccionados.includes(p.id)}
-                                                        onChange={() => togglePermiso(p.id)}
-                                                        className="w-4 h-4 mt-0.5 rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                                                    />
-                                                    <div>
-                                                        <p className="text-sm text-slate-700 dark:text-slate-300">{p.nombre_visible}</p>
-                                                        {p.descripcion && (
-                                                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{p.descripcion}</p>
-                                                        )}
-                                                    </div>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
                 </div>
-            </Modal>
+            )}
         </div>
     );
 };

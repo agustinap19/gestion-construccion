@@ -311,12 +311,21 @@ class MobileSyncController extends Controller
                 $uuidLocal ?? Str::uuid()->toString()
             );
 
+            // Detectar conflicto: otro técnico registró avance en este ítem en los últimos 10 min
+            $hayConflicto = ReporteAvance::where('presupuesto_item_proyecto_id', $pip->id)
+                ->where('tecnico_id', '!=', $user->id)
+                ->where('created_at', '>=', now()->subMinutes(10))
+                ->exists();
+
+            // Si hay conflicto → el reporte se crea pero queda pendiente de revisión por admin
+            $estadoReporte = $hayConflicto ? 'pendiente_revision' : 'aprobado';
+
             // Crear reporte + cascada en transacción
             $reporte = null;
             DB::transaction(function () use (
                 $pip, $user, $uuidLocal, $avanceRegistrado, $avanceActual,
                 $observacion, $fotoPath, $latitud, $longitud, $fueraDeRango,
-                $timestampLocal, &$reporte
+                $timestampLocal, $estadoReporte, &$reporte
             ) {
                 $reporte = ReporteAvance::create([
                     'uuid_local'                   => $uuidLocal,
@@ -333,7 +342,7 @@ class MobileSyncController extends Controller
                     'longitud'                     => $longitud,
                     'fuera_de_rango'               => $fueraDeRango,
                     'fecha_reporte'                => Carbon::parse($timestampLocal),
-                    'estado'                       => 'aprobado',
+                    'estado'                       => $estadoReporte,
                 ]);
 
                 // Auditoría
@@ -348,15 +357,18 @@ class MobileSyncController extends Controller
                     'descripcion'     => $observacion,
                 ]);
 
-                // Cascada: ítem → vivienda → proyecto
-                $this->avance->recalcularCascada($reporte);
+                // Cascada: ítem → vivienda → proyecto (solo si el reporte fue aprobado)
+                if ($estadoReporte === 'aprobado') {
+                    $this->avance->recalcularCascada($reporte);
+                }
             });
 
             return [
-                'uuid_local'    => $uuidLocal,
-                'id_servidor'   => $reporte->id,
-                'estado'        => 'ok',
+                'uuid_local'     => $uuidLocal,
+                'id_servidor'    => $reporte->id,
+                'estado'         => 'ok',
                 'fuera_de_rango' => $fueraDeRango,
+                'conflicto'      => $hayConflicto,  // La app puede informar al técnico
             ];
         } catch (\Throwable $e) {
             Log::error("SyncMovilController::procesarReporte error [{$uuidLocal}]: " . $e->getMessage());
@@ -420,15 +432,17 @@ class MobileSyncController extends Controller
     {
         $ids = [];
 
+        // Técnico: proyectos donde está asignado como personal (estado correcto: 'activa')
         if ($user->personal) {
             $ids = array_merge($ids,
                 AsignacionPersonal::where('personal_id', $user->personal->id)
-                    ->where('estado', 'activo')
+                    ->where('estado', 'activa')   // Fix: era 'activo', debe ser 'activa'
                     ->pluck('proyecto_id')
                     ->toArray()
             );
         }
 
+        // Admin/Responsable: proyectos donde es responsable_id directo
         $ids = array_merge($ids,
             Proyecto::where('responsable_id', $user->id)->pluck('id')->toArray()
         );

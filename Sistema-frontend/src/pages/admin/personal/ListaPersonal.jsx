@@ -39,17 +39,10 @@ const EstadoCell = ({ estado, onClick }) => {
     );
 };
 
-const tipoBadge = (tipo) => {
-    const map = {
-        tecnico: 'blue', obrero: 'amber', trabajadora_social: 'purple',
-        administrativo: 'slate', gerente: 'emerald', encargado_almacen: 'orange', encargado_finanzas: 'cyan'
-    };
-    const labels = {
-        tecnico: 'Técnico', obrero: 'Obrero', trabajadora_social: 'Trab. Social',
-        administrativo: 'Administrativo', gerente: 'Gerente',
-        encargado_almacen: 'Enc. Almacén', encargado_finanzas: 'Enc. Finanzas'
-    };
-    return <Badge variant={map[tipo] || 'neutral'}>{labels[tipo] || tipo}</Badge>;
+const rolBadge = (personal) => {
+    const nombre = personal?.rol?.nombre_visible;
+    if (!nombre) return null;
+    return <Badge variant="neutral">{nombre}</Badge>;
 };
 
 /* ── Component ── */
@@ -60,7 +53,7 @@ const ListaPersonal = () => {
     const [loading, setLoading] = useState(true);
     const [paginacion, setPaginacion] = useState({ current_page: 1, last_page: 1, total: 0, per_page: 15 });
     const [busquedaLocal, setBusquedaLocal] = useState('');
-    const [filtros, setFiltros] = useState({ busqueda: '', tipo: 'todos', estado_laboral: 'todos' });
+    const [filtros, setFiltros] = useState({ busqueda: '', estado_laboral: 'todos' });
     const [stats, setStats] = useState(null);
     const [vista, setVista] = useState(() => localStorage.getItem('personal_vista') || 'tabla');
 
@@ -162,7 +155,6 @@ const ListaPersonal = () => {
                             url="/exportar/personal"
                             filtros={{
                                 ...(filtros.estado_laboral !== 'todos' && { estado_laboral: filtros.estado_laboral }),
-                                ...(filtros.tipo !== 'todos'           && { tipo: filtros.tipo }),
                             }}
                             formatos={[
                                 { tipo: 'pdf',   label: 'Lista PDF'   },
@@ -198,17 +190,6 @@ const ListaPersonal = () => {
             {/* Filtros */}
             <div className="mb-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center flex-wrap">
                 <SearchInput value={busquedaLocal} onChange={setBusquedaLocal} placeholder="Buscar nombre, CI, código..." className="w-full sm:w-80" />
-                <select value={filtros.tipo} onChange={e => setFiltros(p => ({ ...p, tipo: e.target.value }))}
-                    className="h-[42px] px-3 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm text-slate-900 dark:text-slate-200 outline-none">
-                    <option value="todos">Todos los tipos</option>
-                    <option value="tecnico">Técnico</option>
-                    <option value="obrero">Obrero</option>
-                    <option value="trabajadora_social">Trabajadora Social</option>
-                    <option value="administrativo">Administrativo</option>
-                    <option value="gerente">Gerente</option>
-                    <option value="encargado_almacen">Encargado de Almacén</option>
-                    <option value="encargado_finanzas">Encargado de Finanzas</option>
-                </select>
                 <select value={filtros.estado_laboral} onChange={e => setFiltros(p => ({ ...p, estado_laboral: e.target.value }))}
                     className="h-[42px] px-3 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/50 rounded-xl text-sm text-slate-900 dark:text-slate-200 outline-none">
                     <option value="todos">Todos los estados</option>
@@ -312,7 +293,7 @@ const ListaPersonal = () => {
                                     <td className="p-3 font-mono text-xs text-slate-500 dark:text-slate-400">{p.codigo_empleado}</td>
                                     <td className="p-3">
                                         <div className="flex flex-col gap-1 items-start">
-                                            {tipoBadge(p.tipo)}
+                                            {rolBadge(p)}
                                             {p.especialidad && (
                                                 <span className="text-xs text-slate-500 truncate max-w-[120px]" title={p.especialidad}>{p.especialidad}</span>
                                             )}
@@ -370,7 +351,7 @@ const ListaPersonal = () => {
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2 mt-3">
-                                {tipoBadge(p.tipo)}
+                                {rolBadge(p)}
                                 {p.usuario_id && (
                                     <Badge variant="success" icon={<CheckCircle size={11} />}>Sistema</Badge>
                                 )}

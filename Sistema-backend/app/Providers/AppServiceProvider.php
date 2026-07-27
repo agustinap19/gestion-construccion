@@ -7,6 +7,8 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
+use App\Models\AsignacionActivo;
+use App\Observers\AsignacionActivoObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,6 +25,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        AsignacionActivo::observe(AsignacionActivoObserver::class);
+
         if (config('app.env') === 'production') {
             URL::forceScheme('https');
         }

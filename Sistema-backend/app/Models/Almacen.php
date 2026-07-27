@@ -47,6 +47,11 @@ class Almacen extends Model
         return $this->hasMany(MovimientoMaterial::class, 'almacen_id');
     }
 
+    public function activos()
+    {
+        return $this->hasMany(Activo::class, 'almacen_id');
+    }
+
     public function scopeActivos($query)
     {
         return $query->where('estado', 'activo');

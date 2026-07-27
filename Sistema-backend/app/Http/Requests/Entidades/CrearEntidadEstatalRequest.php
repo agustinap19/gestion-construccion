@@ -22,7 +22,7 @@ class CrearEntidadEstatalRequest extends FormRequest
             'zona_id' => 'nullable|exists:zonas_geograficas,id',
             'latitud' => 'nullable|numeric|between:-90,90',
             'longitud' => 'nullable|numeric|between:-180,180',
-            'telefono_principal' => 'nullable|string|max:20',
+            'telefono_principal' => ['nullable', 'string', 'regex:/^[67][0-9]{7}$/'],
             'email_oficial' => 'nullable|email|max:150',
             'sitio_web' => 'nullable|string|max:150',
             'representante_legal' => 'nullable|string|max:150',
@@ -42,6 +42,7 @@ class CrearEntidadEstatalRequest extends FormRequest
             'nit.required' => 'El NIT es obligatorio.',
             'zona_id.exists' => 'La zona geográfica seleccionada no existe.',
             'email_oficial.email' => 'El correo electrónico oficial no es válido.',
+            'telefono_principal.regex' => 'El teléfono debe ser un número boliviano válido (8 dígitos, empieza con 6 o 7).',
         ];
     }
 }

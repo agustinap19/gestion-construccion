@@ -6,6 +6,7 @@ import zonaGeograficaService from '../../../services/zonaGeograficaService';
 import api from '../../../services/api';
 import Skeleton from '../../../components/ui/Skeleton';
 import { parseGPSInput, decimalToGMS } from '../../../utils/gps';
+import MapLocationPicker from '../../../components/ui/MapLocationPicker';
 import {
     Briefcase, Users, Building, ArrowLeft, Check, ChevronRight,
     Plus, Trash2, Upload, X, MapPin, TrendingUp, TrendingDown, AlertTriangle,
@@ -98,26 +99,37 @@ const GpsField = ({ label, value, onChange, isLat, error }) => {
     const [raw, setRaw] = useState(value != null && value !== '' ? decimalToGMS(value, isLat) : '');
     const [gpsErr, setGpsErr] = useState('');
 
+    // Sincronizar 'raw' si 'value' cambia desde afuera (ej: clic en el mapa)
+    useEffect(() => {
+        if (value != null && value !== '') {
+            setRaw(decimalToGMS(value, isLat));
+        } else {
+            setRaw('');
+        }
+    }, [value, isLat]);
+
     const handleBlur = () => {
         if (!raw.trim()) { onChange(null); setGpsErr(''); return; }
-        const parsed = parseGPSInput(raw);
-        if (parsed === null) { setGpsErr('Formato inválido — usa GMS (17°23\'45.6"S) o decimal (-17.3960)'); return; }
+        const { decimal, error: parseError } = parseGPSInput(raw, isLat);
+        if (decimal === null) { setGpsErr(parseError || 'Formato inválido — usa GMS (17°23\'45.6"S) o decimal (-17.3960)'); return; }
         setGpsErr('');
-        onChange(parsed);
-        setRaw(decimalToGMS(parsed, isLat));
+        onChange(decimal);
+        setRaw(decimalToGMS(decimal, isLat));
     };
 
     return (
         <GF label={label} error={error || gpsErr}>
-            <div className="relative">
-                <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                    className={gI(!!(error || gpsErr)) + ' pl-8'}
-                    value={raw}
-                    onChange={e => { setRaw(e.target.value); setGpsErr(''); }}
-                    onBlur={handleBlur}
-                    placeholder={isLat ? '17°23\'45.6"S  ó  -17.3960' : '66°09\'12.3"W  ó  -66.1534'}
-                />
+            <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                    <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                        className={gI(!!(error || gpsErr)) + ' pl-8'}
+                        value={raw}
+                        onChange={e => { setRaw(e.target.value); setGpsErr(''); }}
+                        onBlur={handleBlur}
+                        placeholder={isLat ? '17°23\'45.6"S  ó  -17.3960' : '66°09\'12.3"W  ó  -66.1534'}
+                    />
+                </div>
             </div>
         </GF>
     );
@@ -200,16 +212,39 @@ const MiniClienteModal = ({ onCreado, onCerrar }) => {
 };
 
 /* ── Mini inline modal for creating an entity ── */
+const TELEFONO_BOLIVIA_RE = /^[67][0-9]{7}$/;
+const NIVELES_ENTIDAD = [
+    { val: 'nacional', label: 'Nacional' },
+    { val: 'departamental', label: 'Departamental' },
+    { val: 'municipal', label: 'Municipal' },
+    { val: 'otro', label: 'Otro' },
+];
+
 const MiniEntidadModal = ({ onCreada, onCerrar }) => {
-    const [form, setForm] = useState({ nombre: '', sigla: '', telefono: '', email: '' });
+    const [form, setForm] = useState({ nombre: '', sigla: '', nivel: 'municipal', nit: '', telefono: '', email: '' });
+    const [errores, setErrores] = useState({});
     const [guardando, setGuardando] = useState(false);
-    const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+    const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setErrores(p => ({ ...p, [k]: null })); };
 
     const handleSubmit = async () => {
-        if (!form.nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
+        const e = {};
+        if (!form.nombre.trim()) e.nombre = 'El nombre es obligatorio';
+        if (!form.nit.trim()) e.nit = 'El NIT es obligatorio';
+        if (form.telefono && !TELEFONO_BOLIVIA_RE.test(form.telefono))
+            e.telefono = 'Número boliviano inválido — 8 dígitos, empieza con 6 o 7';
+        setErrores(e);
+        if (Object.keys(e).length) return;
+
         try {
             setGuardando(true);
-            const res = await api.post('/entidades-estatales', form);
+            const res = await api.post('/entidades-estatales', {
+                nombre: form.nombre,
+                sigla: form.sigla,
+                nivel: form.nivel,
+                nit: form.nit,
+                telefono_principal: form.telefono,
+                email_oficial: form.email,
+            });
             const entidad = res.data?.data ?? res.data;
             toast.success('Entidad creada');
             onCreada(entidad);
@@ -229,20 +264,106 @@ const MiniEntidadModal = ({ onCreada, onCerrar }) => {
                     <button onClick={onCerrar} className="text-slate-500 hover:text-white"><X size={16} /></button>
                 </div>
                 <div className="p-5 space-y-3">
-                    <GF label="Nombre *">
-                        <input className={gI(false)} value={form.nombre} onChange={e => set('nombre', e.target.value)} placeholder="Ministerio de..." />
+                    <GF label="Nombre *" error={errores.nombre} hint={`${form.nombre.length}/100 caracteres`}>
+                        <input className={gI(!!errores.nombre)} value={form.nombre}
+                            onChange={e => set('nombre', e.target.value.slice(0, 100))}
+                            maxLength={100}
+                            placeholder="Ministerio de..." />
                     </GF>
                     <div className="grid grid-cols-2 gap-3">
-                        <GF label="Sigla">
-                            <input className={gI(false)} value={form.sigla} onChange={e => set('sigla', e.target.value)} placeholder="MTCC" />
+                        <GF label="Sigla" hint={`${form.sigla.length}/10`}>
+                            <input className={gI(false)} value={form.sigla}
+                                onChange={e => set('sigla', e.target.value.slice(0, 10))}
+                                maxLength={10}
+                                placeholder="MTCC" />
                         </GF>
-                        <GF label="Teléfono">
-                            <input className={gI(false)} value={form.telefono} onChange={e => set('telefono', e.target.value)} />
+                        <GF label="Nivel *">
+                            <GlassSelect value={form.nivel} onChange={e => set('nivel', e.target.value)}>
+                                {NIVELES_ENTIDAD.map(n => <option key={n.val} value={n.val}>{n.label}</option>)}
+                            </GlassSelect>
                         </GF>
                     </div>
+                    <GF label="NIT *" error={errores.nit}>
+                        <input className={gI(!!errores.nit)} value={form.nit} onChange={e => set('nit', e.target.value)} placeholder="1023456011" />
+                    </GF>
+                    <GF label="Teléfono" error={errores.telefono} hint="Ej: 71234567">
+                        <input className={gI(!!errores.telefono)} value={form.telefono}
+                            onChange={e => set('telefono', e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
+                            placeholder="71234567" />
+                    </GF>
                     <GF label="Email">
                         <input type="email" className={gI(false)} value={form.email} onChange={e => set('email', e.target.value)} />
                     </GF>
+                </div>
+                <div className="flex justify-end gap-3 px-5 pb-5">
+                    <button onClick={onCerrar} className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white transition-all"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>Cancelar</button>
+                    <button onClick={handleSubmit} disabled={guardando}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+                        style={{ background: 'linear-gradient(135deg,rgba(16,185,129,0.9),rgba(5,150,105,0.8))' }}>
+                        {guardando && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                        Crear
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ── Mini inline modal for creating a geographic zone ── */
+const DEPARTAMENTOS_BOLIVIA = ['La Paz', 'Cochabamba', 'Santa Cruz', 'Oruro', 'Potosí', 'Chuquisaca', 'Tarija', 'Beni', 'Pando'];
+
+const MiniZonaModal = ({ onCreada, onCerrar }) => {
+    const [form, setForm] = useState({ nombre: '', departamento: '', provincia: '', municipio: '' });
+    const [errores, setErrores] = useState({});
+    const [guardando, setGuardando] = useState(false);
+    const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setErrores(p => ({ ...p, [k]: null })); };
+
+    const handleSubmit = async () => {
+        const e = {};
+        if (!form.nombre.trim()) e.nombre = 'El nombre es obligatorio';
+        if (!form.departamento) e.departamento = 'Selecciona un departamento';
+        setErrores(e);
+        if (Object.keys(e).length) return;
+
+        try {
+            setGuardando(true);
+            const zona = await zonaGeograficaService.crear(form);
+            toast.success('Zona geográfica creada');
+            onCreada(zona);
+        } catch (e) {
+            toast.error(e.response?.data?.message || 'Error al crear la zona geográfica');
+        } finally { setGuardando(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}>
+            <div className="w-full max-w-sm rounded-2xl"
+                style={{ background: 'rgba(10,20,40,0.98)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <div className="flex items-center justify-between px-5 pt-5 pb-4"
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                    <h4 className="font-bold text-white text-sm">Nueva Zona Geográfica</h4>
+                    <button onClick={onCerrar} className="text-slate-500 hover:text-white"><X size={16} /></button>
+                </div>
+                <div className="p-5 space-y-3">
+                    <GF label="Nombre *" error={errores.nombre}>
+                        <input className={gI(!!errores.nombre)} value={form.nombre} onChange={e => set('nombre', e.target.value)} placeholder="Zona Norte" />
+                    </GF>
+                    <GF label="Departamento *" error={errores.departamento}>
+                        <GlassSelect value={form.departamento} onChange={e => set('departamento', e.target.value)} error={!!errores.departamento}>
+                            <option value="">— Seleccionar —</option>
+                            {DEPARTAMENTOS_BOLIVIA.map(d => <option key={d} value={d}>{d}</option>)}
+                        </GlassSelect>
+                    </GF>
+                    <div className="grid grid-cols-2 gap-3">
+                        <GF label="Provincia">
+                            <input className={gI(false)} value={form.provincia} onChange={e => set('provincia', e.target.value)} />
+                        </GF>
+                        <GF label="Municipio">
+                            <input className={gI(false)} value={form.municipio} onChange={e => set('municipio', e.target.value)} />
+                        </GF>
+                    </div>
                 </div>
                 <div className="flex justify-end gap-3 px-5 pb-5">
                     <button onClick={onCerrar} className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white transition-all"
@@ -277,6 +398,7 @@ const CrearProyecto = () => {
     const [usuarios, setUsuarios] = useState([]);
     const [miniCliente, setMiniCliente] = useState(false);
     const [miniEntidad, setMiniEntidad] = useState(false);
+    const [miniZona, setMiniZona] = useState(false);
 
     const [form, setForm] = useState({
         categoria: 'social',
@@ -495,7 +617,9 @@ const CrearProyecto = () => {
             const ini = new Date(form.fecha_inicio_planificada + 'T00:00:00');
             const fin = new Date(form.fecha_fin_planificada + 'T00:00:00');
             const minFin = new Date(ini); minFin.setDate(ini.getDate() + 30);
+            const maxFin = new Date(ini); maxFin.setFullYear(ini.getFullYear() + 4);
             if (fin < minFin) e.fecha_fin_planificada = 'Debe ser al menos 30 días después del inicio';
+            else if (fin > maxFin) e.fecha_fin_planificada = 'No puede superar 4 años desde el inicio';
         }
         if (form.categoria === 'social' && form.cantidad_beneficiarios && parseInt(form.cantidad_beneficiarios) < 1)
             e.cantidad_beneficiarios = 'Debe ser un número positivo';
@@ -547,13 +671,14 @@ const CrearProyecto = () => {
             if (form.porcentaje_utilidad_esperada)  append('porcentaje_utilidad_esperada', form.porcentaje_utilidad_esperada);
             if (form.contrato_pdf) fd.append('contrato_pdf', form.contrato_pdf);
 
+            append('direccion_obra', form.direccion_obra);
+            append('latitud', form.latitud);
+            append('longitud', form.longitud);
+
             if (form.categoria === 'privado') {
                 append('cliente_id', form.cliente_id);
                 append('tipo_obra', form.tipo_obra);
                 append('cantidad_fases', form.cantidad_fases);
-                append('direccion_obra', form.direccion_obra);
-                append('latitud', form.latitud);
-                append('longitud', form.longitud);
                 if (form.dividir_presupuesto && form.fases_config.length > 0) {
                     form.fases_config.forEach((f, i) => {
                         fd.append(`fases_config[${i}][nombre]`, f.nombre || `Fase ${i + 1}`);
@@ -602,6 +727,9 @@ const CrearProyecto = () => {
     const minInicioStr = _minInicio.toISOString().split('T')[0];
     const minFinStr = form.fecha_inicio_planificada
         ? (() => { const d = new Date(form.fecha_inicio_planificada + 'T00:00:00'); d.setDate(d.getDate() + 30); return d.toISOString().split('T')[0]; })()
+        : '';
+    const maxFinStr = form.fecha_inicio_planificada
+        ? (() => { const d = new Date(form.fecha_inicio_planificada + 'T00:00:00'); d.setFullYear(d.getFullYear() + 4); return d.toISOString().split('T')[0]; })()
         : '';
 
     /* ── Financial bar helper ── */
@@ -670,10 +798,10 @@ const CrearProyecto = () => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="sm:col-span-2">
                                         <GF label="Nombre del Proyecto" required error={errores.nombre}
-                                            hint={`${form.nombre.length}/50 caracteres`}>
+                                            hint={`${form.nombre.length}/200 caracteres`}>
                                             <input className={gI(!!errores.nombre)} value={form.nombre}
-                                                onChange={e => set('nombre', e.target.value.slice(0, 50))}
-                                                maxLength={50}
+                                                onChange={e => set('nombre', e.target.value.slice(0, 200))}
+                                                maxLength={200}
                                                 placeholder="Ej: Construcción Viviendas Sociales Zona Norte" />
                                         </GF>
                                     </div>
@@ -724,45 +852,54 @@ const CrearProyecto = () => {
 
                             <SectionCard title={form.categoria === 'social' ? 'Entidad Estatal' : 'Cliente Privado'} accent={form.categoria === 'social' ? '#22d3ee' : '#a78bfa'}>
                                 {form.categoria === 'social' ? (
-                                    <div className="flex gap-2">
-                                        <div className="flex-1">
-                                            <GF error={errores.entidad_estatal_id}>
+                                    <GF label="Entidad" required error={errores.entidad_estatal_id}>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
                                                 <GlassSelect value={form.entidad_estatal_id} onChange={e => set('entidad_estatal_id', e.target.value)} error={!!errores.entidad_estatal_id}>
                                                     <option value="">— Seleccionar entidad —</option>
                                                     {entidades.map(e => <option key={e.id} value={e.id}>{e.nombre}{e.sigla ? ` (${e.sigla})` : ''}</option>)}
                                                 </GlassSelect>
-                                            </GF>
+                                            </div>
+                                            <button onClick={() => setMiniEntidad(true)}
+                                                className="shrink-0 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                                                style={{ background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.25)', color: '#22d3ee' }}>
+                                                <Plus size={13} /> Nueva
+                                            </button>
                                         </div>
-                                        <button onClick={() => setMiniEntidad(true)}
-                                            className="shrink-0 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1"
-                                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}>
-                                            <Plus size={13} /> Nueva
-                                        </button>
-                                    </div>
+                                    </GF>
                                 ) : (
-                                    <div className="flex gap-2">
-                                        <div className="flex-1">
-                                            <GF error={errores.cliente_id}>
+                                    <GF label="Cliente" required error={errores.cliente_id}>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
                                                 <GlassSelect value={form.cliente_id} onChange={e => set('cliente_id', e.target.value)} error={!!errores.cliente_id}>
                                                     <option value="">— Seleccionar cliente —</option>
                                                     {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_visible ?? `${c.nombre_completo ?? c.nombre} ${c.apellido_paterno ?? ''}`}</option>)}
                                                 </GlassSelect>
-                                            </GF>
+                                            </div>
+                                            <button onClick={() => setMiniCliente(true)}
+                                                className="shrink-0 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                                                style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)', color: '#a78bfa' }}>
+                                                <Plus size={13} /> Nuevo
+                                            </button>
                                         </div>
-                                        <button onClick={() => setMiniCliente(true)}
-                                            className="shrink-0 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1"
-                                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}>
-                                            <Plus size={13} /> Nuevo
-                                        </button>
-                                    </div>
+                                    </GF>
                                 )}
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                                     <GF label="Zona Geográfica">
-                                        <GlassSelect value={form.zona_id} onChange={e => set('zona_id', e.target.value)}>
-                                            <option value="">— Opcional —</option>
-                                            {zonas.map(z => <option key={z.id} value={z.id}>{z.nombre}</option>)}
-                                        </GlassSelect>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <GlassSelect value={form.zona_id} onChange={e => set('zona_id', e.target.value)}>
+                                                    <option value="">— Opcional —</option>
+                                                    {zonas.map(z => <option key={z.id} value={z.id}>{z.nombre}</option>)}
+                                                </GlassSelect>
+                                            </div>
+                                            <button onClick={() => setMiniZona(true)}
+                                                className="shrink-0 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1"
+                                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)' }}>
+                                                <Plus size={13} /> Nueva
+                                            </button>
+                                        </div>
                                     </GF>
                                     <GF label="Responsable / Administrador">
                                         <GlassSelect value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)}>
@@ -786,9 +923,9 @@ const CrearProyecto = () => {
                                             min={minInicioStr}
                                             value={form.fecha_inicio_planificada} onChange={e => set('fecha_inicio_planificada', e.target.value)} />
                                     </GF>
-                                    <GF label="Fecha de Fin" required error={errores.fecha_fin_planificada} hint="Mín. 30 días después del inicio">
+                                    <GF label="Fecha de Fin" required error={errores.fecha_fin_planificada} hint="Entre 30 días y 4 años después del inicio">
                                         <input type="date" className={gI(!!errores.fecha_fin_planificada)}
-                                            min={minFinStr}
+                                            min={minFinStr} max={maxFinStr}
                                             value={form.fecha_fin_planificada} onChange={e => set('fecha_fin_planificada', e.target.value)} />
                                     </GF>
                                 </div>
@@ -847,25 +984,52 @@ const CrearProyecto = () => {
                                 </div>
                             )}
 
-                            {/* GPS + Dirección — proyectos privados */}
-                            {form.categoria === 'privado' && (
-                                <SectionCard title="Ubicación de Obra" accent="#fbbf24">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="sm:col-span-2">
-                                            <GF label="Dirección">
-                                                <div className="relative">
-                                                    <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                                                    <input className={gI(false) + ' pl-8'} value={form.direccion_obra}
-                                                        onChange={e => set('direccion_obra', e.target.value)}
-                                                        placeholder="Av. Principal 123, Barrio..." />
-                                                </div>
-                                            </GF>
-                                        </div>
-                                        <GpsField label="Latitud (GPS)" value={form.latitud} onChange={v => set('latitud', v ?? '')} isLat={true} error={errores.latitud} />
-                                        <GpsField label="Longitud (GPS)" value={form.longitud} onChange={v => set('longitud', v ?? '')} isLat={false} error={errores.longitud} />
+                            {/* GPS + Dirección — todos los proyectos */}
+                            <SectionCard title="Ubicación de Obra (Almacén principal)" accent="#fbbf24">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="sm:col-span-2">
+                                        <GF label="Dirección">
+                                            <div className="relative">
+                                                <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                                                <input className={gI(false) + ' pl-8'} value={form.direccion_obra}
+                                                    onChange={e => set('direccion_obra', e.target.value)}
+                                                    placeholder="Av. Principal 123, Barrio..." />
+                                            </div>
+                                        </GF>
                                     </div>
-                                </SectionCard>
-                            )}
+                                    <GpsField label="Latitud (GPS)" value={form.latitud} onChange={v => set('latitud', v ?? '')} isLat={true} error={errores.latitud} />
+                                    <GpsField label="Longitud (GPS)" value={form.longitud} onChange={v => set('longitud', v ?? '')} isLat={false} error={errores.longitud} />
+                                    <div className="sm:col-span-2 flex justify-end">
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                if (navigator.geolocation) {
+                                                    navigator.geolocation.getCurrentPosition((position) => {
+                                                        set('latitud', position.coords.latitude);
+                                                        set('longitud', position.coords.longitude);
+                                                        toast.success('Ubicación obtenida');
+                                                    }, () => toast.error('Error al obtener ubicación'));
+                                                } else {
+                                                    toast.error('Geolocalización no soportada');
+                                                }
+                                            }}
+                                            className="px-3 py-1.5 rounded-xl text-xs font-medium text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
+                                        >
+                                            📍 Usar mi ubicación actual
+                                        </button>
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <MapLocationPicker 
+                                            latitud={form.latitud} 
+                                            longitud={form.longitud} 
+                                            onChange={(lat, lng) => {
+                                                set('latitud', lat);
+                                                set('longitud', lng);
+                                            }} 
+                                        />
+                                    </div>
+                                </div>
+                            </SectionCard>
 
                             {/* Privado: Fases */}
                             {form.categoria === 'privado' && (
@@ -1163,6 +1327,16 @@ const CrearProyecto = () => {
                         setMiniEntidad(false);
                     }}
                     onCerrar={() => setMiniEntidad(false)}
+                />
+            )}
+            {miniZona && (
+                <MiniZonaModal
+                    onCreada={z => {
+                        setZonas(prev => [z, ...prev]);
+                        set('zona_id', String(z.id));
+                        setMiniZona(false);
+                    }}
+                    onCerrar={() => setMiniZona(false)}
                 />
             )}
         </>

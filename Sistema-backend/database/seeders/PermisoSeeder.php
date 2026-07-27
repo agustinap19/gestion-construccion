@@ -17,12 +17,16 @@ class PermisoSeeder extends Seeder
 
         $acciones = ['ver', 'crear', 'editar', 'eliminar'];
 
-        $permisos = [];
-
         foreach ($modulos as $modulo) {
             foreach ($acciones as $accion) {
-                $permisos[] = [
-                    'codigo' => $modulo . '.' . $accion,
+                $codigo = $modulo . '.' . $accion;
+
+                if (DB::table('permisos')->where('codigo', $codigo)->exists()) {
+                    continue;
+                }
+
+                DB::table('permisos')->insert([
+                    'codigo' => $codigo,
                     'nombre' => ucfirst($accion) . ' ' . ucfirst($modulo),
                     'nombre_visible' => ucfirst($accion) . ' ' . ucfirst($modulo),
                     'modulo' => $modulo,
@@ -30,10 +34,8 @@ class PermisoSeeder extends Seeder
                     'descripcion' => 'Permite ' . $accion . ' en el módulo ' . $modulo,
                     'created_at' => now(),
                     'updated_at' => now(),
-                ];
+                ]);
             }
         }
-
-        DB::table('permisos')->insert($permisos);
     }
 }

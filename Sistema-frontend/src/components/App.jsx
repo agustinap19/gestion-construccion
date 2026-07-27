@@ -19,7 +19,6 @@ import RestablecerPassword from '../pages/auth/RestablecerPassword';
 
 // Private
 import Dashboard from '../pages/private/Dashboard';
-import Notificaciones from '../pages/private/Notificaciones';
 import Reportes from '../pages/private/Reportes';
 
 import ReportePersonalRol from '../pages/reportes/ReportePersonalRol';
@@ -72,6 +71,12 @@ import DetalleProveedor  from '../pages/admin/proveedores/DetalleProveedor';
 // Biblioteca Constructiva
 import BibliotecaConstructiva from '../pages/admin/biblioteca/BibliotecaConstructiva';
 
+// Activos (maquinaria y herramientas)
+import ActivosIndex from '../pages/admin/activos/ActivosIndex';
+import AsignacionesPage from '../pages/activos/AsignacionesPage';
+import FlujoPrestamosPage from '../pages/activos/FlujoPrestamosPage';
+import HistorialEntregasPage from '../pages/activos/HistorialEntregasPage';
+
 const AppContent = () => {
     const { startLoading, stopLoading } = useLoading();
 
@@ -92,7 +97,6 @@ const AppContent = () => {
                 {/* Rutas protegidas */}
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                     <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/dashboard/notificaciones" element={<Notificaciones />} />
                     <Route path="/dashboard/reportes" element={<Reportes />} />
                     <Route path="/dashboard/mi-perfil" element={<MiPerfil />} />
                     <Route path="/dashboard/configuracion" element={<Configuracion />} />
@@ -127,6 +131,12 @@ const AppContent = () => {
 
                     <Route path="/dashboard/proveedores" element={<ProveedoresIndex />} />
                     <Route path="/dashboard/proveedores/:id" element={<DetalleProveedor />} />
+
+                    <Route path="/dashboard/activos" element={<ActivosIndex />} />
+                    <Route path="/dashboard/activos/historial-entregas" element={<HistorialEntregasPage />} />
+                    <Route path="/dashboard/activos/:id" element={<Navigate to="asignaciones" replace />} />
+                    <Route path="/dashboard/activos/:id/asignaciones" element={<AsignacionesPage />} />
+                    <Route path="/dashboard/activos/:id/prestamos-sociales" element={<FlujoPrestamosPage />} />
 
                     <Route path="/dashboard/proyectos" element={<ListaProyectos />} />
                     <Route path="/dashboard/proyectos/crear" element={<CrearProyecto />} />

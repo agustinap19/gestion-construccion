@@ -11,15 +11,6 @@ import {
 } from '../../../components/icons/Icons';
 
 /* ─── Constants ─── */
-const TIPOS_PERSONAL = [
-    { id: 'tecnico',              label: 'Técnico' },
-    { id: 'obrero',               label: 'Obrero' },
-    { id: 'trabajadora_social',   label: 'Trabajadora Social' },
-    { id: 'administrativo',       label: 'Administrativo' },
-    { id: 'gerente',              label: 'Gerente' },
-    { id: 'encargado_almacen',    label: 'Encargado de Almacén' },
-    { id: 'encargado_finanzas',   label: 'Encargado de Finanzas' },
-];
 
 const TIPOS_CONTRATO = [
     { id: 'indefinido',  label: 'Indefinido',  desc: 'Contrato sin límite de tiempo' },
@@ -257,7 +248,7 @@ const CrearPersonal = () => {
         codigo_empleado: '',
         nombre: '', apellido_paterno: '', apellido_materno: '',
         ci: '', ci_complemento: '', fecha_nacimiento: '', telefono: '', direccion: '',
-        tipo: 'obrero', especialidad: '', categoria: '',
+        personal_rol_id: '', especialidad: '', categoria: '',
         fecha_contratacion: new Date().toISOString().split('T')[0],
         tipo_contrato: 'indefinido', estado_laboral: 'activo',
         salario_base: '', frecuencia_pago: 'mensual',
@@ -359,8 +350,10 @@ const CrearPersonal = () => {
                 if (d && d > mx) err.fecha_nacimiento = 'Debe tener al menos 18 años';
             }
         }
-        if (n === 2 && !formData.fecha_contratacion)
-            err.fecha_contratacion = 'Obligatorio';
+        if (n === 2) {
+            if (!formData.fecha_contratacion) err.fecha_contratacion = 'Obligatorio';
+            if (!formData.personal_rol_id) err.personal_rol_id = 'El rol es obligatorio';
+        }
         if (n === 3 && formData.salario_base !== '' && (isNaN(Number(formData.salario_base)) || Number(formData.salario_base) < 0))
             err.salario_base = 'Monto inválido';
         if (n === 4 && formData.crear_usuario_vinculado) {
@@ -383,8 +376,10 @@ const CrearPersonal = () => {
         try {
             setLoading(true);
             const payload = { ...formData };
+            payload.rol_id = formData.personal_rol_id ? Number(formData.personal_rol_id) : undefined;
+            delete payload.personal_rol_id;
             if (payload.crear_usuario_vinculado) {
-                payload.usuario_data = { email: payload.email, rol_id: Number(payload.rol_id) };
+                payload.usuario_data = { email: payload.email, rol_id: Number(formData.rol_id) };
             }
             const res = await personalService.crear(payload);
             toast.success('Personal creado exitosamente');
@@ -556,12 +551,13 @@ const CrearPersonal = () => {
                                 <SectionHeader icon={Briefcase} title="Información Laboral" subtitle="Contrato y cargo en la empresa" color="blue" />
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <GF label="Tipo de Personal">
+                                    <GF label="Rol" error={errores.personal_rol_id} required>
                                         <GlassSelect
-                                            value={formData.tipo}
-                                            onChange={v => setField('tipo', v)}
-                                            options={TIPOS_PERSONAL}
-                                            placeholder="Seleccionar tipo..."
+                                            value={formData.personal_rol_id}
+                                            onChange={v => setField('personal_rol_id', v)}
+                                            options={roles.map(r => ({ id: String(r.id), label: r.nombre_visible }))}
+                                            placeholder="Seleccionar rol..."
+                                            hasErr={!!errores.personal_rol_id}
                                         />
                                     </GF>
                                     <GF label={<>Especialidad <span className="normal-case font-normal text-slate-600">(opcional)</span></>}>

@@ -141,11 +141,15 @@ class NotificacionService
     /**
      * Obtiene historial paginado
      */
-    public function obtenerTodas(int $usuarioId, int $perPage = 20): LengthAwarePaginator
+    public function obtenerTodas(int $usuarioId, int $perPage = 20, ?bool $leida = null): LengthAwarePaginator
     {
-        return NotificacionSistema::where('usuario_id', $usuarioId)
-            ->orderBy('created_at', 'desc')
-            ->paginate($perPage);
+        $query = NotificacionSistema::where('usuario_id', $usuarioId);
+        
+        if ($leida !== null) {
+            $query->where('leida', $leida);
+        }
+
+        return $query->orderBy('created_at', 'desc')->paginate($perPage);
     }
 
     /**

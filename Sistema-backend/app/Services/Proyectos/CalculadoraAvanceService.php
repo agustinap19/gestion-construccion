@@ -4,6 +4,7 @@ namespace App\Services\Proyectos;
 
 use App\Models\FaseProyecto;
 use App\Models\ItemChecklist;
+use App\Models\PresupuestoItemProyecto;
 use App\Models\Proyecto;
 use App\Models\Vivienda;
 use Carbon\Carbon;
@@ -35,7 +36,7 @@ class CalculadoraAvanceService
         if ($esSocial) {
             $viviendas = $proyecto->viviendas()
                 ->whereNotNull('beneficiario_id')
-                ->with(['itemsChecklist', 'tipoVivienda:id,nombre', 'beneficiario:id,nombre,apellido_paterno'])
+                ->with(['presupuestoItems', 'tipoVivienda:id,nombre', 'beneficiario:id,nombre,apellido_paterno'])
                 ->orderBy('codigo')
                 ->get();
 
@@ -248,6 +249,63 @@ class CalculadoraAvanceService
         }
     }
 
+    /**
+     * Recalcula ponderacion_avance de todos los PIPs de una vivienda basándose
+     * en costo real (cantidad_planificada × precio_unitario_referencial).
+     *
+     * Esto garantiza que ítems de mayor costo pesen más en el cálculo de avance,
+     * independientemente de lo que diga la plantilla de la biblioteca constructiva.
+     *
+     * Fallback: si ningún ítem tiene precio configurado → distribución igualitaria.
+     * Ítems con precio = 0 en un mix con ítems con precio → peso 0 (excluidos del cálculo).
+     */
+    public function recalcularPonderacionesPorCosto(int $viviendaId): void
+    {
+        $pips = PresupuestoItemProyecto::where('vivienda_id', $viviendaId)
+            ->with('itemConstructivo:id,precio_unitario_referencial')
+            ->get();
+
+        if ($pips->isEmpty()) return;
+
+        $costos = $pips->map(fn($pip) => [
+            'id'    => $pip->id,
+            'costo' => (float) $pip->cantidad_planificada
+                     * (float) ($pip->itemConstructivo?->precio_unitario_referencial ?? 0),
+        ]);
+
+        $totalCosto = $costos->sum('costo');
+
+        if ($totalCosto > 0) {
+            foreach ($costos as $item) {
+                PresupuestoItemProyecto::where('id', $item['id'])
+                    ->update(['ponderacion_avance' => round($item['costo'] / $totalCosto * 100, 4)]);
+            }
+        } else {
+            // Sin precios en la biblioteca → cada ítem pesa igual
+            $pondIgual = round(100.0 / $pips->count(), 4);
+            PresupuestoItemProyecto::whereIn('id', $pips->pluck('id'))
+                ->update(['ponderacion_avance' => $pondIgual]);
+        }
+    }
+
+    /**
+     * Ejecuta recalcularPonderacionesPorCosto para todas las viviendas del proyecto.
+     * Devuelve el número de viviendas procesadas.
+     */
+    public function recalcularPonderacionesProyecto(int $proyectoId): int
+    {
+        $viviendaIds = PresupuestoItemProyecto::where('proyecto_id', $proyectoId)
+            ->whereNotNull('vivienda_id')
+            ->distinct()
+            ->pluck('vivienda_id');
+
+        foreach ($viviendaIds as $vid) {
+            $this->recalcularPonderacionesPorCosto($vid);
+        }
+
+        return $viviendaIds->count();
+    }
+
     /** Indicador de salud: al_dia | retraso_menor | retraso_critico */
     public function calcularSalud(float $avanceReal, float $porcentajePlazo): string
     {
@@ -262,8 +320,8 @@ class CalculadoraAvanceService
     private function avancePorViviendas($viviendas): array
     {
         return $viviendas->map(function ($v) {
-            $items       = $v->itemsChecklist;
-            $completados = $items->where('estado', 'completado')->count();
+            $items       = $v->presupuestoItems;
+            $completados = $items->where('estado_ejecucion', 'terminado')->count();
             return [
                 'id'                    => $v->id,
                 'codigo'                => $v->codigo,
@@ -277,15 +335,7 @@ class CalculadoraAvanceService
                 'tiene_observaciones'   => (bool) $v->tiene_observaciones_activas,
                 'checklist_total'       => $items->count(),
                 'checklist_completados' => $completados,
-                'items_checklist'       => $items->map(fn($i) => [
-                    'id'               => $i->id,
-                    'nombre'           => $i->nombre,
-                    'orden'            => $i->orden,
-                    'estado'           => $i->estado,
-                    'ponderacion'      => (float) $i->ponderacion,
-                    'porcentaje_avance' => (float) $i->porcentaje_avance,
-                    'fecha_completado' => $i->fecha_completado?->format('Y-m-d'),
-                ])->values(),
+                'items_checklist'       => [],
             ];
         })->values()->toArray();
     }

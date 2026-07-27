@@ -1,36 +1,52 @@
-import React from 'react';
+import React from "react";
 
-/**
- * @typedef {'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'tech'} BadgeVariant
- * 
- * @param {Object} props
- * @param {BadgeVariant} [props.variant='neutral']
- * @param {React.ReactNode} [props.icon]
- */
 const Badge = ({
-    children,
-    variant = 'neutral',
-    icon,
-    className = '',
-    ...props
+  variant = "light",
+  color = "primary",
+  size = "md",
+  startIcon,
+  endIcon,
+  children,
 }) => {
-    const baseStyles = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border';
-    
-    const variants = {
-        success: 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20',
-        warning: 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20',
-        danger: 'bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20',
-        info: 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20',
-        neutral: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
-        tech: 'bg-purple-100 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20'
-    };
+  const baseStyles =
+    "inline-flex items-center px-2.5 py-0.5 justify-center gap-1 rounded-full font-medium";
 
-    return (
-        <span className={`${baseStyles} ${variants[variant]} ${className}`} {...props}>
-            {icon && <span className="mr-1.5 -ml-0.5">{icon}</span>}
-            {children}
-        </span>
-    );
+  const sizeStyles = {
+    sm: "text-[10px]",
+    md: "text-sm",
+  };
+
+  const variants = {
+    light: {
+      primary: "bg-violet-50 text-violet-500 dark:bg-violet-500/15 dark:text-violet-400",
+      success: "bg-success-50 text-success-600 dark:bg-success-500/15 dark:text-success-500",
+      error: "bg-error-50 text-error-600 dark:bg-error-500/15 dark:text-error-500",
+      warning: "bg-warning-50 text-warning-600 dark:bg-warning-500/15 dark:text-orange-400",
+      info: "bg-blue-light-50 text-blue-light-500 dark:bg-blue-light-500/15 dark:text-blue-light-500",
+      light: "bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-white/80",
+      dark: "bg-gray-500 text-white dark:bg-white/5 dark:text-white",
+    },
+    solid: {
+      primary: "bg-violet-500 text-white dark:text-white",
+      success: "bg-success-500 text-white dark:text-white",
+      error: "bg-error-500 text-white dark:text-white",
+      warning: "bg-warning-500 text-white dark:text-white",
+      info: "bg-blue-light-500 text-white dark:text-white",
+      light: "bg-gray-400 dark:bg-white/5 text-white dark:text-white/80",
+      dark: "bg-gray-700 text-white dark:text-white",
+    },
+  };
+
+  const sizeClass = sizeStyles[size] || sizeStyles.md;
+  const colorStyles = variants[variant]?.[color] || variants.light.primary;
+
+  return (
+    <span className={`${baseStyles} ${sizeClass} ${colorStyles}`}>
+      {startIcon && <span className="mr-1">{startIcon}</span>}
+      {children}
+      {endIcon && <span className="ml-1">{endIcon}</span>}
+    </span>
+  );
 };
 
 export default Badge;

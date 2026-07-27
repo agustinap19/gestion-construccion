@@ -34,15 +34,15 @@ class ProyectoController extends Controller
         ]);
         $perPage = $request->input('per_page', 20);
 
-        $proyectos = $this->service->listarConFiltros($filtros, $perPage);
+        $proyectos = $this->service->listarConFiltros($filtros, $perPage, $request->user());
         return response()->json($proyectos);
     }
 
-    public function estadisticas(): JsonResponse
+    public function estadisticas(Request $request): JsonResponse
     {
         return response()->json([
             'status' => 'success',
-            'data'   => $this->service->obtenerEstadisticasGenerales(),
+            'data'   => $this->service->obtenerEstadisticasGenerales($request->user()),
         ]);
     }
 
@@ -154,32 +154,41 @@ class ProyectoController extends Controller
         $data    = $this->service->obtenerDashboard($id);
         $proyecto = $data['proyecto'];
         $avance   = $data['avance'];
+        $gantt    = $data['gantt'] ?? ['items' => [], 'dias_totales' => null, 'fecha_inicio_proyecto' => null, 'fecha_fin_proyecto' => null, 'hoy' => now()->format('Y-m-d'), 'pos_hoy' => null];
         $unidades = $avance['avance_por_unidad'] ?? [];
         $nombre   = preg_replace('/[^A-Za-z0-9_\-]/', '_', $proyecto->codigo ?? 'proyecto');
 
         if ($tipo === 'excel') {
-            // CSV simple — Sub-fase E construirá el Excel real
+            $ganttItems = $gantt['items'] ?? [];
             $csv  = "Proyecto;{$proyecto->nombre}\r\n";
             $csv .= "Código;{$proyecto->codigo}\r\n";
             $csv .= "Estado;{$proyecto->estado}\r\n";
             $csv .= "Avance Global;{$avance['global']}%\r\n";
-            $csv .= "Días Transcurridos;{$avance['dias_transcurridos']} de {$avance['dias_totales']}\r\n\r\n";
-            $csv .= "Unidad;Estado;Avance;Checklist Completados;Checklist Total\r\n";
-            foreach ($unidades as $u) {
-                $csv .= "{$u['nombre']};{$u['estado']};{$u['porcentaje_avance']}%;{$u['checklist_completados']};{$u['checklist_total']}\r\n";
+            $csv .= "Período;{$gantt['fecha_inicio_proyecto']} → {$gantt['fecha_fin_proyecto']}\r\n";
+            $csv .= "Días Totales;{$gantt['dias_totales']}\r\n\r\n";
+            $csv .= "Producto/Fase;Avance;Estado;Fecha Inicio;Fecha Fin\r\n";
+            foreach ($ganttItems as $item) {
+                $avItem = $item['porcentaje_avance'] ?? $item['porcentaje'] ?? 0;
+                $fI = $item['fecha_inicio_planificada'] ?? '';
+                $fF = $item['fecha_fin_planificada'] ?? $item['fecha_planificada_cobro'] ?? '';
+                $csv .= "{$item['nombre']};{$avItem}%;{$item['estado']};{$fI};{$fF}\r\n";
             }
 
             return response($csv, 200, [
                 'Content-Type'        => 'text/csv; charset=UTF-8',
-                'Content-Disposition' => "attachment; filename=\"avance_{$nombre}.csv\"",
+                'Content-Disposition' => "attachment; filename=\"cronograma_{$nombre}.csv\"",
             ]);
         }
 
-        // PDF (DomPDF mock — Sub-fase E construirá el layout final)
-        $html = view('exports.avance_proyecto', compact('proyecto', 'avance', 'unidades'))->render();
-        $pdf  = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
+        $proyecto->load(['modificatorios' => fn($q) => $q->where('tipo', 'plazo')->where('estado', 'aplicado')]);
 
-        return $pdf->download("avance_{$nombre}.pdf");
+        $auth    = $request->user();
+        $usuario = $auth ? "{$auth->nombre} {$auth->apellido_paterno}" : '';
+
+        $html = view('exports.cronograma_proyecto', compact('proyecto', 'avance', 'gantt', 'unidades', 'usuario'))->render();
+        $pdf  = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+
+        return $pdf->download("cronograma_{$nombre}.pdf");
     }
 
     public function simples(): JsonResponse

@@ -46,6 +46,127 @@ class ReporteAvanceService
             ->toArray();
     }
 
+    public function galeriaProyecto(int $proyectoId, ?string $desde = null, ?string $hasta = null): array
+    {
+        $query = ReporteAvance::with([
+            'tecnico:id,nombre,apellido_paterno',
+            'pip.itemConstructivo:id,codigo,nombre',
+            'vivienda:id,codigo,beneficiario_id',
+            'vivienda.beneficiario:id,nombre,apellido_paterno',
+        ])
+        ->whereHas('vivienda', fn($q) => $q->where('proyecto_id', $proyectoId))
+        ->orderByDesc('fecha_reporte');
+
+        if ($desde) $query->whereDate('fecha_reporte', '>=', $desde);
+        if ($hasta) $query->whereDate('fecha_reporte', '<=', $hasta);
+
+        $grupos = $query->get()
+            ->groupBy('foto_path')
+            ->map(function ($grupo) {
+                $first = $grupo->first();
+                return [
+                    'foto_url'        => $first->foto_path,
+                    'foto_thumb_url'  => $first->foto_thumbnail_path ?? $first->foto_path,
+                    'fecha'           => $first->fecha_reporte?->toIso8601String(),
+                    'tecnico'         => $first->tecnico
+                        ? trim($first->tecnico->nombre . ' ' . $first->tecnico->apellido_paterno)
+                        : null,
+                    'observacion'     => $first->observacion,
+                    'vivienda_codigo' => $first->vivienda?->codigo,
+                    'beneficiario'    => $first->vivienda?->beneficiario
+                        ? trim($first->vivienda->beneficiario->nombre . ' ' . $first->vivienda->beneficiario->apellido_paterno)
+                        : null,
+                    'items' => $grupo->map(fn($r) => [
+                        'codigo'     => $r->pip?->itemConstructivo?->codigo,
+                        'nombre'     => $r->pip?->itemConstructivo?->nombre,
+                        'porcentaje' => (float) $r->porcentaje_avance,
+                    ])->values()->toArray(),
+                ];
+            })->values()->toArray();
+
+        return ['data' => $grupos, 'total' => count($grupos)];
+    }
+
+    // ── Exportaciones PDF ─────────────────────────────────────────────────────
+
+    public function datosParaExportarFotografico(int $viviendaId): array
+    {
+        $vivienda = Vivienda::with(['beneficiario.tipoVivienda', 'proyecto', 'tipoVivienda'])
+            ->findOrFail($viviendaId);
+
+        $reportes = ReporteAvance::with([
+                'tecnico:id,nombre,apellido_paterno',
+                'pip.itemConstructivo:id,codigo,nombre',
+            ])
+            ->where('vivienda_id', $viviendaId)
+            ->orderBy('fecha_reporte')
+            ->get();
+
+        // Group by foto_path — registrarMulti creates multiple rows sharing the same physical photo
+        $grupos = $reportes->groupBy('foto_path')->map(function ($grupo) {
+            $first = $grupo->first();
+            return [
+                'foto_path'  => $first->foto_path,
+                'thumb_path' => $first->foto_thumbnail_path ?? $first->foto_path,
+                'fecha'      => $first->fecha_reporte,
+                'tecnico'    => $first->tecnico
+                    ? trim($first->tecnico->nombre . ' ' . $first->tecnico->apellido_paterno)
+                    : 'Técnico',
+                'observacion' => $first->observacion,
+                'items'      => $grupo->map(fn($r) => [
+                    'codigo'     => $r->pip?->itemConstructivo?->codigo,
+                    'nombre'     => $r->pip?->itemConstructivo?->nombre ?? "Ítem #{$r->presupuesto_item_proyecto_id}",
+                    'porcentaje' => (float) $r->porcentaje_avance,
+                    'terminado'  => $r->porcentaje_avance >= 100,
+                ])->values()->toArray(),
+            ];
+        })->values();
+
+        return compact('vivienda', 'grupos');
+    }
+
+    public function datosParaExportarConcluidos(int $viviendaId): array
+    {
+        $vivienda = Vivienda::with(['beneficiario.tipoVivienda', 'proyecto', 'tipoVivienda'])
+            ->findOrFail($viviendaId);
+
+        $pipsTerminados = PresupuestoItemProyecto::where('vivienda_id', $viviendaId)
+            ->where('estado_ejecucion', 'terminado')
+            ->pluck('id');
+
+        // Last report per completed item that set it to >= 100%
+        $ultimosReportes = ReporteAvance::with([
+                'tecnico:id,nombre,apellido_paterno',
+                'pip.itemConstructivo:id,codigo,nombre',
+            ])
+            ->whereIn('presupuesto_item_proyecto_id', $pipsTerminados)
+            ->where('porcentaje_avance', '>=', 100)
+            ->orderByDesc('fecha_reporte')
+            ->get()
+            ->unique('presupuesto_item_proyecto_id');
+
+        $grupos = $ultimosReportes->groupBy('foto_path')->map(function ($grupo) {
+            $first = $grupo->first();
+            return [
+                'foto_path'  => $first->foto_path,
+                'thumb_path' => $first->foto_thumbnail_path ?? $first->foto_path,
+                'fecha'      => $first->fecha_reporte,
+                'tecnico'    => $first->tecnico
+                    ? trim($first->tecnico->nombre . ' ' . $first->tecnico->apellido_paterno)
+                    : 'Técnico',
+                'observacion' => $first->observacion,
+                'items'      => $grupo->map(fn($r) => [
+                    'codigo'     => $r->pip?->itemConstructivo?->codigo,
+                    'nombre'     => $r->pip?->itemConstructivo?->nombre ?? "Ítem #{$r->presupuesto_item_proyecto_id}",
+                    'porcentaje' => (float) $r->porcentaje_avance,
+                    'terminado'  => true,
+                ])->values()->toArray(),
+            ];
+        })->values();
+
+        return compact('vivienda', 'grupos');
+    }
+
     // ── Crear ─────────────────────────────────────────────────────────────────
 
     /**

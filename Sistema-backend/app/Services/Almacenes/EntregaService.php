@@ -41,7 +41,7 @@ class EntregaService
 
     public function registrarEntrada(array $data, int $userId): MovimientoAlmacen
     {
-        return DB::transaction(function () use ($data, $userId) {
+        $movimiento = DB::transaction(function () use ($data, $userId) {
             $almacen = Almacen::findOrFail($data['almacen_id']);
 
             // Resolver nombre del proveedor desde FK si se envió proveedor_id
@@ -113,8 +113,16 @@ class EntregaService
                 }
             }
 
-            return $movimiento->load(['detalles.material', 'almacenDestino']);
+            return $movimiento;
         });
+
+        // ── Evidencias: solo se escriben a disco una vez confirmado el commit ──
+        // (evita archivos huérfanos si la transacción anterior se revierte)
+        if (!empty($data['evidencias'])) {
+            $this->guardarEvidencias($movimiento->id, $data['evidencias'], $userId);
+        }
+
+        return $movimiento->load(['detalles.material', 'almacenDestino', 'evidencias']);
     }
 
     // ─── SALIDA SOCIAL (entrega a beneficiario) ──────────────────────────────────
@@ -126,7 +134,9 @@ class EntregaService
      */
     public function registrarSalidaSocial(array $data, int $userId): array
     {
-        return DB::transaction(function () use ($data, $userId) {
+        $movimientoIdEvidencias = null;
+
+        $movimientos = DB::transaction(function () use ($data, $userId, &$movimientoIdEvidencias) {
             $almacen      = Almacen::findOrFail($data['almacen_id']);
             $beneficiario = Beneficiario::findOrFail($data['beneficiario_id']);
             $materialId   = (int) $data['material_id'];
@@ -147,9 +157,7 @@ class EntregaService
                     $materialId, (float) $data['cantidad_total'],
                     $data['justificacion_sobre_consumo'], $data, $userId, $concepto
                 );
-                if (!empty($data['evidencias'])) {
-                    $this->guardarEvidencias($mov->id, $data['evidencias'], $userId);
-                }
+                $movimientoIdEvidencias = $mov->id;
                 $movimientos[] = $mov;
             } else {
                 // ── Un movimiento por ítem ────────────────────────────────────────
@@ -178,8 +186,8 @@ class EntregaService
                     );
 
                     // Evidencias solo en el primer movimiento
-                    if ($idx === 0 && !empty($data['evidencias'])) {
-                        $this->guardarEvidencias($mov->id, $data['evidencias'], $userId);
+                    if ($idx === 0) {
+                        $movimientoIdEvidencias = $mov->id;
                     }
 
                     $this->registrarPrimeraEntrega($itemPpto);
@@ -210,6 +218,14 @@ class EntregaService
 
             return $movimientos;
         });
+
+        // ── Evidencias: solo se escriben a disco una vez confirmado el commit ──
+        // (evita archivos huérfanos si la transacción anterior se revierte)
+        if (!empty($data['evidencias']) && $movimientoIdEvidencias) {
+            $this->guardarEvidencias($movimientoIdEvidencias, $data['evidencias'], $userId);
+        }
+
+        return $movimientos;
     }
 
     private function crearMovimientoIndividual(
@@ -282,7 +298,7 @@ class EntregaService
 
     public function registrarSalidaPrivada(array $data, int $userId): MovimientoAlmacen
     {
-        return DB::transaction(function () use ($data, $userId) {
+        $movimiento = DB::transaction(function () use ($data, $userId) {
             $almacen = Almacen::findOrFail($data['almacen_id']);
 
             $movimiento = MovimientoAlmacen::create([
@@ -330,10 +346,6 @@ class EntregaService
 
             $movimiento->update(['monto_total' => $montoTotal]);
 
-            if (!empty($data['evidencias'])) {
-                $this->guardarEvidencias($movimiento->id, $data['evidencias'], $userId);
-            }
-
             // ── Hook de trazabilidad (salida privada) ──────────────────────
             $proyectoId = $data['proyecto_id'] ?? $almacen->proyecto_id;
             if ($proyectoId) {
@@ -345,10 +357,16 @@ class EntregaService
                 }
             }
 
-            $resultado = $movimiento->load(['detalles.material', 'receptorPersonal', 'evidencias']);
-
-            return $resultado;
+            return $movimiento;
         });
+
+        // ── Evidencias: solo se escriben a disco una vez confirmado el commit ──
+        // (evita archivos huérfanos si la transacción anterior se revierte)
+        if (!empty($data['evidencias'])) {
+            $this->guardarEvidencias($movimiento->id, $data['evidencias'], $userId);
+        }
+
+        return $movimiento->load(['detalles.material', 'receptorPersonal', 'evidencias']);
     }
 
     // ─── TRANSFERENCIA ───────────────────────────────────────────────────────────
@@ -748,31 +766,38 @@ class EntregaService
             return; // Already marked done by user — don't revert
         }
 
-        if ($item->estado_ejecucion === 'pendiente') {
-            $item->update(['estado_ejecucion' => 'en_proceso']);
-        }
+        // Only transition to en_proceso via photo reports (ReporteAvanceService),
+        // not material delivery — avoids showing 0% items as "en proceso".
     }
 
     private function guardarEvidencias(int $movimientoId, array $evidencias, int $userId): void
     {
+        // Se ejecuta fuera de la transacción del movimiento: si una foto falla
+        // (base64 corrupto, etc.) no debe hacer parecer que el movimiento no se guardó.
         foreach ($evidencias as $ev) {
-            // Si viene en base64, guardar en storage
-            $url = $ev['archivo_url'] ?? null;
-            if (!empty($ev['base64'])) {
-                $url = $this->guardarBase64($ev['base64'], $ev['tipo'] ?? 'foto');
-            }
+            try {
+                $url = $ev['archivo_url'] ?? null;
+                if (!empty($ev['base64'])) {
+                    $url = $this->guardarBase64($ev['base64'], $ev['tipo'] ?? 'foto');
+                }
 
-            EvidenciaMovimiento::create([
-                'movimiento_almacen_id' => $movimientoId,
-                'tipo'                  => $ev['tipo'] ?? 'foto',
-                'archivo_url'           => $url,
-                'hash_validacion'       => $url ? hash('sha256', $url . $movimientoId) : null,
-                'latitud'               => $ev['latitud'] ?? null,
-                'longitud'              => $ev['longitud'] ?? null,
-                'dispositivo'           => $ev['dispositivo'] ?? null,
-                'usuario_captura_id'    => $userId,
-                'fecha_captura'         => now(),
-            ]);
+                EvidenciaMovimiento::create([
+                    'movimiento_almacen_id' => $movimientoId,
+                    'tipo'                  => $ev['tipo'] ?? 'foto',
+                    'archivo_url'           => $url,
+                    'hash_validacion'       => $url ? hash('sha256', $url . $movimientoId) : null,
+                    'latitud'               => $ev['latitud'] ?? null,
+                    'longitud'              => $ev['longitud'] ?? null,
+                    'dispositivo'           => $ev['dispositivo'] ?? null,
+                    'usuario_captura_id'    => $userId,
+                    'fecha_captura'         => now(),
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('No se pudo guardar evidencia de movimiento', [
+                    'movimiento_almacen_id' => $movimientoId,
+                    'error'                 => $e->getMessage(),
+                ]);
+            }
         }
     }
 

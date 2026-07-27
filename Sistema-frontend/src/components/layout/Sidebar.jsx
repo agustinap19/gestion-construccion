@@ -5,7 +5,7 @@ import { useNotificaciones } from '../../context/NotificacionContext';
 import {
     Home, Bell, Briefcase, Package, Warehouse, Truck, Users,
     Shield, FileText, LogOut, Settings, User, Sun, Moon,
-    Pin, PinOff, BookOpen
+    Pin, PinOff, BookOpen, Wrench
 } from '../icons/Icons';
 import Avatar from '../ui/Avatar';
 import Dropdown from '../ui/Dropdown';
@@ -39,7 +39,6 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
             title: 'Principal',
             items: [
                 { id: 'home', label: 'Inicio', icon: Home, path: '/dashboard', exact: true },
-                { id: 'notificaciones', label: 'Notificaciones', icon: Bell, path: '/dashboard/notificaciones', badge: contador > 0 ? contador : null },
             ]
         },
         {
@@ -49,6 +48,7 @@ const Sidebar = ({ isOpenMobile, setIsOpenMobile }) => {
                 ...(hasPermission('materiales.ver') ? [{ id: 'materiales', label: 'Materiales', icon: Package, path: '/dashboard/materiales' }] : []),
                 ...(hasPermission('almacenes.ver') ? [{ id: 'almacenes', label: 'Almacenes', icon: Warehouse, path: '/dashboard/almacenes' }] : []),
                 ...(hasPermission('biblioteca_constructiva.ver') ? [{ id: 'biblioteca', label: 'Biblioteca', icon: BookOpen, path: '/dashboard/biblioteca-constructiva' }] : []),
+                ...(hasPermission('activos.ver') ? [{ id: 'activos', label: 'Maquinaria y Herramientas', icon: Wrench, path: '/dashboard/activos' }] : []),
                 { id: 'proveedores', label: 'Proveedores', icon: Truck, path: '/dashboard/proveedores' },
             ]
         },

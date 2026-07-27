@@ -17,6 +17,8 @@ class DatabaseSeeder extends Seeder
             PermisosProyectoSeeder::class,
             PermisoAlmacenesSeeder::class,
             PermisoBibliotecaSeeder::class,
+            PermisoActivosSeeder::class,
+            PermisoActasSeeder::class,
             RolPermisoSeeder::class,
             UserSeeder::class,
 
@@ -54,6 +56,10 @@ class DatabaseSeeder extends Seeder
             ProyectoSeeder::class,
             BeneficiarioSeeder::class,
             ViviendaSeeder::class,
+
+            // Activos: maquinaria, equipo, herramienta y vehículos
+            // (después de ProyectoSeeder: requiere almacenes tipo 'obra' ya creados)
+            ActivoSeeder::class,
 
             // Módulos en pausa — no sembrar datos de:
             // FaseProyectoSeeder, PlanillaPagoSeeder, DetallePlanillaSeeder

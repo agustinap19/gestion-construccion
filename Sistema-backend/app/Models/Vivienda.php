@@ -87,6 +87,21 @@ class Vivienda extends Model
         return $this->hasMany(ItemChecklist::class, 'vivienda_id')->orderBy('orden');
     }
 
+    public function presupuestoItems()
+    {
+        return $this->hasMany(\App\Models\PresupuestoItemProyecto::class, 'vivienda_id')->orderBy('orden');
+    }
+
+    public function asignacionesActivo()
+    {
+        return $this->hasMany(AsignacionActivo::class, 'vivienda_id');
+    }
+
+    public function actasEntregaActivo()
+    {
+        return $this->hasMany(ActaEntregaActivo::class, 'vivienda_id');
+    }
+
     // ── Accessors ────────────────────────────────────────────────────────────
 
     public function getTieneAvanceAttribute(): bool

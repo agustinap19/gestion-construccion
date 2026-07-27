@@ -26,13 +26,13 @@ class AsignacionPersonalController extends Controller
     {
         $request->validate([
             'personal_id'             => 'required|exists:personal,id',
-            'rol_en_proyecto'         => 'required|string|max:100',
+            'rol_id'                  => 'required|exists:roles,id',
             'responsabilidades'       => 'nullable|string|max:1000',
             'es_responsable_principal' => 'nullable|boolean',
             'fecha_inicio'            => 'nullable|date',
         ]);
         $datos = array_merge(
-            $request->only(['personal_id', 'rol_en_proyecto', 'responsabilidades', 'es_responsable_principal', 'fecha_inicio']),
+            $request->only(['personal_id', 'rol_id', 'responsabilidades', 'es_responsable_principal', 'fecha_inicio']),
             ['proyecto_id' => $proyectoId]
         );
         $asignacion = $this->service->asignar($datos, $request->user()->id);
@@ -42,10 +42,10 @@ class AsignacionPersonalController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $request->validate([
-            'rol_en_proyecto' => 'sometimes|string|max:100',
+            'rol_id'           => 'sometimes|exists:roles,id',
             'responsabilidades' => 'nullable|string|max:1000',
         ]);
-        $asignacion = $this->service->actualizar($id, $request->only(['rol_en_proyecto', 'responsabilidades']), $request->user()->id);
+        $asignacion = $this->service->actualizar($id, $request->only(['rol_id', 'responsabilidades']), $request->user()->id);
         return response()->json(['status' => 'success', 'data' => $asignacion, 'message' => 'Asignación actualizada.']);
     }
 

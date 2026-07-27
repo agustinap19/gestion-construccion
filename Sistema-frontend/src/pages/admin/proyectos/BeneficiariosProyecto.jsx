@@ -416,6 +416,8 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
     const [docPreview, setDocPreview] = useState(beneficiario?.documento_propiedad_terreno_url || null);
     const [subiendoFoto, setSubiendoFoto] = useState(false);
     const [subiendoDoc, setSubiendoDoc] = useState(false);
+    const [arrastrandoFoto, setArrastrandoFoto] = useState(false);
+    const fotoInputRef = useRef(null);
     const [modoGms, setModoGms] = useState(false);
     const [gmsLat, setGmsLat] = useState('');
     const [gmsLng, setGmsLng] = useState('');
@@ -450,8 +452,9 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
         setErrors(e => { const n = {...e}; delete n.coordenadas; return n; });
     };
 
-    const subirFoto = async (e) => {
-        const file = e.target.files?.[0]; if (!file) return;
+    const procesarFoto = async (file) => {
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { toast.error('El archivo debe ser una imagen'); return; }
         if (file.size > 2 * 1024 * 1024) { toast.error('La imagen no puede superar los 2 MB'); return; }
         setSubiendoFoto(true);
         try {
@@ -460,6 +463,15 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
             set('foto_titular_url', url);
         } catch { toast.error('Error al subir la foto'); }
         finally { setSubiendoFoto(false); }
+    };
+
+    const subirFoto = (e) => procesarFoto(e.target.files?.[0]);
+    const handleFotoDragOver  = (e) => { e.preventDefault(); e.stopPropagation(); setArrastrandoFoto(true); };
+    const handleFotoDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setArrastrandoFoto(false); };
+    const handleFotoDrop      = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        setArrastrandoFoto(false);
+        procesarFoto(e.dataTransfer.files?.[0]);
     };
 
     const subirDoc = async (e) => {
@@ -553,17 +565,30 @@ function FormularioBeneficiario({ proyectoId, beneficiario, tipologias, onClose,
                         <div>
                             <p className="text-slate-400 text-xs mb-2">Foto del titular <span className="text-slate-600">(JPEG/PNG, máx. 2 MB)</span></p>
                             <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0"
-                                    style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)' }}>
+                                <div
+                                    onDragOver={handleFotoDragOver}
+                                    onDragLeave={handleFotoDragLeave}
+                                    onDrop={handleFotoDrop}
+                                    onClick={() => !subiendoFoto && fotoInputRef.current?.click()}
+                                    className={`w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 cursor-pointer transition-all relative ${arrastrandoFoto ? 'scale-105' : ''}`}
+                                    style={{
+                                        background: arrastrandoFoto ? 'rgba(96,165,250,0.2)' : 'rgba(96,165,250,0.1)',
+                                        border: `1px ${fotoPreview ? 'solid' : 'dashed'} ${arrastrandoFoto ? 'rgba(96,165,250,0.8)' : 'rgba(96,165,250,0.3)'}`,
+                                    }}>
                                     {fotoPreview
                                         ? <img src={fotoPreview} alt="" className="w-full h-full object-cover" />
                                         : <div className="w-full h-full flex items-center justify-center"><User size={24} className="text-blue-400" /></div>
                                     }
+                                    {subiendoFoto && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        </div>
+                                    )}
                                 </div>
                                 <label className={`flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer text-sm transition-all ${subiendoFoto ? 'opacity-50' : 'hover:bg-white/[0.06]'}`}
                                     style={{ border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>
-                                    <Upload size={14} />{subiendoFoto ? 'Subiendo…' : 'Subir foto'}
-                                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={subirFoto} disabled={subiendoFoto} />
+                                    <Upload size={14} />{subiendoFoto ? 'Subiendo…' : arrastrandoFoto ? 'Soltá para subir…' : 'Subir o arrastrá la foto'}
+                                    <input ref={fotoInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={subirFoto} disabled={subiendoFoto} />
                                 </label>
                             </div>
                         </div>

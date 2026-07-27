@@ -32,6 +32,11 @@ class ActualizarProyectoRequest extends FormRequest
             'latitud'                  => 'nullable|numeric|between:-90,90',
             'longitud'                 => 'nullable|numeric|between:-180,180',
             'observaciones'            => 'nullable|string|max:2000',
+
+            // Optimización de activos (Simplex)
+            'avance_esperado'        => 'nullable|numeric|min:0|max:100',
+            'penalidad_diaria'       => 'nullable|numeric|min:0',
+            'dias_estimados_activo'  => 'nullable|integer|min:1',
         ];
     }
 }

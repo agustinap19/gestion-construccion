@@ -38,3 +38,6 @@ Thumbs.db
 # ── Logs ──────────────────────────────────────────────
 *.log
 npm-debug.log*
+
+# ── App móvil (carpeta temporal, NO versionar) ─────────
+app-ConstructoraCAKANAGF/

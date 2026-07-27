@@ -16,11 +16,25 @@ class PersonalSeeder extends Seeder
 
         $bancos = ['Banco Nacional de Bolivia', 'Banco Mercantil Santa Cruz', 'Banco Unión', 'Banco BISA'];
 
+        $usuariosConPersonal = DB::table('personal')->whereNotNull('usuario_id')->pluck('usuario_id')->flip();
+        $cisExistentes = DB::table('personal')->pluck('ci')->flip();
+
+        $maxEmp = 0;
+        foreach (DB::table('personal')->pluck('codigo_empleado') as $codigo) {
+            if (preg_match('/(\d+)$/', (string) $codigo, $m)) {
+                $maxEmp = max($maxEmp, (int) $m[1]);
+            }
+        }
+
         $personalRecords = [];
-        $contadorEmp = 1;
+        $contadorEmp = $maxEmp + 1;
 
         // Crear personal para los usuarios existentes
         foreach ($usuarios as $user) {
+            if (isset($usuariosConPersonal[$user->id])) {
+                continue;
+            }
+
             $rolNombre = $roles[$user->rol_id] ?? 'administrativo';
 
             $tipo = 'administrativo';
@@ -55,7 +69,7 @@ class PersonalSeeder extends Seeder
                 'telefono'         => $user->telefono,
                 'direccion'        => $user->direccion,
                 'fecha_nacimiento' => $user->fecha_nacimiento,
-                'tipo'             => $tipo,
+                'categoria'        => $tipo,
                 'fecha_contratacion' => $faker->dateTimeBetween('2020-01-01', '2025-01-01')->format('Y-m-d'),
                 'tipo_contrato'    => 'indefinido',
                 'salario_base'     => $salario,
@@ -86,6 +100,10 @@ class PersonalSeeder extends Seeder
         ];
 
         foreach ($obreros as $obrero) {
+            if (isset($cisExistentes[$obrero['ci']])) {
+                continue;
+            }
+
             $personalRecords[] = [
                 'usuario_id'       => null,
                 'codigo_empleado'  => 'EMP' . str_pad($contadorEmp++, 3, '0', STR_PAD_LEFT),
@@ -96,7 +114,7 @@ class PersonalSeeder extends Seeder
                 'telefono'         => '7' . $faker->randomNumber(7, true),
                 'direccion'        => 'El Alto, ' . $faker->streetName,
                 'fecha_nacimiento' => $faker->dateTimeBetween('-45 years', '-20 years')->format('Y-m-d'),
-                'tipo'             => 'obrero',
+                'categoria'        => 'obrero',
                 'fecha_contratacion' => $faker->dateTimeBetween('2023-01-01', '2025-01-01')->format('Y-m-d'),
                 'tipo_contrato'    => 'obra',
                 'salario_base'     => 3500,
@@ -110,6 +128,8 @@ class PersonalSeeder extends Seeder
             ];
         }
 
-        DB::table('personal')->insert($personalRecords);
+        if (!empty($personalRecords)) {
+            DB::table('personal')->insert($personalRecords);
+        }
     }
 }

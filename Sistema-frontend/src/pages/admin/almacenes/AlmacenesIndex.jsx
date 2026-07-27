@@ -10,6 +10,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useLoading } from '../../../context/LoadingContext';
+import { useAuth } from '../../../context/AuthContext';
 import { almacenService } from '../../../services/almacenService';
 import {
     Search, Plus, Warehouse, ChevronRight, Building2, MapPin,
@@ -112,6 +113,8 @@ const Card = ({ children, className = '', style = {} }) => (
 export default function AlmacenesIndex() {
     const navigate = useNavigate();
     const { startLoading, stopLoading } = useLoading();
+    const { user } = useAuth();
+    const esAccesoTotal = ['super_admin', 'gerente_general'].includes(user?.rol?.nombre);
 
     const [dashboard, setDashboard]         = useState(null);
     const [loading, setLoading]             = useState(true);
@@ -435,7 +438,13 @@ export default function AlmacenesIndex() {
 
                         {/* Grid */}
                         {almacenesFiltrados.length === 0 ? (
-                            <EmptyState icon={<Warehouse className="w-12 h-12" />} title="Sin almacenes" description="No hay almacenes que coincidan con los filtros." />
+                            <EmptyState
+                                icon={<Warehouse className="w-12 h-12" />}
+                                title={!esAccesoTotal && !busqueda && filtroTipo === 'todos' && filtroEstado === 'todos' ? 'Sin almacenes asignados' : 'Sin almacenes'}
+                                description={!esAccesoTotal && !busqueda && filtroTipo === 'todos' && filtroEstado === 'todos'
+                                    ? 'Aún no tienes almacenes asignados. Contacta con tu gerente.'
+                                    : 'No hay almacenes que coincidan con los filtros.'}
+                            />
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                                 <AnimatePresence>

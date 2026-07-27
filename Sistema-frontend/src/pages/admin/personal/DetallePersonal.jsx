@@ -292,7 +292,7 @@ const DetallePersonal = () => {
                                 {personal.codigo_empleado}
                             </p>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-400">
-                                <span className="capitalize">{personal.tipo.replace(/_/g, ' ')}</span>
+                                {personal.rol?.nombre_visible && <span className="capitalize">{personal.rol.nombre_visible}</span>}
                                 {personal.especialidad && (
                                     <><span className="opacity-30">•</span><span>{personal.especialidad}</span></>
                                 )}
@@ -359,7 +359,7 @@ const DetallePersonal = () => {
                             <InfoRow label="Fecha de contratación"
                                 value={new Date(personal.fecha_contratacion).toLocaleDateString('es-BO', { day: '2-digit', month: 'long', year: 'numeric' })} />
                             <InfoRow label="Tipo de contrato" value={personal.tipo_contrato?.replace(/_/g, ' ')} />
-                            <InfoRow label="Tipo de personal" value={personal.tipo?.replace(/_/g, ' ')} />
+                            <InfoRow label="Rol" value={personal.rol?.nombre_visible} />
                             <InfoRow label="Categoría" value={personal.categoria} />
                         </GlassPanel>
 

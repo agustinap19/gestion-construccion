@@ -15,7 +15,7 @@
 @section('content')
     <div class="page-header">
         <div class="page-header-left">
-            <div class="empresa-nombre">CA & KANAGF S.R.L.</div>
+            <div class="empresa-nombre">CA &amp; KANAGF S.R.L.</div>
             <div class="reporte-titulo">Modificatorio Contractual de Montos</div>
             <div class="reporte-sub">{{ $modificatorio->numero }} &mdash; {{ $modificatorio->proyecto->nombre }}</div>
         </div>

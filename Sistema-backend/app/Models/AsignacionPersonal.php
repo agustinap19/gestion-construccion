@@ -15,7 +15,7 @@ class AsignacionPersonal extends Model
     protected $fillable = [
         'proyecto_id',
         'personal_id',
-        'rol_en_proyecto',
+        'rol_id',
         'responsabilidades',
         'fecha_inicio',
         'fecha_fin',
@@ -41,6 +41,11 @@ class AsignacionPersonal extends Model
     public function personal()
     {
         return $this->belongsTo(Personal::class, 'personal_id');
+    }
+
+    public function rol()
+    {
+        return $this->belongsTo(Rol::class, 'rol_id');
     }
 
     public function asignador()

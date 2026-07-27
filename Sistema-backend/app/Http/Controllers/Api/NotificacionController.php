@@ -19,7 +19,9 @@ class NotificacionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = $request->query('per_page', 20);
-        $notificaciones = $this->notificacionService->obtenerTodas($request->user()->id, $perPage);
+        $leida = $request->has('leida') ? filter_var($request->query('leida'), FILTER_VALIDATE_BOOLEAN) : null;
+        
+        $notificaciones = $this->notificacionService->obtenerTodas($request->user()->id, $perPage, $leida);
         return response()->json($notificaciones);
     }
 

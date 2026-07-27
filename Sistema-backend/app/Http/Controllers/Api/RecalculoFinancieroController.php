@@ -5,13 +5,17 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Proyecto;
 use App\Models\PresupuestoItemProyecto;
+use App\Services\Proyectos\CalculadoraAvanceService;
 use App\Services\Proyectos\RecalculoFinancieroService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class RecalculoFinancieroController extends Controller
 {
-    public function __construct(protected RecalculoFinancieroService $service) {}
+    public function __construct(
+        protected RecalculoFinancieroService $service,
+        protected CalculadoraAvanceService $calculadora,
+    ) {}
 
     /**
      * PATCH /api/proyectos/{id}/porcentajes-financieros
@@ -101,10 +105,80 @@ class RecalculoFinancieroController extends Controller
         $item->cantidad_planificada = $request->input('cantidad_planificada');
         $item->save();
 
+        // Recalcular ponderaciones por costo para la vivienda afectada
+        if ($item->vivienda_id) {
+            $this->calculadora->recalcularPonderacionesPorCosto($item->vivienda_id);
+        }
+
         return response()->json([
             'status'  => 'success',
             'message' => 'Cantidad actualizada.',
             'data'    => $item->load('itemConstructivo:id,nombre,unidad_base'),
+        ]);
+    }
+
+    /**
+     * POST /api/proyectos/{id}/recalcular-ponderaciones
+     * Recalcula ponderacion_avance por costo para todas las viviendas del proyecto.
+     * Usar para proyectos existentes con ponderaciones incorrectas heredadas de plantillas.
+     */
+    public function recalcularPonderaciones(Request $request, int $id): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('proyectos.editar')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $proyecto = Proyecto::findOrFail($id);
+        $viviendas = $this->calculadora->recalcularPonderacionesProyecto($proyecto->id);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Ponderaciones recalculadas en {$viviendas} vivienda(s).",
+            'data'    => ['viviendas_procesadas' => $viviendas],
+        ]);
+    }
+
+    /**
+     * GET /api/proyectos/{id}/matriz-items-agrupada
+     * Items grouped by ItemConstructivo — one row per item type regardless of vivienda count.
+     */
+    public function obtenerMatrizAgrupada(Request $request, int $id): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('proyectos.ver')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $proyecto = Proyecto::findOrFail($id);
+        $matriz   = $this->service->obtenerMatrizAgrupada($proyecto);
+
+        return response()->json(['status' => 'success', 'data' => $matriz]);
+    }
+
+    /**
+     * PATCH /api/proyectos/{id}/items-constructivos/{icId}/producto-contractual
+     * Batch-assign ALL PIPs for this item_constructivo_id to a HitoCobro.
+     */
+    public function asignarPorItemConstructivo(Request $request, int $id, int $icId): JsonResponse
+    {
+        if (!$request->user()->hasPermissionTo('proyectos.editar')) {
+            return response()->json(['status' => 'error', 'message' => 'Sin permiso.'], 403);
+        }
+
+        $request->validate([
+            'hito_cobro_id' => 'nullable|integer|exists:hitos_cobro_proyecto,id',
+        ]);
+
+        $proyecto = Proyecto::findOrFail($id);
+        $updated  = $this->service->asignarPorItemConstructivo(
+            $proyecto,
+            $icId,
+            $request->input('hito_cobro_id')
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "{$updated} ítem(s) actualizados.",
+            'data'    => ['updated' => $updated],
         ]);
     }
 

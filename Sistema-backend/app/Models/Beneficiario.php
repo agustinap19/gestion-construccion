@@ -90,6 +90,11 @@ class Beneficiario extends Model
         return $this->hasOne(Vivienda::class, 'beneficiario_id');
     }
 
+    public function actasEntregaActivo()
+    {
+        return $this->hasMany(ActaEntregaActivo::class, 'beneficiario_id');
+    }
+
     // Accessors
     public function getNombreCompletoAttribute()
     {

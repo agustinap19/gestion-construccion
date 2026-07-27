@@ -5,18 +5,21 @@ namespace App\Services\Proyectos;
 use App\Models\AsignacionPersonal;
 use App\Models\Proyecto;
 use App\Models\Personal;
+use App\Services\NotificacionService;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 
 class AsignacionPersonalService
 {
+    public function __construct(private NotificacionService $notificacion) {}
+
     public function listarPorProyecto(int $proyectoId): Collection
     {
-        return AsignacionPersonal::with(['personal', 'asignador'])
+        return AsignacionPersonal::with(['personal.usuario.rol', 'personal.rol', 'rol', 'asignador'])
             ->where('proyecto_id', $proyectoId)
             ->orderBy('estado')
-            ->orderBy('rol_en_proyecto')
+            ->orderBy('rol_id')
             ->get();
     }
 
@@ -56,10 +59,18 @@ class AsignacionPersonalService
 
             $asignacion = AsignacionPersonal::create($datos);
 
-            // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
-            // $this->auditoria->registrarCreacion('asignacion_personal.creada', 'asignaciones_personal', $asignacion->id, $asignacion->toArray());
+            // Notificar al usuario si el personal tiene acceso al sistema
+            if ($personal->usuario_id) {
+                $this->notificacion->enviarA($personal->usuario_id, [
+                    'tipo'       => 'info',
+                    'titulo'     => 'Asignado a proyecto',
+                    'mensaje'    => "Has sido asignado al proyecto \"{$proyecto->nombre}\". Revisa tus tareas asignadas.",
+                    'icono'      => 'briefcase',
+                    'url_accion' => "/dashboard/proyectos/{$proyecto->id}",
+                ]);
+            }
 
-            return $asignacion->load('personal');
+            return $asignacion->load('personal', 'rol');
         });
     }
 
@@ -78,7 +89,7 @@ class AsignacionPersonalService
             // TODO: reactivar con owen-it/laravel-auditing en sprint de auditoría
             // $this->auditoria->registrarActualizacion('asignacion_personal.actualizada', 'asignaciones_personal', $asignacion->id, $datosAnteriores, $cambios);
 
-            return $asignacion->load('personal');
+            return $asignacion->load('personal', 'rol');
         });
     }
 

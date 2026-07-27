@@ -21,8 +21,8 @@
             <img src="{{ public_path('storage') . '/' . ltrim(str_replace('/storage/', '', $beneficiario->foto_titular_url), '/') }}" />
         </div>
         @else
-        <div class="foto-box" style="background:#f1f5f9; display:flex; align-items:center; justify-content:center;">
-            <span style="font-size:9px; color:#94a3b8">Sin foto</span>
+        <div class="foto-box" style="background:#f1f5f9; display:table; text-align:center;">
+            <span style="display:table-cell; vertical-align:middle; font-size:9px; color:#94a3b8;">Sin foto</span>
         </div>
         @endif
     </div>

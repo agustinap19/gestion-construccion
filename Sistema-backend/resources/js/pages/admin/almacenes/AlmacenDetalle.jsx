@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLoading } from '../../../context/LoadingContext';
 import { almacenService } from '../../../services/almacenService';
 import movimientoAlmacenService from '../../../services/movimientoAlmacenService';
+import api from '../../../services/api';
 import {
     Warehouse, Package, ArrowLeft, ArrowUp, ArrowDown, ArrowRight,
     AlertTriangle, TrendingUp, Search, RefreshCw, ChevronRight,
-    User, Briefcase, ShoppingCart, XCircle, Eye, Check
+    User, Briefcase, ShoppingCart, XCircle, Eye, Check, Camera, FileText, X
 } from '../../../components/icons/Icons';
 import Badge from '../../../components/ui/Badge';
 import EmptyState from '../../../components/ui/EmptyState';
@@ -116,7 +117,26 @@ export default function AlmacenDetalle() {
     }, [id, filtroTipo, filtroEstado, movBusqueda, movPage]);
 
     const [devolviendo, setDevolviendo] = useState(false);
-    
+    const [modalBeneReporte, setModalBeneReporte] = useState(false);
+    const [descargandoFoto, setDescargandoFoto]   = useState(false);
+
+    const descargarReporteFotografico = async (url, nombre) => {
+        setDescargandoFoto(true);
+        try {
+            const res = await api.post(url, { formato: 'pdf' }, { responseType: 'blob' });
+            const blob    = new Blob([res.data], { type: 'application/pdf' });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl; a.download = nombre;
+            document.body.appendChild(a); a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+            toast.success(`${nombre} descargado.`);
+        } catch (err) {
+            toast.error(err?.response?.data?.message || 'Error al generar reporte.');
+        } finally { setDescargandoFoto(false); }
+    };
+
     const devolverCentral = async () => {
         if (!confirm('¿Está seguro de transferir todo el stock restante al almacén central? Esta acción es irreversible.')) return;
         setDevolviendo(true);
@@ -288,6 +308,55 @@ export default function AlmacenDetalle() {
                 ))}
             </div>
 
+            {/* ── Capital Inmovilizado (Sub-fase E adaptado) ───────────────────── */}
+            {tab === 'stock' && (() => {
+                const DIAS_UMBRAL = 30;
+                const hoy = new Date();
+                const inmovilizados = (data?.stocks || []).filter(s => {
+                    if (!s.cantidad || s.cantidad <= 0) return false;
+                    if (!s.ultima_fecha_movimiento) return true;
+                    const dias = Math.floor((hoy - new Date(s.ultima_fecha_movimiento)) / 86400000);
+                    return dias >= DIAS_UMBRAL;
+                });
+                if (inmovilizados.length === 0) return null;
+                const valorTotal = inmovilizados.reduce((sum, s) => sum + (s.valor_total || 0), 0);
+                const bs = n => `Bs. ${Math.round(n).toLocaleString('es-BO')}`;
+                return (
+                    <div className="mb-4 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06]">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                                <h3 className="text-amber-300 font-semibold text-sm">Capital Inmovilizado</h3>
+                            </div>
+                            <span className="text-amber-400 font-bold text-sm">{bs(valorTotal)}</span>
+                        </div>
+                        <p className="text-amber-300/60 text-xs mb-3">
+                            {inmovilizados.length} material{inmovilizados.length > 1 ? 'es' : ''} en almacén sin movimiento de salida en {DIAS_UMBRAL}+ días.
+                        </p>
+                        <div className="space-y-1.5">
+                            {inmovilizados.slice(0, 5).map(s => {
+                                const dias = s.ultima_fecha_movimiento
+                                    ? Math.floor((hoy - new Date(s.ultima_fecha_movimiento)) / 86400000)
+                                    : null;
+                                return (
+                                    <div key={s.id} className="flex items-center justify-between text-xs">
+                                        <span className="text-white/70">{s.material?.nombre}</span>
+                                        <div className="flex items-center gap-3 text-white/40">
+                                            <span>{s.cantidad.toFixed(2)} {s.material?.unidadMedida?.simbolo || ''}</span>
+                                            <span className="text-amber-400/70">{bs(s.valor_total || 0)}</span>
+                                            <span>{dias !== null ? `${dias}d sin mov.` : 'Sin mov.'}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {inmovilizados.length > 5 && (
+                                <p className="text-amber-300/40 text-xs">+{inmovilizados.length - 5} más…</p>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
             <AnimatePresence mode="wait">
                 {tab === 'stock' && (
                     <motion.div key="stock" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -390,6 +459,23 @@ export default function AlmacenDetalle() {
                                 formatos={['xlsx', 'pdf']}
                                 label="Exportar"
                             />
+                            {almacen.proyecto?.es_social && (
+                                <button
+                                    onClick={() => setModalBeneReporte(true)}
+                                    disabled={descargandoFoto}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600/20 border border-violet-500/30 text-violet-300 text-xs hover:bg-violet-600/30 disabled:opacity-50 transition-all">
+                                    <Camera className="w-3.5 h-3.5" /> Fotog. Entregas
+                                </button>
+                            )}
+                            <button
+                                onClick={() => descargarReporteFotografico(
+                                    `/exportar/almacenes/${id}/entradas-fotografico`,
+                                    `entradas_fotografico_${almacen.codigo}.pdf`
+                                )}
+                                disabled={descargandoFoto}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs hover:bg-sky-600/30 disabled:opacity-50 transition-all">
+                                <FileText className="w-3.5 h-3.5" /> Fotog. Entradas
+                            </button>
                         </div>
 
                         {/* Tabla movimientos */}
@@ -401,7 +487,7 @@ export default function AlmacenDetalle() {
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="border-b border-white/10">
-                                                {['Código', 'Tipo', 'Fecha', 'Receptor / Proveedor', 'Items', 'Total', 'Estado', ''].map(h => (
+                                                {['Código', 'Tipo', 'Fecha', 'Receptor / Proveedor', 'Material / Ítem', 'Total', 'Estado', ''].map(h => (
                                                     <th key={h} className="text-left text-slate-400 font-medium py-3 px-4 text-xs">{h}</th>
                                                 ))}
                                             </tr>
@@ -424,10 +510,26 @@ export default function AlmacenDetalle() {
                                                     <td className="py-3 px-4 text-slate-300 text-xs">
                                                         {mov.beneficiario
                                                             ? `${mov.beneficiario.nombre} ${mov.beneficiario.apellido_paterno}`
-                                                            : mov.receptor_nombre || mov.proveedor_nombre || '—'}
+                                                            : mov.receptor_nombre
+                                                            ? mov.receptor_nombre
+                                                            : mov.proveedor
+                                                            ? <Link to={`/dashboard/proveedores/${mov.proveedor.id}`}
+                                                                className="text-violet-300 hover:text-violet-200 hover:underline transition-colors">
+                                                                {mov.proveedor.razon_social}
+                                                              </Link>
+                                                            : mov.proveedor_nombre || '—'}
                                                     </td>
-                                                    <td className="py-3 px-4 text-slate-400 text-xs">
-                                                        {mov.detalles?.length ?? '—'} mat.
+                                                    <td className="py-3 px-4 text-xs max-w-[180px]">
+                                                        {mov.presupuesto_item?.item_constructivo
+                                                            ? <div>
+                                                                <div className="text-slate-300 truncate">{mov.presupuesto_item.item_constructivo.nombre}</div>
+                                                                <div className="text-slate-500">{mov.detalles?.[0]?.material?.nombre ?? ''}</div>
+                                                              </div>
+                                                            : <div>
+                                                                <div className="text-slate-400">{mov.detalles?.length ?? '—'} mat.</div>
+                                                                {mov.detalles?.[0]?.material && <div className="text-slate-500 truncate">{mov.detalles[0].material.nombre}</div>}
+                                                              </div>
+                                                        }
                                                     </td>
                                                     <td className="py-3 px-4 text-white text-xs font-mono">
                                                         Bs {Number(mov.monto_total).toFixed(2)}
@@ -481,6 +583,7 @@ export default function AlmacenDetalle() {
                         )}
                     </motion.div>
                 )}
+
             </AnimatePresence>
 
             {/* Drawer de detalle de movimiento */}
@@ -508,7 +611,22 @@ export default function AlmacenDetalle() {
                                     <Campo label="Tipo" value={TIPO_LABEL[detalleMov.tipo] || detalleMov.tipo} />
                                     <Campo label="Estado" value={detalleMov.estado} />
                                     <Campo label="Fecha" value={new Date(detalleMov.fecha_movimiento).toLocaleString('es-BO')} />
-                                    {detalleMov.proveedor_nombre && <Campo label="Proveedor" value={detalleMov.proveedor_nombre} />}
+                                    {detalleMov.proveedor
+                                        ? <div>
+                                            <p className="text-slate-400 text-xs mb-0.5">Proveedor</p>
+                                            <Link to={`/dashboard/proveedores/${detalleMov.proveedor.id}`}
+                                                className="text-violet-300 hover:text-violet-200 hover:underline text-sm transition-colors flex items-center gap-1">
+                                                {detalleMov.proveedor.razon_social}
+                                                <span className="text-white/25 text-xs font-mono">({detalleMov.proveedor.codigo})</span>
+                                            </Link>
+                                            {detalleMov.proveedor.telefono_principal && (
+                                                <p className="text-white/40 text-xs mt-0.5">{detalleMov.proveedor.telefono_principal}</p>
+                                            )}
+                                          </div>
+                                        : detalleMov.proveedor_nombre
+                                        ? <Campo label="Proveedor" value={detalleMov.proveedor_nombre} />
+                                        : null
+                                    }
                                     {detalleMov.numero_factura && <Campo label="Factura" value={detalleMov.numero_factura} />}
                                     {detalleMov.receptor_nombre && <Campo label="Receptor" value={detalleMov.receptor_nombre} />}
                                     {detalleMov.beneficiario && (
@@ -577,7 +695,94 @@ export default function AlmacenDetalle() {
                         onClose={() => setModalTransfer(false)}
                         onGuardado={() => { setModalTransfer(false); handleGuardado(); }} />
                 )}
+                {modalBeneReporte && (
+                    <BeneficiarioReporteModal
+                        key="modal-bene-reporte"
+                        almacenId={id}
+                        proyectoId={almacen.proyecto_id}
+                        onClose={() => setModalBeneReporte(false)}
+                        onSeleccionar={(beneId) => {
+                            setModalBeneReporte(false);
+                            descargarReporteFotografico(
+                                `/exportar/almacenes/${id}/entregas-fotografico?beneficiario_id=${beneId}`,
+                                `entrega_fotografico_ben${beneId}.pdf`
+                            );
+                        }}
+                    />
+                )}
             </AnimatePresence>
+        </div>
+    );
+}
+
+/* ── Modal selección de beneficiario ─────────────────────────────────── */
+function BeneficiarioReporteModal({ almacenId, proyectoId, onClose, onSeleccionar }) {
+    const [beneficiarios, setBeneficiarios] = useState([]);
+    const [busqueda, setBusqueda]           = useState('');
+    const [loading, setLoading]             = useState(true);
+
+    useEffect(() => {
+        if (!proyectoId) { setLoading(false); return; }
+        api.get(`/beneficiarios`, { params: { proyecto_id: proyectoId, per_page: 500 } })
+           .then(r => setBeneficiarios(r.data?.data?.data ?? r.data?.data ?? r.data ?? []))
+           .catch(() => toast.error('No se pudieron cargar los beneficiarios.'))
+           .finally(() => setLoading(false));
+    }, [proyectoId]);
+
+    const filtrados = busqueda
+        ? beneficiarios.filter(b => {
+            const q = busqueda.toLowerCase();
+            return `${b.nombre} ${b.apellido_paterno}`.toLowerCase().includes(q) || b.ci?.includes(busqueda);
+          })
+        : beneficiarios;
+
+    return (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                className="relative z-10 w-full max-w-lg max-h-[80vh] flex flex-col rounded-3xl overflow-hidden
+                    bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10 shadow-2xl shadow-black/60">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                    <div className="flex items-center gap-2">
+                        <Camera className="w-5 h-5 text-violet-400" />
+                        <h2 className="text-white font-semibold text-sm">Reporte Fotográfico — Seleccione Beneficiario</h2>
+                    </div>
+                    <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 flex items-center justify-center text-white/60 hover:text-white transition-all">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                <div className="p-4 border-b border-white/10">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                            placeholder="Buscar por nombre o CI…"
+                            className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500/60 transition-all" />
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2">
+                    {loading ? (
+                        <div className="text-center text-slate-400 py-8 text-sm">Cargando beneficiarios…</div>
+                    ) : filtrados.length === 0 ? (
+                        <div className="text-center text-slate-500 py-8 text-sm">Sin resultados.</div>
+                    ) : (
+                        filtrados.map(b => (
+                            <button key={b.id} onClick={() => onSeleccionar(b.id)}
+                                className="w-full text-left px-4 py-3 rounded-xl hover:bg-white/8 transition-colors flex items-center gap-3 group">
+                                <div className="w-9 h-9 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
+                                    <User className="w-4 h-4 text-violet-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-white text-sm font-medium group-hover:text-violet-200 transition-colors">
+                                        {b.nombre} {b.apellido_paterno} {b.apellido_materno ?? ''}
+                                    </p>
+                                    <p className="text-slate-400 text-xs">CI: {b.ci}</p>
+                                </div>
+                                <FileText className="w-4 h-4 text-slate-600 group-hover:text-violet-400 transition-colors" />
+                            </button>
+                        ))
+                    )}
+                </div>
+            </motion.div>
         </div>
     );
 }

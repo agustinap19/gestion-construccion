@@ -60,6 +60,9 @@ class Proyecto extends Model
         // Gestión
         'avance_fisico',
         'avance_financiero',
+        'avance_esperado',
+        'penalidad_diaria',
+        'dias_estimados_activo',
         'responsable_id',
         'creado_por_id',
         'observaciones',
@@ -90,6 +93,9 @@ class Proyecto extends Model
         'aplica_retencion_7_porciento'      => 'boolean',
         'avance_fisico'                     => 'decimal:2',
         'avance_financiero'                 => 'decimal:2',
+        'avance_esperado'                   => 'decimal:2',
+        'penalidad_diaria'                  => 'decimal:2',
+        'dias_estimados_activo'             => 'integer',
         'latitud'                           => 'decimal:7',
         'longitud'                          => 'decimal:7',
         'fecha_inicio_planificada'          => 'date',
@@ -187,6 +193,16 @@ class Proyecto extends Model
     public function codigosReapertura()
     {
         return $this->hasMany(CodigoReapertura::class, 'proyecto_id');
+    }
+
+    public function asignacionesPersonal()
+    {
+        return $this->hasMany(\App\Models\AsignacionPersonal::class, 'proyecto_id');
+    }
+
+    public function asignacionesActivo()
+    {
+        return $this->hasMany(AsignacionActivo::class, 'proyecto_id');
     }
 
     public function cerradoRegistrosPor()

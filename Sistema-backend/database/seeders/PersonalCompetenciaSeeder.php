@@ -14,10 +14,20 @@ class PersonalCompetenciaSeeder extends Seeder
         $personal = DB::table('personal')->get();
         $competencias = DB::table('competencias')->get()->keyBy('nombre');
 
+        $personalConCompetencias = DB::table('personal_competencia')
+            ->distinct()
+            ->pluck('personal_id')
+            ->flip();
+
         $registros = [];
 
         foreach ($personal as $emp) {
-            if ($emp->tipo == 'obrero') {
+            // Ya tiene competencias asignadas (de una corrida anterior del seeder) — no duplicar.
+            if (isset($personalConCompetencias[$emp->id])) {
+                continue;
+            }
+
+            if ($emp->categoria == 'obrero') {
                 // Obreros tienen Maestro albañil (o a veces nada)
                 if (rand(0, 1)) {
                     $registros[] = [
@@ -31,7 +41,7 @@ class PersonalCompetenciaSeeder extends Seeder
                         'updated_at' => now(),
                     ];
                 }
-            } elseif (in_array($emp->tipo, ['tecnico', 'gerente', 'administrador_proyecto'])) {
+            } elseif (in_array($emp->categoria, ['tecnico', 'gerente', 'administrador_proyecto'])) {
                 // Técnicos y gerentes tienen entre 2 y 4 competencias
                 $numComps = rand(2, 4);
                 $compsDisponibles = $competencias->random($numComps);
@@ -73,6 +83,8 @@ class PersonalCompetenciaSeeder extends Seeder
             }
         }
 
-        DB::table('personal_competencia')->insert($registros);
+        if (!empty($registros)) {
+            DB::table('personal_competencia')->insert($registros);
+        }
     }
 }

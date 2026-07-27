@@ -20,6 +20,10 @@ class RolSeeder extends Seeder
         ];
 
         foreach ($roles as $rol) {
+            if (DB::table('roles')->where('nombre', $rol['nombre'])->exists()) {
+                continue;
+            }
+
             DB::table('roles')->insert([
                 'nombre'         => $rol['nombre'],
                 'nombre_visible' => $rol['nombre_visible'],

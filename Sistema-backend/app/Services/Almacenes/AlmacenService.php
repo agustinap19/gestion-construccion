@@ -5,6 +5,7 @@ namespace App\Services\Almacenes;
 use App\Models\Almacen;
 use App\Models\MovimientoMaterial;
 use App\Models\StockMaterial;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -13,9 +14,32 @@ use Exception;
 
 class AlmacenService
 {
-    public function listarConFiltros(array $filtros, int $perPage = 15): LengthAwarePaginator
+    private const ROLES_ACCESO_TOTAL = ['super_admin', 'gerente_general'];
+
+    private function esAccesoTotal(?User $actor): bool
+    {
+        if (!$actor) return true;
+        return in_array($actor->rol?->nombre, self::ROLES_ACCESO_TOTAL);
+    }
+
+    private function aplicarScopeUsuario(\Illuminate\Database\Eloquent\Builder $query, ?User $actor): void
+    {
+        if ($this->esAccesoTotal($actor)) return;
+        $query->whereHas('responsable', fn($q) => $q->where('usuario_id', $actor->id));
+    }
+
+    private function idsPermitidos(?User $actor): ?array
+    {
+        if ($this->esAccesoTotal($actor)) return null;
+        return Almacen::whereHas('responsable', fn($q) => $q->where('usuario_id', $actor->id))
+            ->pluck('id')->toArray();
+    }
+
+    public function listarConFiltros(array $filtros, int $perPage = 15, ?User $actor = null): LengthAwarePaginator
     {
         $query = Almacen::with(['proyecto:id,nombre,codigo,estado', 'responsable:id,nombre,apellido_paterno']);
+
+        $this->aplicarScopeUsuario($query, $actor);
 
         if (!empty($filtros['busqueda'])) {
             $b = $filtros['busqueda'];
@@ -153,43 +177,52 @@ class AlmacenService
         return $almacen;
     }
 
-    public function estadisticasResumen(): array
+    public function estadisticasResumen(?User $actor = null): array
     {
-        $total   = Almacen::count();
-        $activos = Almacen::where('estado', 'activo')->count();
-        $central = Almacen::where('tipo', 'central')->first();
+        $base = Almacen::query();
+        $this->aplicarScopeUsuario($base, $actor);
+
+        $total   = (clone $base)->count();
+        $activos = (clone $base)->where('estado', 'activo')->count();
+        $central = (clone $base)->where('tipo', 'central')->first();
 
         return compact('total', 'activos', 'central');
     }
 
-    public function dashboard(): array
+    public function dashboard(?User $actor = null): array
     {
+        $ids = $this->idsPermitidos($actor);
+
+        $baseA = fn() => tap(Almacen::query(),      fn($q) => $ids !== null && $q->whereIn('id', $ids));
+        $baseS = fn() => tap(StockMaterial::query(), fn($q) => $ids !== null && $q->whereIn('almacen_id', $ids));
+        $baseM = fn() => tap(MovimientoMaterial::query(), fn($q) => $ids !== null && $q->whereIn('almacen_id', $ids));
+
         // ── KPIs ──────────────────────────────────────────────────────────────
-        $total     = Almacen::count();
-        $activos   = Almacen::where('estado', 'activo')->count();
-        $inactivos = Almacen::where('estado', 'inactivo')->count();
-        $cerrados  = Almacen::where('estado', 'cerrado')->count();
+        $total     = $baseA()->count();
+        $activos   = $baseA()->where('estado', 'activo')->count();
+        $inactivos = $baseA()->where('estado', 'inactivo')->count();
+        $cerrados  = $baseA()->where('estado', 'cerrado')->count();
 
-        $valorTotal = (float) (StockMaterial::selectRaw('COALESCE(SUM(cantidad * costo_promedio), 0) as total')->first()?->total ?? 0);
+        $valorTotal = (float) ($baseS()->selectRaw('COALESCE(SUM(cantidad * costo_promedio), 0) as total')->first()?->total ?? 0);
 
-        $itemsCriticos = StockMaterial::whereRaw(
+        $itemsCriticos = $baseS()->whereRaw(
             '(cantidad - COALESCE(cantidad_reservada, 0)) <= COALESCE(stock_minimo_alerta, 0)'
         )->where('cantidad', '>', 0)->count();
 
-        $itemsAgotados = StockMaterial::where('cantidad', '<=', 0)->count();
+        $itemsAgotados = $baseS()->where('cantidad', '<=', 0)->count();
 
         // ── Distribución por tipo ─────────────────────────────────────────────
-        $porTipo = Almacen::selectRaw('tipo, COUNT(*) as cantidad')
+        $porTipo = $baseA()->selectRaw('tipo, COUNT(*) as cantidad')
             ->groupBy('tipo')
             ->get()
             ->map(fn($r) => ['tipo' => $r->tipo, 'cantidad' => (int) $r->cantidad])
             ->values();
 
-        // ── Movimientos últimos 6 meses ───────────────────────────────────────
+        // ── Movimientos últimos 3 meses ───────────────────────────────────────
         $mesesEsp = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
         $desde    = Carbon::now()->subMonths(2)->startOfMonth();
 
-        $movs = MovimientoMaterial::selectRaw(
+        $movs = $baseM()->selectRaw(
             "DATE_FORMAT(fecha_movimiento, '%Y-%m') as mes,
              SUM(CASE WHEN tipo IN ('entrada','transferencia_entrada','ajuste_positivo','inventario_inicial') THEN 1 ELSE 0 END) as entradas,
              SUM(CASE WHEN tipo IN ('salida','transferencia_salida','ajuste_negativo') THEN 1 ELSE 0 END) as salidas"
@@ -212,7 +245,7 @@ class AlmacenService
         }
 
         // ── Top 5 materiales por valor ────────────────────────────────────────
-        $topMateriales = StockMaterial::selectRaw(
+        $topMateriales = $baseS()->selectRaw(
             'material_id, SUM(cantidad * costo_promedio) as valor_total, SUM(cantidad) as cantidad_total'
         )
         ->with('material:id,nombre,codigo')
@@ -229,7 +262,7 @@ class AlmacenService
         ->values();
 
         // ── Stocks críticos (tabla de alerta) ─────────────────────────────────
-        $stocksCriticos = StockMaterial::with([
+        $stocksCriticos = $baseS()->with([
             'material:id,nombre,codigo,unidad_medida_id',
             'material.unidadMedida:id,simbolo',
             'almacen:id,nombre',
@@ -251,7 +284,7 @@ class AlmacenService
         ->values();
 
         // ── Resumen por almacén ───────────────────────────────────────────────
-        $almacenesData  = Almacen::with(['proyecto:id,nombre'])->get();
+        $almacenesData  = $baseA()->with(['proyecto:id,nombre'])->get();
         $almacenIds     = $almacenesData->pluck('id');
 
         $stockPorAlmacen = StockMaterial::selectRaw(

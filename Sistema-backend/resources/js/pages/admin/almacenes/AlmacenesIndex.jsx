@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLoading } from '../../../context/LoadingContext';
+import { useAuth } from '../../../context/AuthContext';
 import { almacenService } from '../../../services/almacenService';
 import proyectoService from '../../../services/proyectoService';
 import {
@@ -25,6 +26,8 @@ const ESTADO_STYLES = {
 export default function AlmacenesIndex() {
     const navigate   = useNavigate();
     const { startLoading, stopLoading } = useLoading();
+    const { user } = useAuth();
+    const esAccesoTotal = ['super_admin', 'gerente_general'].includes(user?.rol?.nombre);
     const [almacenes, setAlmacenes] = useState([]);
     const [stats, setStats]         = useState({ total: 0, activos: 0, central: null });
     const [page, setPage]           = useState(1);
@@ -141,7 +144,13 @@ export default function AlmacenesIndex() {
 
             {/* Grid */}
             {almacenes.length === 0 ? (
-                <EmptyState icon={<Warehouse className="w-12 h-12" />} title="Sin almacenes" description="Crea el primer almacén para comenzar." />
+                <EmptyState
+                    icon={<Warehouse className="w-12 h-12" />}
+                    title={!esAccesoTotal && !busqueda && filtroTipo === 'todos' && filtroEstado === 'todos' ? 'Sin almacenes asignados' : 'Sin almacenes'}
+                    description={!esAccesoTotal && !busqueda && filtroTipo === 'todos' && filtroEstado === 'todos'
+                        ? 'Aún no tienes almacenes asignados. Contacta con tu gerente.'
+                        : 'Crea el primer almacén para comenzar.'}
+                />
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     <AnimatePresence>

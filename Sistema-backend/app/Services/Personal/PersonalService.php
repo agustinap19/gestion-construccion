@@ -22,7 +22,7 @@ class PersonalService
      */
     public function listarConFiltros(array $filtros, int $perPage = 15): LengthAwarePaginator
     {
-        $query = Personal::with('usuario.rol', 'competencias');
+        $query = Personal::with('usuario.rol', 'rol', 'competencias');
 
         if (!empty($filtros['busqueda'])) {
             $b = $filtros['busqueda'];
@@ -35,8 +35,8 @@ class PersonalService
             });
         }
 
-        if (!empty($filtros['tipo']) && $filtros['tipo'] !== 'todos') {
-            $query->where('tipo', $filtros['tipo']);
+        if (!empty($filtros['rol_id']) && $filtros['rol_id'] !== 'todos') {
+            $query->where('rol_id', $filtros['rol_id']);
         }
 
         if (!empty($filtros['estado_laboral']) && $filtros['estado_laboral'] !== 'todos') {
@@ -93,7 +93,7 @@ class PersonalService
      */
     public function obtenerCompleto(int $id): array
     {
-        $personal = Personal::with('usuario.rol', 'competencias')->findOrFail($id);
+        $personal = Personal::with('usuario.rol', 'rol', 'competencias')->findOrFail($id);
 
         // Estadísticas de competencias
         $competenciasStats = [
@@ -183,7 +183,7 @@ class PersonalService
                 'telefono' => $datos['telefono'] ?? null,
                 'direccion' => $datos['direccion'] ?? null,
                 'fecha_nacimiento' => $datos['fecha_nacimiento'] ?? null,
-                'tipo' => $datos['tipo'],
+                'rol_id' => $datos['rol_id'] ?? null,
                 'especialidad' => $datos['especialidad'] ?? null,
                 'categoria' => $datos['categoria'] ?? null,
                 'fecha_contratacion' => $datos['fecha_contratacion'],
@@ -212,7 +212,7 @@ class PersonalService
 
         $camposActualizables = [
             'nombre', 'apellido_paterno', 'apellido_materno', 'ci', 'ci_complemento',
-            'telefono', 'direccion', 'fecha_nacimiento', 'tipo', 'especialidad', 'categoria',
+            'telefono', 'direccion', 'fecha_nacimiento', 'rol_id', 'especialidad', 'categoria',
             'fecha_contratacion', 'tipo_contrato', 'salario_base', 'frecuencia_pago',
             'banco', 'numero_cuenta', 'tipo_cuenta',
         ];
@@ -395,10 +395,14 @@ class PersonalService
             COUNT(CASE WHEN usuario_id IS NULL THEN 1 END) as sin_usuario_count
         ")->first();
 
-        $distribucionTipo = Personal::where('estado_laboral', '!=', 'desvinculado')
-            ->selectRaw('tipo, COUNT(*) as total')
-            ->groupBy('tipo')
-            ->pluck('total', 'tipo')
+        $distribucionTipo = DB::table('personal')
+            ->where('personal.estado_laboral', '!=', 'desvinculado')
+            ->whereNull('personal.deleted_at')
+            ->leftJoin('roles', 'personal.rol_id', '=', 'roles.id')
+            ->selectRaw('personal.rol_id, roles.nombre_visible, COUNT(*) as total')
+            ->groupBy('personal.rol_id', 'roles.nombre_visible')
+            ->get()
+            ->mapWithKeys(fn($item) => [($item->nombre_visible ?? 'Sin rol') => $item->total])
             ->toArray();
 
         $competenciasVencidas = DB::table('personal_competencia')

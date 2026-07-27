@@ -116,6 +116,13 @@ class MovimientoAlmacenController extends Controller
             'materiales.*.material_id'    => 'required|exists:materiales,id',
             'materiales.*.cantidad'       => 'required|numeric|min:0.0001',
             'materiales.*.precio_unitario'=> 'required|numeric|min:0',
+            'evidencias'                  => 'nullable|array',
+            'evidencias.*.tipo'           => 'required_with:evidencias|in:foto,documento',
+            'evidencias.*.base64'         => 'nullable|string',
+            'evidencias.*.archivo_url'    => 'nullable|string',
+            'evidencias.*.latitud'        => 'nullable|numeric',
+            'evidencias.*.longitud'       => 'nullable|numeric',
+            'evidencias.*.dispositivo'    => 'nullable|string|max:100',
         ]);
 
         $movimiento = $this->entregaService->registrarEntrada($validated, auth()->id());

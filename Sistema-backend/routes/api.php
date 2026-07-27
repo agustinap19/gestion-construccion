@@ -30,6 +30,10 @@ use App\Http\Controllers\Api\ConfiguracionPorcentajesController;
 use App\Http\Controllers\Api\RecalculoFinancieroController;
 use App\Http\Controllers\Api\TotpController;
 use App\Http\Controllers\Api\ProveedorController;
+use App\Http\Controllers\Api\ActivoController;
+use App\Http\Controllers\Api\ConfiguracionOptimizacionController;
+use App\Http\Controllers\Api\AsignacionActivoController;
+use App\Http\Controllers\Api\ActaEntregaController;
 
 // ── Auth pública ─────────────────────────────────────────────────────────────
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -63,6 +67,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Todo lo demás requiere contraseña ya cambiada
     Route::middleware(ForzarCambioPassword::class)->group(function () {
+
+        // Dashboard Gerencial
+        Route::get('/dashboard/general', [\App\Http\Controllers\Api\DashboardController::class, 'general']);
 
         // Reportes JSON
         Route::get('/reportes/personal-rol', [\App\Http\Controllers\Api\ReporteController::class, 'reporte1']);
@@ -231,13 +238,17 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('/{proyectoId}/fases/validar-pesos', [\App\Http\Controllers\Api\FaseProyectoController::class, 'validarPesos']);
             Route::get('/{proyectoId}/personal', [\App\Http\Controllers\Api\AsignacionPersonalController::class, 'indexPorProyecto']);
             Route::post('/{proyectoId}/personal', [\App\Http\Controllers\Api\AsignacionPersonalController::class, 'store']);
+            Route::get('/{proyectoId}/reportes-avance/galeria', [\App\Http\Controllers\Api\ReporteAvanceController::class, 'galeriaProyecto']);
 
             // Reactividad financiera
             Route::patch('/{id}/porcentajes-financieros', [RecalculoFinancieroController::class, 'actualizarPorcentajes']);
             Route::get('/{id}/matriz-items-productos', [RecalculoFinancieroController::class, 'obtenerMatriz']);
+            Route::get('/{id}/matriz-items-agrupada', [RecalculoFinancieroController::class, 'obtenerMatrizAgrupada']);
             Route::patch('/{id}/items/{itemId}/producto-contractual', [RecalculoFinancieroController::class, 'asignarItemAProducto']);
+            Route::patch('/{id}/items-constructivos/{icId}/producto-contractual', [RecalculoFinancieroController::class, 'asignarPorItemConstructivo']);
             Route::patch('/{id}/items/{itemId}/cantidad', [RecalculoFinancieroController::class, 'actualizarCantidadItem']);
             Route::post('/{id}/items/asignacion-automatica', [RecalculoFinancieroController::class, 'asignacionAutomatica']);
+            Route::post('/{id}/recalcular-ponderaciones', [RecalculoFinancieroController::class, 'recalcularPonderaciones']);
         });
 
         // Viviendas (operaciones individuales)
@@ -255,6 +266,8 @@ Route::middleware('auth:sanctum')->group(function () {
             // Reportes de avance fotográfico (único canal para actualizar avance)
             Route::get('/{viviendaId}/reportes-avance', [\App\Http\Controllers\Api\ReporteAvanceController::class, 'index']);
             Route::post('/{viviendaId}/reportes-avance', [\App\Http\Controllers\Api\ReporteAvanceController::class, 'store']);
+            Route::match(['get', 'post'], '/{viviendaId}/reportes-avance/exportar-fotografico', [\App\Http\Controllers\Api\ReporteAvanceController::class, 'exportarFotografico']);
+            Route::match(['get', 'post'], '/{viviendaId}/reportes-avance/exportar-concluidos', [\App\Http\Controllers\Api\ReporteAvanceController::class, 'exportarConcluidos']);
         });
 
         // Fases (operaciones individuales)
@@ -315,6 +328,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::match(['get', 'post'], '/almacenes/{almacenId}/kardex/{materialId}', [ExportacionController::class, 'kardexAlmacen']);
             Route::match(['get', 'post'], '/proyectos/{proyectoId}/presupuesto-materiales', [ExportacionController::class, 'presupuestoMateriales']);
             Route::match(['get', 'post'], '/movimientos-almacen',              [ExportacionController::class, 'movimientosAlmacen']);
+            Route::match(['get', 'post'], '/almacenes/{almacenId}/entregas-fotografico',  [ExportacionController::class, 'reporteFotograficoEntregas']);
+            Route::match(['get', 'post'], '/almacenes/{almacenId}/entradas-fotografico',  [ExportacionController::class, 'reporteFotograficoEntradas']);
+            Route::match(['get', 'post'], '/activos',                          [ExportacionController::class, 'activos']);
+            Route::match(['get', 'post'], '/entregas-finalizadas',             [ExportacionController::class, 'entregasFinalizadas']);
         });
 
         // Almacenes y Materiales
@@ -402,6 +419,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::prefix('zonas-geograficas')->group(function () {
             Route::get('/', [ZonaGeograficaController::class, 'index']);
+            Route::post('/', [ZonaGeograficaController::class, 'store']);
             Route::get('/departamento/{depto}', [ZonaGeograficaController::class, 'porDepartamento']);
             Route::get('/cercanas', [ZonaGeograficaController::class, 'cercanas']);
         });
@@ -514,6 +532,52 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/{id}/aplicar-a-proyecto/{proyectoId}', [PlantillaChecklistController::class, 'aplicarAProyecto']);
         });
 
+        // Activos: maquinaria, equipos y herramientas
+        Route::prefix('activos')->group(function () {
+            Route::get('/disponibles',          [ActivoController::class, 'disponibles']);
+            Route::get('/estadisticas',         [ActivoController::class, 'estadisticas']);
+            Route::get('/alertas',              [ActivoController::class, 'alertas']);
+            Route::post('/upload-foto',         [ActivoController::class, 'uploadFoto']);
+            Route::get('/',                     [ActivoController::class, 'index']);
+            Route::post('/',                    [ActivoController::class, 'store']);
+            Route::get('/{activo}',             [ActivoController::class, 'show']);
+            Route::put('/{activo}',             [ActivoController::class, 'update']);
+            Route::delete('/{activo}',          [ActivoController::class, 'destroy']);
+            Route::get('/{activo}/asignaciones',    [ActivoController::class, 'asignaciones']);
+            Route::post('/{activo}/asignaciones',   [AsignacionActivoController::class, 'store']);
+            Route::get('/{activo}/disponibilidad',  [AsignacionActivoController::class, 'verificarDisponibilidad']);
+            Route::get('/{activo}/mantenimientos',  [ActivoController::class, 'mantenimientos']);
+        });
+
+        // Optimización VRP
+        Route::post('/optimizacion/proyectos', [\App\Http\Controllers\Activos\OptimizacionController::class, 'optimizarProyectos']);
+        Route::post('/optimizacion/viviendas', [\App\Http\Controllers\Activos\OptimizacionController::class, 'optimizarViviendas']);
+        Route::post('/optimizacion/planes/{id}/aprobar', [\App\Http\Controllers\Activos\OptimizacionController::class, 'aprobarPlan']);
+
+        // Asignaciones de activos
+        Route::prefix('asignaciones-activo')->group(function () {
+            Route::get('/',                     [AsignacionActivoController::class, 'index']);
+            Route::put('/{asignacion}',          [AsignacionActivoController::class, 'update']);
+            Route::patch('/{asignacion}/estado', [AsignacionActivoController::class, 'cambiarEstado']);
+            Route::delete('/{asignacion}',       [AsignacionActivoController::class, 'destroy']);
+            Route::post('/{asignacion}/actas',   [ActaEntregaController::class, 'store']);
+            Route::get('/{asignacion}/actas',    [ActaEntregaController::class, 'index']);
+        });
+
+        // Actas de entrega de activos a viviendas (proyectos sociales)
+        Route::prefix('actas-entrega')->group(function () {
+            Route::get('/devueltas',              [ActaEntregaController::class, 'historialDevueltas']);
+            Route::get('/{acta}/pdf',            [ActaEntregaController::class, 'descargarPdf']);
+            Route::patch('/{acta}/estado',       [ActaEntregaController::class, 'cambiarEstado']);
+            Route::post('/{acta}/pdf-firmado',   [ActaEntregaController::class, 'subirPdfFirmado']);
+            Route::post('/{acta}/foto-entrega',  [ActaEntregaController::class, 'subirFotoEntrega']);
+            Route::post('/{acta}/foto-devolucion', [ActaEntregaController::class, 'subirFotoDevolucion']);
+        });
+
+        Route::prefix('configuracion-optimizacion')->group(function () {
+            Route::get('/', [ConfiguracionOptimizacionController::class, 'show']);
+            Route::put('/', [ConfiguracionOptimizacionController::class, 'update']);
+        });
 
     }); // fin ForzarCambioPassword
 }); // fin auth:sanctum

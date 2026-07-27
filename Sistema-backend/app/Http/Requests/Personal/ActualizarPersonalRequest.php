@@ -21,7 +21,7 @@ class ActualizarPersonalRequest extends FormRequest
             'telefono' => 'nullable|string|max:20',
             'direccion' => 'nullable|string|max:200',
             'fecha_nacimiento' => 'nullable|date|before:today',
-            'tipo' => 'sometimes|required|in:tecnico,obrero,trabajadora_social,administrativo,gerente,encargado_almacen,encargado_finanzas',
+            'rol_id' => 'sometimes|required|exists:roles,id',
             'especialidad' => 'nullable|string|max:100',
             'categoria' => 'nullable|string|max:50',
             'fecha_contratacion' => 'sometimes|required|date',
@@ -38,7 +38,7 @@ class ActualizarPersonalRequest extends FormRequest
     {
         return [
             'ci.unique' => 'Ya existe otro personal con este CI.',
-            'tipo.in' => 'El tipo de personal no es válido.',
+            'rol_id.exists' => 'El rol seleccionado no existe.',
             'tipo_contrato.in' => 'El tipo de contrato no es válido.',
             'salario_base.min' => 'El salario base no puede ser negativo.',
         ];

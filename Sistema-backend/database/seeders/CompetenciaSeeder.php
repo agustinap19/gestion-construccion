@@ -23,6 +23,10 @@ class CompetenciaSeeder extends Seeder
         ];
 
         foreach ($competencias as $comp) {
+            if (DB::table('competencias')->where('nombre', $comp['nombre'])->exists()) {
+                continue;
+            }
+
             DB::table('competencias')->insert([
                 'nombre' => $comp['nombre'],
                 'descripcion' => 'Competencia en ' . strtolower($comp['nombre']),
